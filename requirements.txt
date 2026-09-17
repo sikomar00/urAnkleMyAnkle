@@ -1,0 +1,15 @@
+# 버전을 고정해두는 이유:
+# - joblib으로 저장한 모델은 scikit-learn 버전이 다르면 로드 시
+#   경고나 오류가 날 수 있음
+# - 팀원마다 버전이 다르면 "내 컴퓨터에서는 됐는데" 문제가 생김
+# 실제 설치된 버전으로 아래 숫자를 맞춰서 채워 넣으세요
+# (설치 후 `pip freeze > requirements.txt`로 확정본을 만들어도 됩니다)
+
+pandas==
+numpy==
+scikit-learn==
+plotly==
+dash==
+prophet==
+joblib==
+pytest==

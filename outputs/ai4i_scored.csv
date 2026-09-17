@@ -1,0 +1,5 @@
+udi,type,air_k,process_k,rpm,torque,tool_wear,failure,split,proba,cluster,anomaly
+1,M,298.1,308.6,1551,42.8,0,0,train,0.02,0,0
+2,L,298.2,308.7,1408,46.3,3,0,train,0.05,1,0
+3,L,298.1,308.5,1498,49.4,5,0,test,0.11,1,0
+4,H,298.2,308.6,1433,39.6,7,1,test,0.83,3,1
