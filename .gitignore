@@ -216,3 +216,22 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+
+
+# ===== 프로젝트 전용 규칙 =====
+
+# 📊 원본/가공 데이터 — 용량 크고 라이선스 문제 있어서 Git에 안 올림
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# 🤖 학습된 모델 — 코드 실행하면 다시 생성됨
+models/*.joblib
+!models/.gitkeep
+
+# 💻 OS 잡파일
+.DS_Store
+Thumbs.db
