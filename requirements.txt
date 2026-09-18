@@ -2,14 +2,31 @@
 # - joblib으로 저장한 모델은 scikit-learn 버전이 다르면 로드 시
 #   경고나 오류가 날 수 있음
 # - 팀원마다 버전이 다르면 "내 컴퓨터에서는 됐는데" 문제가 생김
-# 실제 설치된 버전으로 아래 숫자를 맞춰서 채워 넣으세요
-# (설치 후 `pip freeze > requirements.txt`로 확정본을 만들어도 됩니다)
+# 채우는 순서:
+#   1. 아래 목록을 버전 없이 그대로 설치 (pip install -r requirements.txt)
+#   2. 설치 잘 되면 pip freeze > requirements.txt 로 실제 버전을 덮어씀
+#   3. 커밋 → 나머지 팀원은 pull 후 이 파일 기준으로 재설치
 
-pandas==
-numpy==
-scikit-learn==
-plotly==
-dash==
-prophet==
-joblib==
-pytest==
+# === 데이터 처리 ===
+pandas
+numpy
+
+# === 시각화 (Dash와 동일한 문법으로 통일) ===
+plotly
+
+# === Dash 대시보드 ===
+dash
+
+# === 머신러닝 ===
+scikit-learn
+joblib
+
+# === 시계열 예측 ===
+prophet
+
+# === 노트북 실행 (VS Code Jupyter 확장용) ===
+ipykernel
+
+# === 협업 도구 ===
+nbstripout
+pytest
