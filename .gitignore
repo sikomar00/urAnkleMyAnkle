@@ -235,3 +235,5 @@ models/*.joblib
 # 💻 OS 잡파일
 .DS_Store
 Thumbs.db
+Miniforge3.sh
+Miniforge3.sh

@@ -1,0 +1,15 @@
+# import 경로 문제 해결용 최소 설정
+#
+# 이 파일이 없으면:
+#   - `pytest` 실행 시 ModuleNotFoundError: No module named 'src'
+#   - `python app/app.py` 실행 시 같은 에러
+# pythonpath = ["."] 가 프로젝트 루트를 import 경로에 넣어줍니다.
+
+[project]
+name = "ls-jumpup-pdm"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
