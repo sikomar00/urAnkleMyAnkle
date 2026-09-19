@@ -23,10 +23,21 @@ Dash 대시보드로 통합한 프로젝트입니다.
 ## 실행 순서
 
 1. 가상환경 생성 및 활성화
-   ```
+
+   **macOS / Linux**
+```bash
    python3.11 -m venv venv
-   source venv/bin/activate   # Windows는 venv\Scripts\activate
-   ```
+   source venv/bin/activate
+```
+
+   **Windows (PowerShell)**
+```powershell
+   py -3.11 -m venv venv
+   venv\Scripts\activate
+```
+   > `python`을 쳤을 때 Microsoft Store가 열리면: 설정 → 앱 → 고급 앱 설정
+   > → 앱 실행 별칭 에서 python.exe / python3.exe를 끄세요.
+   > `py -3.11`이 없다고 나오면 python.org에서 3.11을 설치하세요.
 2. 패키지 설치
    ```
    pip install -r requirements.txt
