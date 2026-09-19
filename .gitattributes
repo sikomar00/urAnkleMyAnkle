@@ -1,0 +1,7 @@
+# 노트북 출력이 Git에 안 남게 함 (병합 충돌 방지)
+# 각자 한 번씩 `nbstripout --install` 도 실행해야 실제로 동작합니다.
+*.ipynb filter=nbstripout
+*.ipynb diff=ipynb
+
+# 줄바꿈 통일 (윈도우 팀원 대비)
+* text=auto eol=lf

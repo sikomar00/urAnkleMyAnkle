@@ -1,3 +1,4 @@
-model,MAE,RMSE,R2
-baseline,850.2,1020.5,0.41
-prophet,520.7,690.3,0.68
+model,MAE,RMSE,R2,n_test,horizon_days
+baseline,850.2,1020.5,0.41,15,15
+linreg,640.1,812.4,0.55,15,15
+prophet,520.7,690.3,0.68,15,15
