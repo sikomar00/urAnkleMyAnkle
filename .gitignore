@@ -238,9 +238,6 @@ Thumbs.db
 Miniforge3.sh
 Miniforge3.sh
 
-# AI4I 원본은 CC BY 4.0 + 500KB 수준이라 재현성을 위해 커밋 허용
-!data/raw/ai4i2020.csv
-
 # 폴더 설명 문서는 GitHub에서 보여야 하므로 예외
 !data/raw/README.md
 !data/processed/README.md

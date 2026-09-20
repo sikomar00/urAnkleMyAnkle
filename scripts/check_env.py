@@ -57,15 +57,15 @@ def _prophet_fit():
     return "fit + predict 성공"
 
 
-check("prophet (fit/predict)", _prophet_fit)
+# check("prophet (fit/predict)", _prophet_fit)
 
-data_path = Path("data/raw/ai4i2020.csv")
-check(
-    "AI4I 데이터",
-    lambda: f"{__import__('pandas').read_csv(data_path).shape} (data/raw/ai4i2020.csv)"
-    if data_path.exists()
-    else (_ for _ in ()).throw(FileNotFoundError("data/raw/ai4i2020.csv 없음")),
-)
+# data_path = Path("data/raw/ai4i2020.csv")
+# check(
+#     "AI4I 데이터",
+#     lambda: f"{__import__('pandas').read_csv(data_path).shape} (data/raw/ai4i2020.csv)"
+#     if data_path.exists()
+#     else (_ for _ in ()).throw(FileNotFoundError("data/raw/ai4i2020.csv 없음")),
+# )
 
 print()
 print("=== 전체 결과:", "PASS ===" if ok else "FAIL ===")

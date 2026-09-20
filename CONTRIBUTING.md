@@ -80,6 +80,7 @@
   [ ] pip install -r requirements.txt
   [ ] pip install nbstripout && nbstripout --install
       (노트북 출력이 Git에 안 남게 해서 병합 충돌을 줄여줌)
+       → 확인: cat .git/config 에 [filter "nbstripout"] 블록이 보이는지 체크
   [ ] data/raw/ 에 원본 데이터 다운로드 (DATA_SOURCES.md에 기록)
   [ ] docs/data_contract.md 내용을 팀 전체가 한 번 읽고 합의
 
