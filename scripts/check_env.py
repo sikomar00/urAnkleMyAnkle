@@ -57,7 +57,7 @@ def _prophet_fit():
     return "fit + predict 성공"
 
 
-# check("prophet (fit/predict)", _prophet_fit)
+check("prophet (fit/predict)", _prophet_fit)
 
 # data_path = Path("data/raw/ai4i2020.csv")
 # check(

@@ -5,8 +5,6 @@
 대시보드로 통합한 프로젝트입니다. (예지보전 데이터셋: TODO — 결정 후
 DATA_SOURCES.md, docs/data_contract.md와 함께 여기 채우기)
 
-레포 폴더 구조 전체 설명은 루트의 `CONTRIBUTING.md`를 먼저 읽어주세요.
-
 ## 팀 구성 및 역할 (TODO)
 
 | 이름 | 담당 | 기여도 |
@@ -74,6 +72,38 @@ DATA_SOURCES.md, docs/data_contract.md와 함께 여기 채우기)
 - `models/rf.joblib` — 4번 단계에서 생성
 - `outputs/*.csv`의 실제 값 — 4번 단계 실행 시 더미 데이터가
   실제 결과로 덮어써짐 (더미는 `python -m scripts.make_dummy`로 재생성)
+
+## 폴더 구조
+
+### 전체 지도 (데이터가 흘러가는 순서)
+
+```
+[data/raw]  원본 데이터 (건드리지 않음)
+    ↓
+[notebooks]  또는 [src]  전처리 · 학습 · 분석
+    ↓
+[outputs]  결과 파일 (csv)      [models]  학습된 모델 파일
+    ↓                                ↓
+            [app]  Dash 대시보드 (outputs와 models를 "읽기만" 함)
+                   ↓
+            [report]  최종 보고서 · 발표자료
+```
+
+핵심 규칙 한 줄: 분석(학습)하는 사람과 화면(Dash) 만드는 사람은 outputs/ 안의
+정해진 파일(이름 · 컬럼)로만 소통합니다. 서로의 코드를 몰라도 됩니다.
+이 약속은 `docs/data_contract.md`에 고정되어 있습니다.
+
+### 폴더별 한 줄 요약
+
+- `docs/` — 회의록 · 데이터 약속 · AI 사용 기록 · 트러블슈팅 기록
+- `data/` — 원본(raw) · 가공(processed) 데이터. Git에는 안 올라감
+- `notebooks/` — 탐색·실험용 (에너지 팀용 / 예지보전 팀용 파일 분리됨)
+- `src/` — 여러 곳에서 재사용하는 파이썬 함수 (전처리, 검증 등)
+- `outputs/` — 분석 결과 csv. Dash가 읽는 "계약 파일들"
+- `models/` — 학습된 모델 파일(.joblib). Git에는 안 올라감
+- `app/` — Dash 대시보드 앱 (화면 5개, 파일별로 분리)
+- `report/` — 최종 보고서 · 발표자료 원본
+- `tests/` — 간단한 자동 확인 코드 (재현성 증거용)
 
 ## 문서
 

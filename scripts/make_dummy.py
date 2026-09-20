@@ -132,7 +132,7 @@ def ai4i():
 
 if __name__ == "__main__":
     energy()
-    ai4i()
+    # ai4i()  # 데이터셋 확정 후 컬럼명 교체하여 복구 예정
     print("더미 생성 완료:")
     for f in sorted(OUT.glob("*")):
         if f.is_file():

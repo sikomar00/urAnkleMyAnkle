@@ -238,6 +238,3 @@ Thumbs.db
 Miniforge3.sh
 Miniforge3.sh
 
-# 폴더 설명 문서는 GitHub에서 보여야 하므로 예외
-!data/raw/README.md
-!data/processed/README.md

@@ -1,5 +1,5 @@
 """
-화면: AI4I 예지보전
+화면: 예지보전
 요건: 설비유형 필터, 고장 확률 분류 결과, 혼동행렬 또는 지표
 
 TODO:
@@ -10,5 +10,5 @@ TODO:
 from dash import html
 
 layout = html.Div([
-    html.H2("AI4I 예지보전 (TODO)"),
+    html.H2("예지보전 (TODO)"),
 ])

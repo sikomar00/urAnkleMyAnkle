@@ -1,5 +1,5 @@
 """
-AI4I 트랙: 전처리 → 분류(DT/RF) → K-Means 이상탐지 → 결과 저장.
+예지보전 트랙: 전처리 → 분류(DT/RF) → K-Means 이상탐지 → 결과 저장.
 
 실행:
     python src/ai4i_train.py
@@ -11,9 +11,9 @@ AI4I 트랙: 전처리 → 분류(DT/RF) → K-Means 이상탐지 → 결과 저
 """
 
 def main():
-    # TODO 1. data/raw/의 AI4I 원본 로드
+    # TODO 1. data/raw/의 예지보전 원본 로드 (데이터셋 미정)
     # TODO 2. src.features.make_ai4i_features로 파생변수 생성
-    # TODO 3. UDI, Product ID, TWF~RNF 제외 근거 확인 후 제외
+    # TODO 3. 식별자·누수 컬럼 제외 근거 확인 후 제외 (데이터셋 확정 후 구체화)
     # TODO 4. stratify 분할
     # TODO 5. baseline / DecisionTree / RandomForest 학습·평가
     # TODO 6. K-Means 군집화 + 거리 기반 이상치 탐지

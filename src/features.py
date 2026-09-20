@@ -5,6 +5,8 @@
 (app/pages/data_lookup.py) 양쪽에서 똑같이 이 함수를 불러다
 씁니다. 학습 때와 앱에서 전처리 방식이 달라지지 않도록 하기
 위함입니다 (자세한 이유는 src/README.md 참고).
+
+데이터셋 미정 상태 — 확정 후 COLUMN_RENAME_MAP부터 작성할 것
 """
 import numpy as np
 import pandas as pd
@@ -15,25 +17,25 @@ import pandas as pd
 # df.air_k 같은 접근이 안 되고, src/validate.py의 REQUIRED_COLUMNS
 # 와도 맞지 않습니다. 로드 직후 한 번만 적용하세요:
 #     df = pd.read_csv(path).rename(columns=COLUMN_RENAME_MAP)
-COLUMN_RENAME_MAP = {
-    "UDI": "udi",
-    "Product ID": "product_id",
-    "Type": "type",
-    "Air temperature [K]": "air_k",
-    "Process temperature [K]": "process_k",
-    "Rotational speed [rpm]": "rpm",
-    "Torque [Nm]": "torque",
-    "Tool wear [min]": "tool_wear",
-    "Machine failure": "failure",
-    "TWF": "twf", "HDF": "hdf", "PWF": "pwf",
-    "OSF": "osf", "RNF": "rnf",
-}
+# COLUMN_RENAME_MAP = {
+#     "UDI": "udi",
+#     "Product ID": "product_id",
+#     "Type": "type",
+#     "Air temperature [K]": "air_k",
+#     "Process temperature [K]": "process_k",
+#     "Rotational speed [rpm]": "rpm",
+#     "Torque [Nm]": "torque",
+#     "Tool wear [min]": "tool_wear",
+#     "Machine failure": "failure",
+#     "TWF": "twf", "HDF": "hdf", "PWF": "pwf",
+#     "OSF": "osf", "RNF": "rnf",
+# }
 
 # 모델 입력에서 제외할 컬럼과 그 근거 (발표에서 설명할 항목)
 #   udi, product_id : 단순 식별자. 학습하면 행 번호를 외우는 꼴
 #   twf~rnf         : 고장의 '원인 유형' = 타깃이 정해진 뒤에야 알 수 있음
 #                     -> 누수(leakage). 반드시 제외
-LEAKAGE_COLUMNS = ["udi", "product_id", "twf", "hdf", "pwf", "osf", "rnf"]
+# LEAKAGE_COLUMNS = ["udi", "product_id", "twf", "hdf", "pwf", "osf", "rnf"]
 
 
 def make_ai4i_features(df: pd.DataFrame) -> pd.DataFrame:

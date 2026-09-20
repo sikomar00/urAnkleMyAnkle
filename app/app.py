@@ -16,7 +16,7 @@ from app.pages import ai4i, data_lookup, energy_status, forecast, report_summary
 TABS = {
     "tab-energy": ("에너지 현황", energy_status),
     "tab-forecast": ("예측", forecast),
-    "tab-ai4i": ("AI4I 예지보전", ai4i),
+    "tab-ai4i": ("예지보전", ai4i),
     "tab-data": ("데이터 조회", data_lookup),
     "tab-report": ("보고서 요약", report_summary),
 }
