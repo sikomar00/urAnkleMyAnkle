@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    __package__ = "src"
 
 from .industrial_features import load_industrial_data, prepare_forecast
-from .industrial_training import run_experiments
+from .industrial_training import DEFAULT_DATA, PROJECT_ROOT, run_experiments
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="과거 센서·고장 이력 기반 7일 위험 모델")
-    parser.add_argument("--data", default="data/synthetic_industrial_machine_data.csv")
-    parser.add_argument("--output", default="outputs/timeseries")
+    parser.add_argument("--data", default=DEFAULT_DATA)
+    parser.add_argument("--output", default=PROJECT_ROOT / "outputs" / "timeseries")
     parser.add_argument("--horizon", type=int, default=7)
     parser.add_argument("--scope", choices=["all", "overall", "machine_type", "asset_tag"], default="all")
     parser.add_argument("--machine-type")

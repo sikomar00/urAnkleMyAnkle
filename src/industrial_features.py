@@ -90,14 +90,14 @@ def prepare_current(frame: pd.DataFrame) -> tuple[pd.DataFrame, list[str], str]:
     return result, CURRENT_FEATURES.copy(), CURRENT_TARGET
 
 
-def _future_label_for_group(group: pd.DataFrame, horizon: int) -> pd.Series:
+def _future_label_for_group(group: pd.DataFrame, horizon: int) -> tuple[pd.Series, pd.Series]:
     """Return a future max label only when all future calendar dates exist."""
 
     if horizon < 1:
         raise ValueError("horizon은 1 이상이어야 합니다.")
     indexed = group.set_index(DATE_COLUMN)[CURRENT_TARGET]
     labels: list[float] = []
-    end_dates: list[pd.Timestamp | pd.NaT] = []
+    end_dates: list[Any] = []  # Timestamp values and the NaT singleton.
     for date in group[DATE_COLUMN]:
         future_dates = pd.date_range(
             date + pd.Timedelta(days=1), periods=horizon, freq="D"
@@ -112,6 +112,8 @@ def _future_label_for_group(group: pd.DataFrame, horizon: int) -> pd.Series:
 
 
 def _future_labels(frame: pd.DataFrame, horizon: int) -> tuple[pd.Series, pd.Series]:
+    if horizon < 1:
+        raise ValueError("horizon must be at least 1")
     # The source has a regular daily cadence for each asset/part.  Grouped
     # shifts preserve group boundaries and let us verify calendar continuity
     # without constructing a Python date range for every source row.

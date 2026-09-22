@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +29,17 @@ from sklearn.metrics import (
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    __package__ = "src"
+
 from .industrial_features import iter_scopes, split_by_date
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_DATA = PROJECT_ROOT / "data" / "raw" / "synthetic_industrial_machine_data.csv"
+if sys.platform == "win32":
+    # Keep the desktop responsive and avoid the physical-core probe.
+    os.environ.setdefault("LOKY_MAX_CPU_COUNT", str(max(1, min(4, (os.cpu_count() or 2) // 2))))
 
 
 POST_EVENT_FEATURES = {
@@ -62,12 +74,19 @@ def choose_threshold(y_true: Any, scores: Any) -> float:
         return 0.5
     candidates = np.unique(np.clip(probabilities, 0.0, 1.0))
     candidates = np.unique(np.r_[0.5, candidates])
-    best_threshold, best_score = 0.5, -1.0
-    for threshold in candidates:
-        score = f1_score(y, probabilities >= threshold, zero_division=0)
-        if score > best_score or (score == best_score and threshold > best_threshold):
-            best_threshold, best_score = float(threshold), float(score)
-    return best_threshold
+    order = np.argsort(probabilities)
+    sorted_scores = probabilities[order]
+    positive_prefix = np.r_[0, np.cumsum(y[order])]
+    starts = np.searchsorted(sorted_scores, candidates, side="left")
+    true_positives = positive_prefix[-1] - positive_prefix[starts]
+    predicted_positives = len(y) - starts
+    denominators = predicted_positives + positive_prefix[-1]
+    f1_values = np.divide(
+        2.0 * true_positives, denominators,
+        out=np.zeros(len(candidates), dtype=float), where=denominators != 0,
+    )
+    # Candidates are sorted; retain the original highest-threshold tie break.
+    return float(candidates[np.flatnonzero(f1_values == f1_values.max())[-1]])
 
 
 def classification_metrics(
@@ -246,9 +265,11 @@ def run_experiments(
     metric_rows: list[dict[str, Any]] = []
     prediction_rows: list[pd.DataFrame] = []
     for scope_kind, scope_name, subset in scopes:
+        print(f"[Training] {scope_kind}: {scope_name} ({len(subset):,} rows)", flush=True)
         splits = split_by_date(subset, validation_start, test_start)
         train, valid, test = splits["train"], splits["valid"], splits["test"]
         if train.empty or valid.empty or test.empty or train[target].nunique() < 2:
+            print("[Skipped] Empty date split or single training class.", flush=True)
             metric_rows.extend(
                 _skipped_rows(scope_kind, scope_name, train, valid, test, target)
             )
@@ -355,13 +376,15 @@ def run_experiments(
         )
     else:
         pd.DataFrame().to_csv(output_path / "test_predictions.csv", index=False)
+    print(f"[Done] Results: {output_path.resolve()}", flush=True)
+    print(metrics_frame.groupby('status').size().to_string(), flush=True)
     return metrics_frame
 
 
 def _cli() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="산업 기계 고장 위험 모델 학습")
-    parser.add_argument("--data", required=True)
-    parser.add_argument("--output", required=True)
+    parser.add_argument("--data", default=DEFAULT_DATA)
+    parser.add_argument("--output", default=None)
     parser.add_argument("--mode", choices=["current", "forecast"], default="current")
     parser.add_argument("--scope", choices=["all", "overall", "machine_type", "asset_tag"], default="all")
     parser.add_argument("--machine-type")
@@ -383,7 +406,7 @@ if __name__ == "__main__":
         prepared,
         feature_data,
         target_data,
-        output_dir=args.output,
+        output_dir=args.output or PROJECT_ROOT / "outputs" / ("current_state" if args.mode == "current" else "timeseries"),
         mode=args.mode,
         scope=args.scope,
         machine_type=args.machine_type,
