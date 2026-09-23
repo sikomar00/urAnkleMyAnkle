@@ -22,6 +22,9 @@
 - 초기 기본 모델에는 LightGBM을 포함하지 않는다.
 - 기존 `src/current_state_model.py`, `src/timeseries_model.py` 명령과 각각의 기존 기본 출력 경로 `outputs/current_state`, `outputs/timeseries`를 유지한다.
 - 기존 사용자의 데이터 또는 산출물을 삭제하지 않는다.
+- 새로 만들거나 역할을 바꾸는 모든 Python 파일에는 파일의 책임과 호출 관계를 설명하는 한글 모듈 docstring을 둔다.
+- 외부에서 호출하는 모든 함수에는 입력값, 반환값, 발생 가능한 예외를 설명하는 한글 docstring을 작성한다.
+- 주석은 코드 동작을 그대로 번역하지 않고 미래 라벨 경계, `shift(1)`, 그룹 키처럼 해당 구현이 필요한 이유를 설명한다.
 
 ## Review Focus
 
@@ -59,6 +62,7 @@
 - `src/eda.py`: 모델 학습을 제거하고 네 결과 폴더 비교 기능만 유지
 - `src/RUN_INDUSTRIAL.md`: macOS·Linux·Windows 실행 예시와 네 과제 설명 갱신
 - `docs/industrial_feature_guide.md`: 네 과제별 Feature와 Target 문서화
+- `docs/industrial_code_guide.md`: 각 Python 파일의 책임, 호출 흐름, 주요 함수와 실행 예시 설명
 - `tests/test_industrial_training.py`: 임계값·순위 지표·학습 선택·출력 계약 테스트 확장
 
 ---
@@ -1056,6 +1060,7 @@ git commit -m "feat: 장비와 부품 위험 모델 CLI 분리"
 - Modify: `src/eda.py:1-293`
 - Modify: `src/RUN_INDUSTRIAL.md:1-31`
 - Modify: `docs/industrial_feature_guide.md:1-96`
+- Create: `docs/industrial_code_guide.md`
 - Create: `tests/test_eda.py`
 
 **Interfaces:**
@@ -1131,6 +1136,50 @@ python src/eda.py
 Feature가 날짜 \(t\)를 포함한다는 점, 고장 이력이 `shift(1)`부터 시작한다는 점을
 반영한다. 교육용 합성 데이터의 한계와 식별자 기억 효과를 유지한다.
 
+`docs/industrial_code_guide.md`는 다음 순서로 작성한다.
+
+```markdown
+# 산업 위험 모델 코드 가이드
+
+## 1. 전체 실행 흐름
+원본 CSV → Feature/Target 생성 → 시간 분할 → 모델 비교 → 임계값 선택 → 결과 저장
+
+## 2. 실행 파일
+각 파일의 목적, 기본 Target, 실행 명령, 주요 선택 인자를 설명한다.
+
+## 3. 공통 모듈
+industrial_data.py, asset_features.py, part_features.py,
+industrial_training.py, industrial_cli.py의 책임과 공개 함수를 설명한다.
+
+## 4. 데이터 누수 방지
+label_end_date, shift(1), 미래 날짜 연속성 검사가 필요한 이유를 예시로 설명한다.
+
+## 5. 결과 파일 읽기
+metrics.csv, test_predictions.csv, feature_importance.csv,
+run_config.json, models/의 주요 컬럼과 해석 예시를 설명한다.
+
+## 6. 기존 파일 호환성
+current_state_model.py, timeseries_model.py, industrial_features.py가
+어떤 새 파일로 연결되는지 설명한다.
+```
+
+각 Python 파일의 모듈 docstring과 공개 함수 docstring이 존재하는지도 다음 테스트로
+고정한다.
+
+```python
+def test_public_industrial_modules_have_korean_documentation():
+    modules = [
+        industrial_data, asset_features, part_features, industrial_training,
+        industrial_cli, current_asset_model, forecast_asset_model,
+        current_part_model, forecast_part_model,
+    ]
+    for module in modules:
+        assert module.__doc__ and any("가" <= char <= "힣" for char in module.__doc__)
+        for name, function in inspect.getmembers(module, inspect.isfunction):
+            if function.__module__ == module.__name__ and not name.startswith("_"):
+                assert function.__doc__, f"{module.__name__}.{name}에 docstring이 없습니다."
+```
+
 - [ ] **Step 5: EDA와 문서 연관 테스트 실행**
 
 Run: `pytest tests/test_eda.py tests/test_industrial_entrypoints.py -v`
@@ -1140,7 +1189,8 @@ Expected: PASS.
 - [ ] **Step 6: 커밋**
 
 ```bash
-git add src/eda.py src/RUN_INDUSTRIAL.md docs/industrial_feature_guide.md tests/test_eda.py
+git add src/eda.py src/RUN_INDUSTRIAL.md docs/industrial_feature_guide.md \
+  docs/industrial_code_guide.md tests/test_eda.py
 git commit -m "docs: 산업 위험 모델 실행과 결과 비교 정리"
 ```
 
@@ -1187,6 +1237,9 @@ python src/forecast_part_model.py --scope overall --max-iter 20 --output outputs
 
 Expected: 네 명령 모두 exit code 0. 각 폴더에 `metrics.csv`,
 `test_predictions.csv`, `feature_importance.csv`, `run_config.json`, `models/`가 존재한다.
+
+또한 `docs/industrial_code_guide.md`가 존재하고, 새 산업 모델 모듈의 공개 함수
+docstring 검사도 전체 `pytest` 결과에 포함되어 통과해야 한다.
 
 - [ ] **Step 4: 산출물 스키마와 선택 규칙 검사**
 
@@ -1247,6 +1300,7 @@ git add src/industrial_data.py src/asset_features.py src/part_features.py \
   src/current_part_model.py src/forecast_part_model.py \
   src/current_state_model.py src/timeseries_model.py src/eda.py \
   src/RUN_INDUSTRIAL.md docs/industrial_feature_guide.md \
+  docs/industrial_code_guide.md \
   tests/test_industrial_data.py tests/test_asset_features.py \
   tests/test_part_features.py tests/test_industrial_training.py \
   tests/test_industrial_entrypoints.py tests/test_eda.py
