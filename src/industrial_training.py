@@ -58,6 +58,7 @@ POST_EVENT_FEATURES = {
     "target_3d",
     "target_7d",
 }
+ASSET_SCORE_TARGETS = {"failure_points", "severity_level", "severity_code"}
 
 
 def validate_features(features: list[str], target: str) -> None:
@@ -68,7 +69,7 @@ def validate_features(features: list[str], target: str) -> None:
         raise ValueError(f"target 컬럼을 feature에 넣을 수 없습니다: {sorted(overlap)}")
     forbidden = (set(features) & POST_EVENT_FEATURES) | {
         column for column in features if column.startswith("target_")
-    }
+    } | (set(features) & ASSET_SCORE_TARGETS)
     if forbidden:
         raise ValueError(f"사후 정보 컬럼을 feature에 넣을 수 없습니다: {sorted(forbidden)}")
 
@@ -246,14 +247,8 @@ def _column_types(frame: pd.DataFrame) -> tuple[list[str], list[str]]:
     return categorical, numeric
 
 
-def build_model(
-    model_name: str,
-    frame: pd.DataFrame,
-    max_iter: int = 100,
-    random_state: int = 42,
-) -> Pipeline:
-    """Build a pipeline whose preprocessing is fitted on training data only."""
-
+def build_preprocessor(frame: pd.DataFrame) -> ColumnTransformer:
+    """학습 Frame의 범주형·수치형 컬럼에 맞는 전처리를 만든다."""
     categorical, numeric = _column_types(frame)
     transformers: list[tuple[str, Any, list[str]]] = []
     if categorical:
@@ -268,14 +263,27 @@ def build_model(
         transformers.append(
             (
                 "numeric",
-                Pipeline([
-                    ("imputer", SimpleImputer(strategy="median")),
-                    ("scaler", StandardScaler()),
-                ]),
+                Pipeline(
+                    [
+                        ("imputer", SimpleImputer(strategy="median")),
+                        ("scaler", StandardScaler()),
+                    ]
+                ),
                 numeric,
             )
         )
-    preprocess = ColumnTransformer(transformers=transformers, remainder="drop")
+    return ColumnTransformer(transformers=transformers, remainder="drop")
+
+
+def build_model(
+    model_name: str,
+    frame: pd.DataFrame,
+    max_iter: int = 100,
+    random_state: int = 42,
+) -> Pipeline:
+    """Build a pipeline whose preprocessing is fitted on training data only."""
+
+    preprocess = build_preprocessor(frame)
 
     if model_name == "hist_gradient_boosting":
         classifier = HistGradientBoostingClassifier(

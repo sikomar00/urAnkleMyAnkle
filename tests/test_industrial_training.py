@@ -8,6 +8,7 @@ from sklearn.metrics import f1_score
 
 from src.industrial_data import PreparedTask
 from src.industrial_training import (
+    build_preprocessor,
     build_model,
     choose_threshold,
     choose_thresholds,
@@ -81,6 +82,25 @@ def test_min_precision_threshold_search_scales_to_many_unique_scores():
 def test_validate_features_rejects_every_target_prefix():
     with pytest.raises(ValueError, match="target_14d"):
         validate_features(["signal", "target_14d"], "target_7d")
+
+
+def test_shared_preprocessor_accepts_unseen_category():
+    train = pd.DataFrame({"asset_tag": ["A-1", "A-2"], "signal": [1.0, 2.0]})
+    valid = pd.DataFrame({"asset_tag": ["NEW"], "signal": [3.0]})
+    preprocessor = build_preprocessor(train)
+
+    preprocessor.fit(train)
+    transformed = preprocessor.transform(valid)
+
+    assert transformed.shape[0] == 1
+
+
+@pytest.mark.parametrize(
+    "leak", ["failure_points", "severity_level", "severity_code"]
+)
+def test_validate_features_rejects_asset_score_targets(leak):
+    with pytest.raises(ValueError, match=leak):
+        validate_features(["signal", leak], "severity_level")
 
 
 def test_logistic_regression_scales_numeric_features():
