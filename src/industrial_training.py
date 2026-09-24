@@ -1,4 +1,4 @@
-"""Leakage-safe classifiers and scope-wide experiment runner."""
+"""데이터 누수를 막는 분류 모델 비교·선택·평가·저장을 공통으로 수행한다."""
 
 from __future__ import annotations
 
@@ -174,6 +174,7 @@ def ranking_metrics(y_true: Any, scores: Any) -> dict[str, float | None]:
 def classification_metrics(
     y_true: Any, scores: Any, threshold: float
 ) -> dict[str, float | int | None]:
+    """확률점수와 판단 임계값으로 분류 성능과 혼동행렬 값을 계산한다."""
     y = np.asarray(y_true, dtype=int)
     probabilities = np.asarray(scores, dtype=float)
     predictions = (probabilities >= threshold).astype(int)

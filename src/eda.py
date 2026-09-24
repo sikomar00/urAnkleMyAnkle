@@ -1,293 +1,149 @@
-import numpy as np
+"""네 산업 위험 모델의 저장된 평가 결과를 읽고 비교표를 만드는 모듈이다.
+
+이 파일은 모델을 다시 학습하지 않는다. 먼저 네 학습 실행 파일로 ``metrics.csv``를
+만든 뒤 실행하면, 선택된 모델의 테스트 결과만 한 표로 저장한다.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+
 import pandas as pd
-from sklearn.model_selection import train_test_split
-import matplotlib.pyplot as plt
-import plotly.express as px
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import mean_absolute_error
-from sklearn.metrics import mean_squared_error
-from sklearn.metrics import accuracy_score
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_score
-from sklearn.metrics import recall_score
-from sklearn.metrics import f1_score
-from sklearn.metrics import confusion_matrix
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.ensemble import HistGradientBoostingClassifier
-from lightgbm import LGBMClassifier
-from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score,
-    roc_auc_score, average_precision_score,precision_recall_curve
-)
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.impute import SimpleImputer
 
-df = pd.read_csv('data/raw/synthetic_industrial_machine_data.csv')
-# df.info()
-# df["timestamp"] = pd.to_datetime(df["timestamp"])
-# df = df.sort_values("timestamp")
-# print(df)
-df.dropna(axis = 1,inplace = True)
-df = df[['transaction_date','part_no','criticality','asset_tag','part_description','machine_type','temp_bearing_degC','temp_motor_degC','vibration_h_mms','vibration_v_mms','oil_pressure_bar','load_pct','shaft_rpm','power_consumption_kw','breakdown_flag']]
-weights = {"A": 4, "B": 2, "C": 1}
-# df.info()
-# print(df.columns)
-# print(df.head())
-# print(df['machine_type'].unique())
-data = df.copy()
-data["transaction_date"] = pd.to_datetime(
-    data["transaction_date"]
-).dt.normalize()
-data["criticality_weight"] = (
-    data["criticality"]
-    .astype("string")
-    .str.strip()
-    .str.upper()
-    .map(weights)
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    __package__ = "src"
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_METRICS = (
+    PROJECT_ROOT / "outputs" / "asset_current" / "metrics.csv",
+    PROJECT_ROOT / "outputs" / "asset_forecast_7d" / "metrics.csv",
+    PROJECT_ROOT / "outputs" / "part_current" / "metrics.csv",
+    PROJECT_ROOT / "outputs" / "part_forecast_7d" / "metrics.csv",
+)
+DEFAULT_OUTPUT = PROJECT_ROOT / "outputs" / "model_comparison.csv"
+
+COMPARISON_COLUMNS = (
+    "grain",
+    "mode",
+    "risk_definition",
+    "target",
+    "score_threshold",
+    "horizon",
+    "scope_kind",
+    "scope_name",
+    "model",
+    "threshold_policy",
+    "probability_cutoff",
+    "status",
+    "test_rows",
+    "test_positive_rate",
+    "average_precision",
+    "roc_auc",
+    "accuracy",
+    "precision",
+    "recall",
+    "f1",
+    "precision_at_10pct",
+    "recall_at_10pct",
+    "lift_at_10pct",
 )
 
-target_data = 'breakdown_flag'
-feature_data = ['temp_bearing_degC','temp_motor_degC','vibration_h_mms','vibration_v_mms','oil_pressure_bar','load_pct','shaft_rpm','power_consumption_kw']
 
+def load_metric_outputs(paths: Sequence[str | Path] = DEFAULT_METRICS) -> pd.DataFrame:
+    """존재하는 평가 CSV를 합쳐 반환한다.
 
-if data["criticality_weight"].isna().any():
-    raise ValueError("criticality에 A/B/C 이외의 값 또는 결측값이 있습니다.")
+    Args:
+        paths: 읽을 ``metrics.csv`` 경로 목록. 존재하지 않는 일부 경로는 건너뛴다.
 
-if not data["breakdown_flag"].isin([0, 1]).all():
-    raise ValueError("breakdown_flag는 0 또는 1이어야 합니다.")
+    Returns:
+        파일 출처 컬럼 ``metrics_path``가 추가된 통합 평가표.
 
-# 같은 부품을 중복으로 더하지 않도록 검사
-keys = ["transaction_date", "asset_tag", "part_no"]
-if data.duplicated(keys).any():
-    raise ValueError("같은 날짜·장비·부품의 중복 행을 먼저 확인하세요.")
-
-# 실제 고장 난 부품만 점수에 반영
-data["failure_points"] = (
-    data["breakdown_flag"] * data["criticality_weight"]
-)
-
-group_keys = ["transaction_date", "machine_type", "asset_tag"]
-
-# 같은 장비·날짜의 센서가 공통값인지 검사
-sensor_counts = data.groupby(group_keys)[feature_data].nunique(
-    dropna=False
-)
-if sensor_counts.gt(1).any().any():
-    raise ValueError(
-        "같은 장비·날짜에 센서값이 다릅니다. "
-        "평균/최대 등 집계 방식을 먼저 정하세요."
-    )
-
-daily = (
-    data.groupby(group_keys, as_index=False)
-    .agg({
-        "failure_points": "sum",
-        **{column: "first" for column in feature_data},
-    })
-)
-
-for threshold in [12, 13, 14]:
-    daily[f"target_gt_{threshold}"] = (
-        daily["failure_points"] >= threshold
-    ).astype(int)
-
-print(
-    daily.groupby("machine_type")[
-        ["target_gt_12", "target_gt_13", "target_gt_14"]
-    ].mean().rename(columns=lambda c: f"{c}_양성률")
-)
-# df1 = data[data['machine_type'] == 'CNC Lathe']
-# for i in feature_data:
-#     fig = px.scatter(
-#     df1,
-#     x="transaction_date",
-#     y=i,
-#     color_discrete_sequence=['blue'],
-#     title="날짜별 feature값변동",
-#     labels={
-#         "transaction_date": "날짜",
-#         i: 'feature'
-#         })
-#     fig.show()
-# X = df1[feature_data]
-# y = df1[target_data]
-# X_train,X_test,y_train,y_test = train_test_split(
-#     X,
-#     y,
-#     test_size=0.2,
-#     random_state = 42,
-#     stratify = y
-# )
-
-####LogisticRegression#############
-
-# model = LogisticRegression(max_iter = 10000000)
-
-
-# model = RandomForestClassifier(
-#     n_estimators=100,
-#     max_depth=20,
-#     random_state=42
-# )
-# model.fit(X_train,y_train)
-
-
-# y_pred = model.predict(X_test)
-# train_pred = model.predict(X_train)
-
-# print("학습 F1:", f1_score(y_train, train_pred, zero_division=0))
-# print("테스트 F1:", f1_score(y_test, y_pred, zero_division=0))
-# print(y_pred[:10])
-# print(y_test[:10])
-
-# model = HistGradientBoostingClassifier(
-#     learning_rate = 0.05,
-#     max_iter = 200,
-#     max_depth = 10)
-
-# # model = LGBMClassifier(
-    
-# # )
-# model.fit(X_train,y_train)
-# y_pred = model.predict(X_test)
-
-
-# cm = confusion_matrix(
-#     y_test,
-#     y_pred
-# )
-# print(cm)
-
-# accuracy = accuracy_score(
-#     y_test,
-#     y_pred
-# )
-# print("Accuracy:", accuracy)
-
-# precision = precision_score(
-#     y_test,
-#     y_pred,
-#     zero_division=0
-# )
-# recall = recall_score(
-#     y_test,
-#     y_pred,
-#     zero_division=0
-# )
-# f1 = f1_score(
-#     y_test,
-#     y_pred,
-#     zero_division=0
-# )
-
-# print("Precision:", precision)
-# print("Recall:", recall)
-# print("F1-score:", f1)
-
-
-results = []
-models = {}
-
-for machine_type, group in daily.groupby("machine_type"):
-    train = group[group["transaction_date"] < "2024-01-01"]
-    valid = group[
-        (group["transaction_date"] >= "2024-01-01")
-        & (group["transaction_date"] < "2024-07-01")
-    ]
-    test = group[group["transaction_date"] >= "2024-07-01"]
-
-    for threshold in [12, 13, 14]:
-        target = f"target_gt_{threshold}"
-        features = ["asset_tag", * feature_data]
-
-        # 陽性が少ない条件も隠さず記録
-        counts = {
-            "train_positive": int(train[target].sum()),
-            "valid_positive": int(valid[target].sum()),
-            "test_positive": int(test[target].sum()),
-        }
-
-        if (
-            any(part.empty for part in [train, valid, test])
-            or train[target].nunique() < 2
-            or valid[target].nunique() < 2
-        ):
-            results.append({
-                "machine_type": machine_type,
-                "score_threshold": threshold,
-                "status": "skip: 学習・検証に両クラスが必要",
-                **counts,
-            })
+    Raises:
+        FileNotFoundError: 입력 경로 중 존재하는 평가 파일이 하나도 없을 때.
+    """
+    frames: list[pd.DataFrame] = []
+    for value in paths:
+        path = Path(value)
+        if not path.exists():
             continue
-
-        preprocess = ColumnTransformer([
-            ("asset", OneHotEncoder(handle_unknown="ignore"),
-             ["asset_tag"]),
-            ("sensors", SimpleImputer(strategy="median"),
-             feature_data),
-        ])
-
-        model = Pipeline([
-            ("preprocess", preprocess),
-            ("classifier", RandomForestClassifier(
-                n_estimators=300,
-                max_depth=10,
-                min_samples_leaf=5,
-                class_weight="balanced",
-                random_state=42,
-                n_jobs=-1,
-            )),
-        ])
-
-        model.fit(train[features], train[target])
-
-        positive_index = list(model.classes_).index(1)
-        valid_scores = model.predict_proba(
-            valid[features]
-        )[:, positive_index]
-
-        precision, recall, cutoffs = precision_recall_curve(
-            valid[target], valid_scores
+        frame = pd.read_csv(path)
+        frame["metrics_path"] = str(path)
+        frames.append(frame)
+    if not frames:
+        commands = "\n".join(
+            [
+                "python src/current_asset_model.py",
+                "python src/forecast_asset_model.py --horizon 7 --risk-definition new",
+                "python src/current_part_model.py",
+                "python src/forecast_part_model.py --horizon 7",
+            ]
         )
-        f1_values = np.divide(
-            2 * precision * recall,
-            precision + recall,
-            out=np.zeros_like(precision),
-            where=(precision + recall) != 0,
+        raise FileNotFoundError(
+            "비교할 metrics.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            f"{commands}"
         )
-        probability_cutoff = float(
-            cutoffs[np.argmax(f1_values[:-1])]
-        )
+    return pd.concat(frames, ignore_index=True, sort=False)
 
-        test_scores = model.predict_proba(
-            test[features]
-        )[:, positive_index]
-        predictions = (test_scores >= probability_cutoff).astype(int)
 
-        results.append({
-            "machine_type": machine_type,
-            "score_threshold": threshold,
-            "probability_cutoff": probability_cutoff,
-            "status": "ok",
-            **counts,
-            "Accuracy": accuracy_score(test[target], predictions),
-            "Precision": precision_score(
-                test[target], predictions, zero_division=0
-            ),
-            "Recall": recall_score(
-                test[target], predictions, zero_division=0
-            ),
-            "F1": f1_score(
-                test[target], predictions, zero_division=0
-            ),
-        })
+def build_comparison(metrics: pd.DataFrame) -> pd.DataFrame:
+    """검증에서 선택된 모델의 테스트 지표만 비교표로 추린다.
 
-        models[(machine_type, threshold)] = {
-            "model": model,
-            "probability_cutoff": probability_cutoff,
-        }
+    Args:
+        metrics: 공통 학습기가 저장한 하나 이상의 평가 결과.
 
-result_df = pd.DataFrame(results)
-print(result_df.to_string(index=False))
+    Returns:
+        과제·범위·임계값 정책별 테스트 성능 비교표.
+
+    Raises:
+        ValueError: 선택 여부나 데이터 분할처럼 필수인 컬럼이 없을 때.
+    """
+    required = {"selected_model", "split", "model"}
+    missing = sorted(required - set(metrics.columns))
+    if missing:
+        raise ValueError(f"평가 결과에 필요한 컬럼이 없습니다: {missing}")
+    selected = metrics["selected_model"].astype(str).str.lower().eq("true")
+    result = metrics.loc[selected & metrics["split"].eq("test")].copy()
+    columns = [column for column in COMPARISON_COLUMNS if column in result.columns]
+    if "metrics_path" in result.columns:
+        columns.append("metrics_path")
+    sort_columns = [
+        column
+        for column in ("grain", "mode", "target", "scope_kind", "scope_name", "threshold_policy")
+        if column in result.columns
+    ]
+    result = result.loc[:, columns]
+    if sort_columns:
+        result = result.sort_values(sort_columns, kind="stable")
+    return result.reset_index(drop=True)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """결과 비교 CLI의 입력 파일과 출력 파일 인자를 구성한다."""
+    parser = argparse.ArgumentParser(description="산업 위험 모델 테스트 결과 비교")
+    parser.add_argument(
+        "--metrics",
+        type=Path,
+        action="append",
+        help="비교할 metrics.csv. 반복 지정 가능하며 생략하면 네 기본 출력 사용",
+    )
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    return parser
+
+
+def main() -> None:
+    """저장된 평가 파일을 읽어 비교표를 출력하고 CSV로 저장한다."""
+    args = build_parser().parse_args()
+    metrics = load_metric_outputs(args.metrics or DEFAULT_METRICS)
+    comparison = build_comparison(metrics)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    comparison.to_csv(args.output, index=False)
+    print(comparison.to_string(index=False))
+    print(f"\n[저장 완료] {args.output.resolve()}")
+
+
+if __name__ == "__main__":
+    main()
