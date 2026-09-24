@@ -13,6 +13,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from .part_features import prepare_part_current, prepare_part_forecast
+
 from .industrial_data import (
     ASSET_COLUMN,
     CURRENT_TARGET,
@@ -50,14 +52,8 @@ def prepare_current(frame: pd.DataFrame) -> tuple[pd.DataFrame, list[str], str]:
     ``feature_data`` so callers cannot accidentally train on the answer.
     """
 
-    missing = [column for column in REQUIRED_COLUMNS if column not in frame]
-    if missing:
-        raise ValueError(f"입력 데이터에 필요한 컬럼이 없습니다: {missing}")
-    result = _copy_and_metadata(frame)
-    result[CURRENT_TARGET] = pd.to_numeric(result[CURRENT_TARGET], errors="coerce")
-    result = result.dropna(subset=[CURRENT_TARGET]).copy()
-    result[CURRENT_TARGET] = result[CURRENT_TARGET].astype(int)
-    return result, CURRENT_FEATURES.copy(), CURRENT_TARGET
+    prepared = prepare_part_current(frame)
+    return prepared.frame, list(prepared.features), prepared.target
 
 
 def _future_label_for_group(group: pd.DataFrame, horizon: int) -> tuple[pd.Series, pd.Series]:
@@ -131,45 +127,5 @@ def prepare_forecast(
     generated.  The raw current ``breakdown_flag`` is never a feature.
     """
 
-    missing = [column for column in REQUIRED_COLUMNS if column not in frame]
-    if missing:
-        raise ValueError(f"입력 데이터에 필요한 컬럼이 없습니다: {missing}")
-    result = _copy_and_metadata(frame)
-    result[CURRENT_TARGET] = pd.to_numeric(result[CURRENT_TARGET], errors="coerce")
-    result = result.dropna(subset=[CURRENT_TARGET]).copy()
-    result[CURRENT_TARGET] = result[CURRENT_TARGET].astype(int)
-
-    target_name = f"target_{horizon}d"
-    future_label, label_end = _future_labels(result, horizon)
-    result[target_name] = future_label
-    result["label_end_date"] = label_end
-
-    group_keys = [ASSET_COLUMN, PART_COLUMN]
-    result = result.sort_values(group_keys + [DATE_COLUMN]).copy()
-    for column in SENSOR_COLUMNS:
-        grouped = result.groupby(group_keys, sort=False)[column]
-        result[f"{column}_lag1"] = grouped.shift(1)
-        result[f"{column}_lag3"] = grouped.shift(3)
-        result[f"{column}_lag7"] = grouped.shift(7)
-        result[f"{column}_mean7"] = grouped.transform(
-            lambda values: values.shift(1).rolling(7, min_periods=3).mean()
-        )
-
-    breakdown_group = result.groupby(group_keys, sort=False)[CURRENT_TARGET]
-    result["breakdown_lag1"] = breakdown_group.shift(1)
-    result["breakdown_count_30d"] = breakdown_group.transform(
-        lambda values: values.shift(1).rolling(30, min_periods=1).sum()
-    )
-    result["day_of_week"] = result[DATE_COLUMN].dt.dayofweek
-    result["month_sin"] = np.sin(2 * np.pi * result[DATE_COLUMN].dt.month / 12)
-    result["month_cos"] = np.cos(2 * np.pi * result[DATE_COLUMN].dt.month / 12)
-
-    # The model is a pre-failure model: rows already marked as broken are not
-    # prediction opportunities. Future labels that cannot be observed remain
-    # NaN and are removed here rather than converted to a negative class.
-    features = _forecast_features(result)
-    result = result[result[CURRENT_TARGET].eq(0)].copy()
-    result = result.dropna(subset=[target_name]).copy()
-    result[target_name] = result[target_name].astype(int)
-    result = result.reset_index(drop=True)
-    return result, features, target_name
+    prepared = prepare_part_forecast(frame, horizon)
+    return prepared.frame, list(prepared.features), prepared.target
