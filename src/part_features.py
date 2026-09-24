@@ -48,22 +48,65 @@ def _sensor_history(result: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
         columns = counts.columns[counts.gt(1).any()].tolist()
         raise ValueError(f"같은 장비·날짜의 센서값이 다릅니다: {columns}")
     sensors = result[keys + SENSOR_COLUMNS].drop_duplicates(keys).sort_values(keys)
-    grouped = sensors.groupby(ASSET_COLUMN, sort=False)
     features: list[str] = []
     for column in SENSOR_COLUMNS:
-        values = grouped[column]
-        names = [f"{column}_current", f"{column}_lag1", f"{column}_lag3",
-                 f"{column}_lag7", f"{column}_mean7", f"{column}_std7",
-                 f"{column}_diff1"]
-        sensors[names[0]] = sensors[column]
-        sensors[names[1]] = values.shift(1)
-        sensors[names[2]] = values.shift(3)
-        sensors[names[3]] = values.shift(7)
-        sensors[names[4]] = values.transform(lambda s: s.rolling(7, min_periods=3).mean())
-        sensors[names[5]] = values.transform(lambda s: s.rolling(7, min_periods=3).std())
-        sensors[names[6]] = values.diff(1)
-        features.extend(names)
-    return sensors[keys + features], features
+        features.extend([
+            f"{column}_current", f"{column}_lag1", f"{column}_lag3",
+            f"{column}_lag7", f"{column}_mean7", f"{column}_std7",
+            f"{column}_diff1",
+        ])
+    pieces: list[pd.DataFrame] = []
+    for asset_tag, group in sensors.groupby(ASSET_COLUMN, sort=False):
+        indexed = group.set_index(DATE_COLUMN).sort_index()
+        calendar = indexed.reindex(
+            pd.date_range(indexed.index.min(), indexed.index.max(), freq="D")
+        )
+        calendar.index.name = DATE_COLUMN
+        for column in SENSOR_COLUMNS:
+            values = calendar[column]
+            calendar[f"{column}_current"] = values
+            calendar[f"{column}_lag1"] = values.shift(1)
+            calendar[f"{column}_lag3"] = values.shift(3)
+            calendar[f"{column}_lag7"] = values.shift(7)
+            calendar[f"{column}_mean7"] = values.rolling(7, min_periods=3).mean()
+            calendar[f"{column}_std7"] = values.rolling(7, min_periods=3).std()
+            calendar[f"{column}_diff1"] = values.diff(1)
+        piece = calendar.loc[indexed.index, features].reset_index()
+        piece[ASSET_COLUMN] = asset_tag
+        pieces.append(piece)
+    return pd.concat(pieces, ignore_index=True)[keys + features], features
+
+
+def _breakdown_history(result: pd.DataFrame) -> pd.DataFrame:
+    """달력 날짜 기준으로 부품별 과거 고장 Feature를 계산한다."""
+    keys = [ASSET_COLUMN, PART_COLUMN]
+    features = [
+        "breakdown_lag1", "breakdown_count_7d", "breakdown_count_30d",
+        "days_since_last_breakdown",
+    ]
+    pieces: list[pd.DataFrame] = []
+    for (asset_tag, part_no), group in result.groupby(keys, sort=False):
+        indexed = group.set_index(DATE_COLUMN).sort_index()
+        calendar = indexed.reindex(
+            pd.date_range(indexed.index.min(), indexed.index.max(), freq="D")
+        )
+        calendar.index.name = DATE_COLUMN
+        shifted = calendar[CURRENT_TARGET].shift(1)
+        calendar["breakdown_lag1"] = shifted
+        calendar["breakdown_count_7d"] = shifted.rolling(7, min_periods=1).sum()
+        calendar["breakdown_count_30d"] = shifted.rolling(30, min_periods=1).sum()
+        previous_dates = calendar.index.to_series().shift(1)
+        last_date = previous_dates.where(shifted.eq(1)).ffill()
+        calendar["days_since_last_breakdown"] = (
+            calendar.index.to_series() - last_date
+        ).dt.days
+        piece = calendar.loc[indexed.index, features].reset_index()
+        piece[ASSET_COLUMN] = asset_tag
+        piece[PART_COLUMN] = part_no
+        pieces.append(piece)
+    return pd.concat(pieces, ignore_index=True)[
+        [DATE_COLUMN, ASSET_COLUMN, PART_COLUMN, *features]
+    ]
 
 
 def prepare_part_forecast(frame: pd.DataFrame, horizon: int = 7) -> PreparedTask:
@@ -86,21 +129,11 @@ def prepare_part_forecast(frame: pd.DataFrame, horizon: int = 7) -> PreparedTask
 
     sensor_history, sensor_features = _sensor_history(result)
     result = result.merge(sensor_history, on=[ASSET_COLUMN, DATE_COLUMN], how="left")
-    groups = result.groupby([ASSET_COLUMN, PART_COLUMN], sort=False)
-    shifted = groups[CURRENT_TARGET].shift(1)
-    shifted_groups = shifted.groupby([result[ASSET_COLUMN], result[PART_COLUMN]], sort=False)
-    result["breakdown_lag1"] = shifted
-    result["breakdown_count_7d"] = shifted_groups.transform(
-        lambda s: s.rolling(7, min_periods=1).sum()
+    result = result.merge(
+        _breakdown_history(result),
+        on=[DATE_COLUMN, ASSET_COLUMN, PART_COLUMN],
+        how="left",
     )
-    result["breakdown_count_30d"] = shifted_groups.transform(
-        lambda s: s.rolling(30, min_periods=1).sum()
-    )
-    previous_date = groups[DATE_COLUMN].shift(1).where(shifted.eq(1))
-    last_date = previous_date.groupby(
-        [result[ASSET_COLUMN], result[PART_COLUMN]], sort=False
-    ).ffill()
-    result["days_since_last_breakdown"] = (result[DATE_COLUMN] - last_date).dt.days
     result = add_calendar_features(result)
 
     static = [MACHINE_COLUMN, ASSET_COLUMN, PART_COLUMN, "criticality", PLANT_COLUMN]

@@ -53,3 +53,17 @@ def test_part_forecast_rejects_missing_calendar_day(part_history):
     prepared = prepare_part_forecast(missing, horizon=7)
     key_rows = prepared.frame.query("asset_tag == 'A-1' and part_no == 'P-1'")
     assert pd.Timestamp("2024-01-01") not in set(key_rows["transaction_date"])
+
+
+def test_part_lags_mean_previous_calendar_day(part_history):
+    missing_day = part_history[
+        ~part_history["transaction_date"].eq(pd.Timestamp("2024-01-02"))
+    ]
+    prepared = prepare_part_forecast(missing_day, horizon=7).frame
+    january_third = prepared.loc[
+        prepared["asset_tag"].eq("A-1")
+        & prepared["part_no"].eq("P-1")
+        & prepared["transaction_date"].eq(pd.Timestamp("2024-01-03"))
+    ].iloc[0]
+    assert pd.isna(january_third["load_pct_lag1"])
+    assert pd.isna(january_third["breakdown_lag1"])

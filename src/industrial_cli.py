@@ -27,7 +27,7 @@ class IndustrialArgumentParser(argparse.ArgumentParser):
 
 def add_common_arguments(
     parser: argparse.ArgumentParser,
-    default_output: Path,
+    default_output: Path | None,
 ) -> None:
     """네 학습 CLI에 공통 데이터·분할·평가 인자를 추가한다.
 

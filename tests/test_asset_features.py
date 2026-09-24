@@ -124,3 +124,22 @@ def test_future_sensor_change_does_not_change_past_features(asset_history):
         before.loc[before["transaction_date"].eq(pd.Timestamp("2024-01-01")), columns].iloc[0],
         after.loc[after["transaction_date"].eq(pd.Timestamp("2024-01-01")), columns].iloc[0],
     )
+
+
+def test_days_since_last_risk_uses_actual_event_date(asset_history):
+    prepared = prepare_asset_forecast(asset_history, 12, 7, "any").frame
+    day_after_risk = prepared.loc[
+        prepared["transaction_date"].eq(pd.Timestamp("2024-01-05"))
+    ].iloc[0]
+    assert day_after_risk["days_since_last_risk"] == 1
+
+
+def test_asset_lag_means_previous_calendar_day(asset_history):
+    missing_day = asset_history[
+        ~asset_history["transaction_date"].eq(pd.Timestamp("2024-01-02"))
+    ]
+    prepared = prepare_asset_forecast(missing_day, 12, 7, "any").frame
+    january_third = prepared.loc[
+        prepared["transaction_date"].eq(pd.Timestamp("2024-01-03"))
+    ].iloc[0]
+    assert pd.isna(january_third["load_pct_lag1"])

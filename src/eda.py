@@ -20,7 +20,8 @@ if __package__ in {None, ""}:
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_METRICS = (
     PROJECT_ROOT / "outputs" / "asset_current" / "metrics.csv",
-    PROJECT_ROOT / "outputs" / "asset_forecast_7d" / "metrics.csv",
+    PROJECT_ROOT / "outputs" / "asset_forecast_7d_new" / "metrics.csv",
+    PROJECT_ROOT / "outputs" / "asset_forecast_7d_any" / "metrics.csv",
     PROJECT_ROOT / "outputs" / "part_current" / "metrics.csv",
     PROJECT_ROOT / "outputs" / "part_forecast_7d" / "metrics.csv",
 )

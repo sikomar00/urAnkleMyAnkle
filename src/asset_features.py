@@ -115,6 +115,64 @@ def prepare_asset_current(
     )
 
 
+def _asset_history_features(
+    daily: pd.DataFrame,
+    current_target: str,
+) -> tuple[pd.DataFrame, list[str]]:
+    """달력 날짜를 보존하여 장비별 센서·과거 위험 Feature를 계산한다."""
+    pieces: list[pd.DataFrame] = []
+    feature_names: list[str] = []
+    for column in SENSOR_COLUMNS:
+        feature_names.extend([
+            f"{column}_current", f"{column}_lag1", f"{column}_lag3",
+            f"{column}_lag7", f"{column}_mean7", f"{column}_std7",
+            f"{column}_diff1",
+        ])
+    risk_features = [
+        "failure_points_lag1", "failure_points_mean7", "failure_points_max7",
+        "risk_event_count_30d", "days_since_last_risk",
+    ]
+    for asset_tag, group in daily.groupby(ASSET_COLUMN, sort=False):
+        indexed = group.sort_values(DATE_COLUMN).set_index(DATE_COLUMN)
+        calendar = indexed.reindex(
+            pd.date_range(indexed.index.min(), indexed.index.max(), freq="D")
+        )
+        calendar.index.name = DATE_COLUMN
+        for column in SENSOR_COLUMNS:
+            values = calendar[column]
+            calendar[f"{column}_current"] = values
+            calendar[f"{column}_lag1"] = values.shift(1)
+            calendar[f"{column}_lag3"] = values.shift(3)
+            calendar[f"{column}_lag7"] = values.shift(7)
+            calendar[f"{column}_mean7"] = values.rolling(7, min_periods=3).mean()
+            calendar[f"{column}_std7"] = values.rolling(7, min_periods=3).std()
+            calendar[f"{column}_diff1"] = values.diff(1)
+
+        shifted_points = calendar["failure_points"].shift(1)
+        calendar["failure_points_lag1"] = shifted_points
+        calendar["failure_points_mean7"] = shifted_points.rolling(
+            7, min_periods=1
+        ).mean()
+        calendar["failure_points_max7"] = shifted_points.rolling(
+            7, min_periods=1
+        ).max()
+        shifted_risk = calendar[current_target].shift(1)
+        calendar["risk_event_count_30d"] = shifted_risk.rolling(
+            30, min_periods=1
+        ).sum()
+        previous_dates = calendar.index.to_series().shift(1)
+        event_dates = previous_dates.where(shifted_risk.eq(1)).ffill()
+        calendar["days_since_last_risk"] = (
+            calendar.index.to_series() - event_dates
+        ).dt.days
+
+        original_dates = indexed.index
+        piece = calendar.loc[original_dates, feature_names + risk_features].reset_index()
+        piece[ASSET_COLUMN] = asset_tag
+        pieces.append(piece)
+    return pd.concat(pieces, ignore_index=True), feature_names + risk_features
+
+
 def prepare_asset_forecast(
     frame: pd.DataFrame,
     score_threshold: int,
@@ -154,50 +212,12 @@ def prepare_asset_forecast(
         daily[DATE_COLUMN] + pd.Timedelta(days=horizon)
     ).where(valid, pd.NaT)
 
-    feature_names = [MACHINE_COLUMN, ASSET_COLUMN]
-    for column in SENSOR_COLUMNS:
-        values = grouped[column]
-        names = [
-            f"{column}_current", f"{column}_lag1", f"{column}_lag3",
-            f"{column}_lag7", f"{column}_mean7", f"{column}_std7",
-            f"{column}_diff1",
-        ]
-        daily[names[0]] = daily[column]
-        daily[names[1]] = values.shift(1)
-        daily[names[2]] = values.shift(3)
-        daily[names[3]] = values.shift(7)
-        daily[names[4]] = values.transform(
-            lambda series: series.rolling(7, min_periods=3).mean()
-        )
-        daily[names[5]] = values.transform(
-            lambda series: series.rolling(7, min_periods=3).std()
-        )
-        daily[names[6]] = values.diff(1)
-        feature_names.extend(names)
-
-    shifted_points = grouped["failure_points"].shift(1)
-    point_groups = shifted_points.groupby(daily[ASSET_COLUMN], sort=False)
-    daily["failure_points_lag1"] = shifted_points
-    daily["failure_points_mean7"] = point_groups.transform(
-        lambda series: series.rolling(7, min_periods=1).mean()
-    )
-    daily["failure_points_max7"] = point_groups.transform(
-        lambda series: series.rolling(7, min_periods=1).max()
-    )
-
-    shifted_risk = grouped[current_target].shift(1)
-    risk_groups = shifted_risk.groupby(daily[ASSET_COLUMN], sort=False)
-    daily["risk_event_count_30d"] = risk_groups.transform(
-        lambda series: series.rolling(30, min_periods=1).sum()
-    )
-    risk_dates = daily[DATE_COLUMN].where(shifted_risk.eq(1))
-    last_risk = risk_dates.groupby(daily[ASSET_COLUMN], sort=False).ffill()
-    daily["days_since_last_risk"] = (daily[DATE_COLUMN] - last_risk).dt.days
-    feature_names.extend([
-        "failure_points_lag1", "failure_points_mean7", "failure_points_max7",
-        "risk_event_count_30d", "days_since_last_risk", "day_of_week",
-        "month_sin", "month_cos",
-    ])
+    history, history_features = _asset_history_features(daily, current_target)
+    daily = daily.merge(history, on=[DATE_COLUMN, ASSET_COLUMN], how="left")
+    feature_names = [
+        MACHINE_COLUMN, ASSET_COLUMN, *history_features,
+        "day_of_week", "month_sin", "month_cos",
+    ]
 
     if risk_definition == "new":
         daily = daily[daily[current_target].eq(0)].copy()

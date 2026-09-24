@@ -14,7 +14,7 @@ from src import (
     industrial_training,
     part_features,
 )
-from src.eda import build_comparison, load_metric_outputs
+from src.eda import DEFAULT_METRICS, build_comparison, load_metric_outputs
 
 
 def test_build_comparison_keeps_selected_test_rows_only():
@@ -57,6 +57,11 @@ def test_build_comparison_keeps_selected_test_rows_only():
 def test_load_metric_outputs_explains_how_to_create_missing_results(tmp_path):
     with pytest.raises(FileNotFoundError, match="current_asset_model.py"):
         load_metric_outputs([tmp_path / "missing.csv"])
+
+
+def test_default_comparison_reads_both_asset_forecast_definitions():
+    names = {path.parent.name for path in DEFAULT_METRICS}
+    assert {"asset_forecast_7d_new", "asset_forecast_7d_any"} <= names
 
 
 def test_public_industrial_modules_have_korean_documentation():

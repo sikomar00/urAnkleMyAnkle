@@ -73,7 +73,8 @@
 ### `industrial_training.py`
 
 - `build_model()`이 범주형 One-Hot 인코딩과 수치 결측 대치를 포함한 파이프라인을 만듭니다.
-- 비교 모델은 Logistic Regression, Random Forest, HistGradientBoosting입니다.
+- Dummy 양성률 기준선과 Logistic Regression, Random Forest,
+  HistGradientBoosting을 비교합니다. 최종 선택은 세 학습모델 중에서 합니다.
 - `run_experiment_suite()`가 검증 Average Precision으로 모델을 선택합니다.
 - `choose_thresholds()`가 F1, 최소 Precision, 상위 비율 정책을 계산합니다.
 - `ranking_metrics()`가 상위 5/10/20% Precision·Recall·Lift를 계산합니다.

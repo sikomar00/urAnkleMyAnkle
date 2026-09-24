@@ -45,7 +45,7 @@ python -m pytest -v
 | 실행 파일 | 한 행의 단위 | 예측 대상 | 기본 출력 |
 |---|---|---|---|
 | `current_asset_model.py` | 장비·날짜 | 당일 고장점수 12/13/14 이상 | `outputs/asset_current` |
-| `forecast_asset_model.py` | 장비·날짜 | 향후 7일 신규 또는 전체 위험 | `outputs/asset_forecast_7d` |
+| `forecast_asset_model.py` | 장비·날짜 | 향후 7일 신규 또는 전체 위험 | `outputs/asset_forecast_7d_new` 또는 `_any` |
 | `current_part_model.py` | 장비·부품·날짜 | 당일 `breakdown_flag` | `outputs/part_current` |
 | `forecast_part_model.py` | 장비·부품·날짜 | 향후 7일 신규 고장 | `outputs/part_forecast_7d` |
 
@@ -75,11 +75,13 @@ python src/current_asset_model.py --data data/raw/my_data.csv --output outputs/m
 
 ## 5. 사용 모델과 결과 파일
 
-각 과제는 다음 세 모델을 학습하여 검증 Average Precision이 가장 높은 하나를 고릅니다.
+각 과제는 Dummy 양성률 기준선과 다음 세 학습모델을 비교합니다. 최종 모델은 세
+학습모델 중 검증 Average Precision이 가장 높은 하나를 고릅니다.
 
-1. `LogisticRegression`: 선형 기준모델, `class_weight="balanced"`
-2. `RandomForestClassifier`: 비선형 트리 앙상블
-3. `HistGradientBoostingClassifier`: 비선형 부스팅 모델
+1. `DummyClassifier`: 학습 양성률만 사용하는 기준선
+2. `LogisticRegression`: 표준화된 수치 Feature를 쓰는 선형 모델
+3. `RandomForestClassifier`: 비선형 트리 앙상블
+4. `HistGradientBoostingClassifier`: 비선형 부스팅 모델
 
 LightGBM은 macOS의 `libomp` 같은 네이티브 의존성 문제를 피하기 위해 기본 흐름에서
 제외했습니다. 출력 폴더에는 다음 파일이 생깁니다.
