@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +89,82 @@ def choose_threshold(y_true: Any, scores: Any) -> float:
     )
     # Candidates are sorted; retain the original highest-threshold tie break.
     return float(candidates[np.flatnonzero(f1_values == f1_values.max())[-1]])
+
+
+@dataclass(frozen=True)
+class ThresholdSelection:
+    """검증 데이터에서 선택한 한 가지 임계값 정책의 결과다."""
+
+    policy: str
+    cutoff: float | None
+    status: str
+
+
+def choose_thresholds(
+    y_true: Any,
+    scores: Any,
+    *,
+    min_precision: float = 0.30,
+    top_fraction: float = 0.10,
+) -> list[ThresholdSelection]:
+    """F1·최소 Precision·상위 비율 기준 임계값을 검증 점수에서 선택한다."""
+    if not 0 < min_precision <= 1:
+        raise ValueError("min_precision은 0보다 크고 1 이하여야 합니다.")
+    if not 0 < top_fraction <= 1:
+        raise ValueError("top_fraction은 0보다 크고 1 이하여야 합니다.")
+    y = np.asarray(y_true, dtype=int)
+    probabilities = np.asarray(scores, dtype=float)
+    if len(y) == 0 or len(np.unique(y)) < 2:
+        return [
+            ThresholdSelection("f1", 0.5, "ok"),
+            ThresholdSelection("min_precision", None, "unavailable"),
+            ThresholdSelection("top_fraction", 0.5, "ok"),
+        ]
+
+    candidates = np.unique(np.clip(probabilities, 0.0, 1.0))
+    feasible: list[tuple[float, float]] = []
+    for cutoff in candidates:
+        predictions = probabilities >= cutoff
+        precision = precision_score(y, predictions, zero_division=0)
+        recall = recall_score(y, predictions, zero_division=0)
+        if precision >= min_precision:
+            feasible.append((float(recall), float(cutoff)))
+    min_precision_cutoff = max(feasible)[1] if feasible else None
+
+    count = max(1, math.ceil(len(probabilities) * top_fraction))
+    top_cutoff = float(np.sort(probabilities)[::-1][count - 1])
+    return [
+        ThresholdSelection("f1", choose_threshold(y, probabilities), "ok"),
+        ThresholdSelection(
+            "min_precision", min_precision_cutoff,
+            "ok" if min_precision_cutoff is not None else "unavailable",
+        ),
+        ThresholdSelection("top_fraction", top_cutoff, "ok"),
+    ]
+
+
+def ranking_metrics(y_true: Any, scores: Any) -> dict[str, float | None]:
+    """위험점수 상위 5·10·20%의 Precision, Recall과 Lift를 계산한다."""
+    y = np.asarray(y_true, dtype=int)
+    probabilities = np.asarray(scores, dtype=float)
+    result: dict[str, float | None] = {}
+    prevalence = float(y.mean()) if len(y) else 0.0
+    order = np.argsort(-probabilities, kind="stable")
+    for percent in (5, 10, 20):
+        key = f"{percent}pct"
+        if not len(y):
+            result[f"precision_at_{key}"] = None
+            result[f"recall_at_{key}"] = None
+            result[f"lift_at_{key}"] = None
+            continue
+        count = max(1, math.ceil(len(y) * percent / 100))
+        selected = y[order[:count]]
+        precision = float(selected.mean())
+        recall = float(selected.sum() / y.sum()) if y.sum() else 0.0
+        result[f"precision_at_{key}"] = precision
+        result[f"recall_at_{key}"] = recall
+        result[f"lift_at_{key}"] = precision / prevalence if prevalence else None
+    return result
 
 
 def classification_metrics(
