@@ -286,15 +286,23 @@ def score_regression_metrics(y_true: Any, y_pred: Any) -> dict[str, Any]:
         observed_severity(actual),
         predicted_severity(predicted),
     )
+    spearman: float | None = None
+    if (
+        len(actual) >= 2
+        and np.unique(actual).size > 1
+        and np.unique(predicted).size > 1
+    ):
+        correlation = pd.Series(actual).corr(
+            pd.Series(predicted),
+            method="spearman",
+        )
+        if pd.notna(correlation):
+            spearman = float(correlation)
     return {
         "mae": float(mean_absolute_error(actual, predicted)),
         "rmse": float(mean_squared_error(actual, predicted) ** 0.5),
         "r2": float(r2_score(actual, predicted)) if len(actual) >= 2 else None,
-        "spearman": (
-            float(pd.Series(actual).corr(pd.Series(predicted), method="spearman"))
-            if len(actual) >= 2
-            else None
-        ),
+        "spearman": spearman,
         **severity,
     }
 
@@ -428,6 +436,11 @@ def run_asset_score_suite(
     output = Path(output_dir)
     model_dir = output / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
+    print(
+        "[Info] DummyRegressor Spearman: N/A "
+        "(상수 예측을 사용하는 기준선)",
+        flush=True,
+    )
     features = list(score_task.features)
     regression_rows: list[dict[str, Any]] = []
     severity_rows: list[dict[str, Any]] = []

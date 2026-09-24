@@ -1,7 +1,10 @@
+import warnings
+
 import joblib
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.stats import ConstantInputWarning
 from sklearn.dummy import DummyRegressor
 
 from src.asset_features import SEVERITY_LEVELS
@@ -99,6 +102,15 @@ def test_regression_metrics_include_score_and_high_risk_results():
     assert metrics["high_risk_recall"] == 1.0
 
 
+def test_regression_metrics_skip_spearman_for_constant_prediction():
+    with warnings.catch_warnings(record=True) as captured:
+        warnings.simplefilter("always")
+        metrics = score_regression_metrics([0, 4, 8, 12], [6, 6, 6, 6])
+
+    assert metrics["spearman"] is None
+    assert not any(isinstance(item.message, ConstantInputWarning) for item in captured)
+
+
 def test_severity_metrics_keep_fixed_class_order_when_class_is_absent():
     metrics = severity_classification_metrics(
         ["normal", "risk"],
@@ -146,6 +158,21 @@ def test_asset_score_suite_writes_all_outputs(tmp_path):
         "prob_risk",
         "prob_high_risk",
     } <= set(predictions)
+
+
+def test_asset_score_suite_reports_dummy_spearman_once(tmp_path, capsys):
+    score_task, severity_task = _score_tasks()
+
+    run_asset_score_suite(
+        score_task,
+        severity_task,
+        output_dir=tmp_path,
+        scope="overall",
+        max_iter=10,
+    )
+
+    output = capsys.readouterr().out
+    assert output.count("DummyRegressor Spearman") == 1
 
 
 def test_asset_score_suite_records_single_train_class_as_skipped(tmp_path):
