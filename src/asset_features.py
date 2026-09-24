@@ -113,3 +113,103 @@ def prepare_asset_current(
         mode="current",
         score_threshold=score_threshold,
     )
+
+
+def prepare_asset_forecast(
+    frame: pd.DataFrame,
+    score_threshold: int,
+    horizon: int = 7,
+    risk_definition: str = "new",
+) -> PreparedTask:
+    """오늘까지의 장비 센서·위험 이력으로 미래 위험 과제를 준비한다.
+
+    ``new``는 오늘 정상인 장비만 남겨 신규 위험을 예측하고, ``any``는 오늘
+    상태와 관계없이 미래 위험을 예측한다. 미래 달력 날짜가 연속으로 모두 존재하는
+    행만 Target을 만든다.
+    """
+    if score_threshold < 1:
+        raise ValueError("score_threshold는 1 이상이어야 합니다.")
+    if horizon < 1:
+        raise ValueError("horizon은 1 이상이어야 합니다.")
+    if risk_definition not in {"new", "any"}:
+        raise ValueError("risk_definition은 new 또는 any여야 합니다.")
+
+    daily = build_asset_daily(frame).sort_values(
+        [ASSET_COLUMN, DATE_COLUMN]
+    ).reset_index(drop=True)
+    current_target = f"target_ge_{score_threshold}"
+    daily[current_target] = (daily["failure_points"] >= score_threshold).astype(int)
+    grouped = daily.groupby(ASSET_COLUMN, sort=False)
+
+    valid = pd.Series(True, index=daily.index)
+    future_values = []
+    for offset in range(1, horizon + 1):
+        future_date = grouped[DATE_COLUMN].shift(-offset)
+        valid &= (future_date - daily[DATE_COLUMN]).dt.days.eq(offset)
+        future_values.append(grouped[current_target].shift(-offset).astype(float))
+
+    target = f"target_{risk_definition}_risk_{horizon}d_ge_{score_threshold}"
+    daily[target] = pd.concat(future_values, axis=1).max(axis=1).where(valid)
+    daily["label_end_date"] = (
+        daily[DATE_COLUMN] + pd.Timedelta(days=horizon)
+    ).where(valid, pd.NaT)
+
+    feature_names = [MACHINE_COLUMN, ASSET_COLUMN]
+    for column in SENSOR_COLUMNS:
+        values = grouped[column]
+        names = [
+            f"{column}_current", f"{column}_lag1", f"{column}_lag3",
+            f"{column}_lag7", f"{column}_mean7", f"{column}_std7",
+            f"{column}_diff1",
+        ]
+        daily[names[0]] = daily[column]
+        daily[names[1]] = values.shift(1)
+        daily[names[2]] = values.shift(3)
+        daily[names[3]] = values.shift(7)
+        daily[names[4]] = values.transform(
+            lambda series: series.rolling(7, min_periods=3).mean()
+        )
+        daily[names[5]] = values.transform(
+            lambda series: series.rolling(7, min_periods=3).std()
+        )
+        daily[names[6]] = values.diff(1)
+        feature_names.extend(names)
+
+    shifted_points = grouped["failure_points"].shift(1)
+    point_groups = shifted_points.groupby(daily[ASSET_COLUMN], sort=False)
+    daily["failure_points_lag1"] = shifted_points
+    daily["failure_points_mean7"] = point_groups.transform(
+        lambda series: series.rolling(7, min_periods=1).mean()
+    )
+    daily["failure_points_max7"] = point_groups.transform(
+        lambda series: series.rolling(7, min_periods=1).max()
+    )
+
+    shifted_risk = grouped[current_target].shift(1)
+    risk_groups = shifted_risk.groupby(daily[ASSET_COLUMN], sort=False)
+    daily["risk_event_count_30d"] = risk_groups.transform(
+        lambda series: series.rolling(30, min_periods=1).sum()
+    )
+    risk_dates = daily[DATE_COLUMN].where(shifted_risk.eq(1))
+    last_risk = risk_dates.groupby(daily[ASSET_COLUMN], sort=False).ffill()
+    daily["days_since_last_risk"] = (daily[DATE_COLUMN] - last_risk).dt.days
+    feature_names.extend([
+        "failure_points_lag1", "failure_points_mean7", "failure_points_max7",
+        "risk_event_count_30d", "days_since_last_risk", "day_of_week",
+        "month_sin", "month_cos",
+    ])
+
+    if risk_definition == "new":
+        daily = daily[daily[current_target].eq(0)].copy()
+    daily = daily.dropna(subset=[target]).copy()
+    daily[target] = daily[target].astype(int)
+    return PreparedTask(
+        frame=daily.reset_index(drop=True),
+        features=tuple(feature_names),
+        target=target,
+        grain="asset",
+        mode="forecast",
+        risk_definition=risk_definition,
+        score_threshold=score_threshold,
+        horizon=horizon,
+    )
