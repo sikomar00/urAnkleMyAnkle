@@ -2,10 +2,12 @@ import joblib
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.dummy import DummyRegressor
 
 from src.asset_features import SEVERITY_LEVELS
 from src.industrial_data import PreparedRegressionTask, PreparedTask
 from src.industrial_regression import (
+    NonnegativeRegressor,
     predicted_severity,
     run_asset_score_suite,
     score_regression_metrics,
@@ -159,6 +161,21 @@ def test_asset_score_suite_records_single_train_class_as_skipped(tmp_path):
 
     assert set(severity["status"]) == {"skipped"}
     assert "single train class" in severity.iloc[0]["reason"]
+    predictions = pd.read_csv(tmp_path / "test_predictions.csv")
+    assert len(predictions) == 4
+    assert predictions["predicted_failure_points"].notna().all()
+    assert predictions["predicted_severity_level"].isna().all()
+    assert predictions[
+        ["prob_normal", "prob_caution", "prob_risk", "prob_high_risk"]
+    ].isna().all().all()
+
+
+def test_saved_regression_predictor_clips_negative_predictions():
+    raw = DummyRegressor(strategy="constant", constant=-1.5)
+    raw.fit([[0.0], [1.0]], [0.0, 1.0])
+    predictor = NonnegativeRegressor(raw)
+
+    assert predictor.predict([[2.0]]).tolist() == [0.0]
 
 
 def test_saved_asset_score_models_reproduce_predictions_and_class_order(tmp_path):
@@ -175,13 +192,32 @@ def test_saved_asset_score_models_reproduce_predictions_and_class_order(tmp_path
     regression_payload = joblib.load(regression_file)
     severity_payload = joblib.load(severity_file)
     rows = score_task.frame.loc[:, list(score_task.features)].head(3)
+    test_rows = score_task.frame.loc[
+        score_task.frame["transaction_date"].ge("2024-07-01")
+    ]
+    saved_predictions = pd.read_csv(tmp_path / "test_predictions.csv")
 
     assert np.allclose(
         regression_payload["pipeline"].predict(rows),
         regression_payload["verification_predictions"],
     )
     assert severity_payload["class_order"] == list(SEVERITY_LEVELS)
+    assert severity_payload["pipeline"].classes_.tolist() == list(SEVERITY_LEVELS)
     assert np.allclose(
         severity_payload["pipeline"].predict_proba(rows),
         severity_payload["verification_probabilities"],
+    )
+    assert np.allclose(
+        regression_payload["pipeline"].predict(
+            test_rows.loc[:, list(score_task.features)]
+        ),
+        saved_predictions["predicted_failure_points"],
+    )
+    assert np.allclose(
+        severity_payload["pipeline"].predict_proba(
+            test_rows.loc[:, list(severity_task.features)]
+        ),
+        saved_predictions[
+            ["prob_normal", "prob_caution", "prob_risk", "prob_high_risk"]
+        ],
     )

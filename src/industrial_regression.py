@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -119,6 +120,38 @@ IMPORTANCE_COLUMNS = (
     "importance_mean",
     "importance_std",
 )
+
+
+@dataclass(frozen=True)
+class NonnegativeRegressor:
+    """저장 모델의 회귀 예측을 점수 도메인인 0 이상으로 제한한다."""
+
+    estimator: Any
+
+    def predict(self, frame: Any) -> np.ndarray:
+        """음수 원시 예측을 0으로 바꿔 반환한다."""
+        return np.maximum(np.asarray(self.estimator.predict(frame), dtype=float), 0.0)
+
+
+@dataclass(frozen=True)
+class OrderedSeverityClassifier:
+    """저장 모델의 확률 컬럼을 고정된 4단계 순서로 제공한다."""
+
+    estimator: Pipeline
+    class_order: tuple[str, ...] = SEVERITY_LEVELS
+
+    @property
+    def classes_(self) -> np.ndarray:
+        """`predict_proba()` 컬럼과 같은 순서의 등급을 반환한다."""
+        return np.asarray(self.class_order)
+
+    def predict(self, frame: Any) -> np.ndarray:
+        """원본 분류기의 예측 등급을 반환한다."""
+        return np.asarray(self.estimator.predict(frame), dtype=str)
+
+    def predict_proba(self, frame: pd.DataFrame) -> np.ndarray:
+        """확률을 `normal`, `caution`, `risk`, `high_risk` 순서로 반환한다."""
+        return ordered_probabilities(self.estimator, frame)
 
 
 def build_regression_model(
@@ -512,6 +545,9 @@ def run_asset_score_suite(
                     )
 
             selected_regression_model = regression_models[selected_regression]
+            selected_regression_predictor = NonnegativeRegressor(
+                selected_regression_model
+            )
             verification_rows = subset.loc[:, features].head(3)
             regression_path = model_dir / (
                 f"regression__{_safe_name(scope_kind)}__{_safe_name(scope_name)}__"
@@ -519,13 +555,14 @@ def run_asset_score_suite(
             )
             joblib.dump(
                 {
-                    "pipeline": selected_regression_model,
+                    "pipeline": selected_regression_predictor,
+                    "raw_pipeline": selected_regression_model,
                     "feature_data": features,
                     "target_data": score_task.target,
                     "selected_model": selected_regression,
                     "validation_start": str(validation_start),
                     "test_start": str(test_start),
-                    "verification_predictions": selected_regression_model.predict(
+                    "verification_predictions": selected_regression_predictor.predict(
                         verification_rows
                     ),
                 },
@@ -546,6 +583,32 @@ def run_asset_score_suite(
                 )
             )
 
+            regression_prediction = selected_regression_predictor.predict(
+                test[features]
+            )
+            prediction = test[
+                [
+                    "transaction_date",
+                    "label_end_date",
+                    "machine_type",
+                    "asset_tag",
+                    "failure_points",
+                    "severity_level",
+                ]
+            ].rename(
+                columns={
+                    "failure_points": "actual_failure_points",
+                    "severity_level": "actual_severity_level",
+                }
+            )
+            prediction["scope_kind"] = scope_kind
+            prediction["scope_name"] = scope_name
+            prediction["predicted_failure_points"] = regression_prediction
+            prediction["regression_severity_level"] = predicted_severity(
+                regression_prediction
+            )
+            prediction["regression_model"] = selected_regression
+
             if train[severity_task.target].nunique() < 2:
                 severity_rows.append(
                     _base_metric_row(
@@ -562,6 +625,11 @@ def run_asset_score_suite(
                         test=test,
                     )
                 )
+                prediction["predicted_severity_level"] = pd.NA
+                for level in SEVERITY_LEVELS:
+                    prediction[f"prob_{level}"] = pd.NA
+                prediction["severity_model"] = "skipped"
+                prediction_rows.append(prediction)
                 continue
 
             severity_models: dict[str, Pipeline] = {}
@@ -616,13 +684,17 @@ def run_asset_score_suite(
                     )
 
             selected_severity_model = severity_models[selected_severity]
+            selected_severity_predictor = OrderedSeverityClassifier(
+                selected_severity_model
+            )
             severity_path = model_dir / (
                 f"severity__{_safe_name(scope_kind)}__{_safe_name(scope_name)}__"
                 f"{selected_severity}__selected.joblib"
             )
             joblib.dump(
                 {
-                    "pipeline": selected_severity_model,
+                    "pipeline": selected_severity_predictor,
+                    "raw_pipeline": selected_severity_model,
                     "feature_data": features,
                     "target_data": severity_task.target,
                     "selected_model": selected_severity,
@@ -630,7 +702,7 @@ def run_asset_score_suite(
                     "validation_start": str(validation_start),
                     "test_start": str(test_start),
                     "verification_probabilities": (
-                        selected_severity_model.predict_proba(verification_rows)
+                        selected_severity_predictor.predict_proba(verification_rows)
                     ),
                 },
                 severity_path,
@@ -650,39 +722,13 @@ def run_asset_score_suite(
                 )
             )
 
-            regression_prediction = regression_predictions[selected_regression][
-                "test"
-            ]
-            severity_prediction = selected_severity_model.predict(test[features])
-            severity_probability = ordered_probabilities(
-                selected_severity_model,
-                test[features],
-            )
-            prediction = test[
-                [
-                    "transaction_date",
-                    "label_end_date",
-                    "machine_type",
-                    "asset_tag",
-                    "failure_points",
-                    "severity_level",
-                ]
-            ].rename(
-                columns={
-                    "failure_points": "actual_failure_points",
-                    "severity_level": "actual_severity_level",
-                }
-            )
-            prediction["scope_kind"] = scope_kind
-            prediction["scope_name"] = scope_name
-            prediction["predicted_failure_points"] = regression_prediction
-            prediction["regression_severity_level"] = predicted_severity(
-                regression_prediction
+            severity_prediction = selected_severity_predictor.predict(test[features])
+            severity_probability = selected_severity_predictor.predict_proba(
+                test[features]
             )
             prediction["predicted_severity_level"] = severity_prediction
             for index, level in enumerate(SEVERITY_LEVELS):
                 prediction[f"prob_{level}"] = severity_probability[:, index]
-            prediction["regression_model"] = selected_regression
             prediction["severity_model"] = selected_severity
             prediction_rows.append(prediction)
 
