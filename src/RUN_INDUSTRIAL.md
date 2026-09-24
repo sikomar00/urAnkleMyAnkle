@@ -9,6 +9,7 @@
 
 ```bash
 python src/current_asset_model.py
+python src/current_asset_score_model.py
 python src/forecast_asset_model.py --horizon 7 --risk-definition new
 python src/forecast_asset_model.py --horizon 7 --risk-definition any
 python src/current_part_model.py
@@ -26,6 +27,7 @@ python src/eda.py
 
 ```powershell
 .\venv\Scripts\python.exe src\current_asset_model.py
+.\venv\Scripts\python.exe src\current_asset_score_model.py
 .\venv\Scripts\python.exe src\forecast_asset_model.py --horizon 7 --risk-definition new
 .\venv\Scripts\python.exe src\forecast_asset_model.py --horizon 7 --risk-definition any
 .\venv\Scripts\python.exe src\current_part_model.py
@@ -45,6 +47,7 @@ python -m pytest -v
 | 실행 파일 | 한 행의 단위 | 예측 대상 | 기본 출력 |
 |---|---|---|---|
 | `current_asset_model.py` | 장비·날짜 | 당일 고장점수 12/13/14 이상 | `outputs/asset_current` |
+| `current_asset_score_model.py` | 장비·날짜 | 당일 `failure_points`와 4단계 위험도 | `outputs/asset_score_current` |
 | `forecast_asset_model.py` | 장비·날짜 | 향후 7일 신규 또는 전체 위험 | `outputs/asset_forecast_7d_new` 또는 `_any` |
 | `current_part_model.py` | 장비·부품·날짜 | 당일 `breakdown_flag` | `outputs/part_current` |
 | `forecast_part_model.py` | 장비·부품·날짜 | 향후 7일 신규 고장 | `outputs/part_forecast_7d` |
@@ -73,6 +76,20 @@ python src/current_asset_model.py --data data/raw/my_data.csv --output outputs/m
 생략하면 세 정책을 모두 평가합니다. 기본 날짜 분할은 학습 2024년 이전, 검증
 2024-01-01~2024-06-30, 테스트 2024-07-01 이후입니다.
 
+### 장비 점수·4단계 모델만 실행하기
+
+```bash
+python src/current_asset_score_model.py \
+  --data dataVerification/synthetic_industrial_machine_data.csv \
+  --scope all \
+  --max-iter 100
+```
+
+장비 일별 고장점수 (S)는 `normal`((S=0)), `caution`((1\le S\le5)),
+`risk`((6\le S\le11)), `high_risk`((S\ge12))로 표시합니다.
+`high_risk`는 부품별 `breakdown_flag`에 중요도 가중치를 적용한 대리 지표이며,
+실제 기계 정지·생산 손실이 확인됐다는 뜻은 아닙니다.
+
 ## 5. 사용 모델과 결과 파일
 
 각 과제는 Dummy 양성률 기준선과 다음 세 학습모델을 비교합니다. 최종 모델은 세
@@ -94,6 +111,17 @@ LightGBM은 macOS의 `libomp` 같은 네이티브 의존성 문제를 피하기 
 
 `src/eda.py`는 이 결과들을 읽어 선택된 테스트 결과만
 `outputs/model_comparison.csv`로 합칩니다. 모델을 다시 학습하지 않습니다.
+
+`current_asset_score_model.py`는 별도로 다음을 생성합니다.
+
+- `regression_metrics.csv`: 점수 회귀의 MAE, RMSE, (R^2), Spearman과 4단계 환산 지표
+- `severity_metrics.csv`: 4단계 분류의 Macro/Weighted F1과 등급별 지표
+- `test_predictions.csv`: 실제·예측 점수, 등급, 네 등급의 예측 확률
+- `feature_importance.csv`: 회귀와 분류 선택 모델의 permutation importance
+- `run_config.json`, `models/`: 실행 설정과 다시 불러올 수 있는 선택 모델
+
+이 실험에서는 Accuracy만으로 판단하지 말고 `macro_f1`과
+`high_risk_precision`, `high_risk_recall`, `high_risk_binary_f1`을 함께 봐야 합니다.
 
 ## 6. 기존 명령 호환
 

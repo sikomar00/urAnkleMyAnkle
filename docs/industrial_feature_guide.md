@@ -18,7 +18,35 @@ S_{a,t}=\sum_{i\in\mathrm{parts}(a)}
 입니다. 같은 장비·날짜에 반복된 센서값이 서로 다르면 임의로 평균하지 않고 오류를
 발생시킵니다.
 
-## 2. 장비 단위 당일 탐지
+## 2. 장비 점수와 4단계 위험도
+
+기존 임계값별 이진 Target과 병렬로 `failure_points` 자체를 예측하는
+회귀 과제와 다음 4단계 분류 과제를 사용합니다.
+
+\[
+L(S)=
+\begin{cases}
+\mathrm{normal},&S=0,\\
+\mathrm{caution},&1\le S\le5,\\
+\mathrm{risk},&6\le S\le11,\\
+\mathrm{high\_risk},&S\ge12.
+\end{cases}
+\]
+
+회귀 예측값 \(\hat S\)는 연속값이므로 0 이상으로 제한한 뒤 0.5, 5.5,
+11.5를 등급 경계로 사용합니다. 이 경계는 가장 가까운 정수 점수의 등급에
+대응하도록 정한 것입니다.
+
+- \(0\le\hat S<0.5\): `normal`
+- \(0.5\le\hat S<5.5\): `caution`
+- \(5.5\le\hat S<11.5\): `risk`
+- \(11.5\le\hat S\): `high_risk`
+
+`high_risk`는 가중합 점수의 대리 상태이지 실제 기계 정지 여부가 아닙니다.
+기존 `target_ge_12`, `target_ge_13`, `target_ge_14` 이진 모델은 성능 비교용
+기준선으로 계속 유지합니다.
+
+## 3. 장비 단위 당일 탐지
 
 - 그룹 키: `transaction_date + machine_type + asset_tag`
 - Target:
@@ -33,7 +61,7 @@ y^{\mathrm{asset,current}}_{\tau}(t)=\mathbf{1}\{S_{a,t}\ge\tau\},
 
 `target_ge_12`처럼 이름과 실제 `>=` 연산을 일치시켰습니다.
 
-## 3. 장비 단위 향후 7일 예측
+## 4. 장비 단위 향후 7일 예측
 
 - 그룹 키: Feature 이력은 `asset_tag`, 일별 집계는 장비·날짜
 - 전체 위험 Target:
@@ -61,7 +89,7 @@ x_t,\ x_{t-1},\ x_{t-3},\ x_{t-7},\
 - `risk_event_count_30d`
 - `days_since_last_risk`
 
-## 4. 부품 단위 당일 탐지
+## 5. 부품 단위 당일 탐지
 
 - 그룹 키: `transaction_date + asset_tag + part_no`
 - Target:
@@ -77,7 +105,7 @@ y^{\mathrm{part,current}}_{a,i,t}
 같은 장비의 여러 부품은 센서값이 같아도 정답이 다를 수 있으므로 `part_no`와
 `criticality`를 포함합니다.
 
-## 5. 부품 단위 향후 7일 예측
+## 6. 부품 단위 향후 7일 예측
 
 - Target:
 
@@ -94,7 +122,7 @@ y^{\mathrm{part,7d}}_{a,i,t}
 사용합니다. 부품 고장 이력은 `breakdown_lag1`, `breakdown_count_7d`,
 `breakdown_count_30d`, `days_since_last_breakdown`이며 모두 `shift(1)` 이후 값입니다.
 
-## 6. 시간 분할과 누수 방지
+## 7. 시간 분할과 누수 방지
 
 미래 Target의 마지막 관측일을 `label_end_date`에 저장합니다. 검증 시작일을 \(V\),
 테스트 시작일을 \(T\)라 하면
@@ -113,7 +141,7 @@ y^{\mathrm{part,7d}}_{a,i,t}
 또한 미래 7개 달력 날짜 중 하루라도 빠지면 음성으로 간주하지 않고 그 기준일 자체를
 제외합니다.
 
-## 7. 해석할 때 주의할 점
+## 8. 해석할 때 주의할 점
 
 1. 현재 CSV는 교육용 합성 데이터입니다. 실제 센서의 열화 패턴과 고장 전조가 약하거나
    무작위에 가까우면 복잡한 모델도 높은 성능을 낼 수 없습니다.

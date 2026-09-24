@@ -22,6 +22,16 @@
        └─ industrial_training.run_experiment_suite()
 ```
 
+장비 점수·4단계 실험은 기존 이진 분류를 변경하지 않고 다음 별도
+흐름을 사용합니다.
+
+```text
+current_asset_score_model.py
+  ├─ prepare_asset_score_current()
+  ├─ prepare_asset_severity_current()
+  └─ run_asset_score_suite()
+```
+
 ## 2. 실행 파일
 
 1. `current_asset_model.py`
@@ -30,21 +40,27 @@
    - 실행: `python src/current_asset_model.py`
    - 선택 인자: `--score-threshold`, `--scope`, 날짜 분할, 임계값 정책
 
-2. `forecast_asset_model.py`
+2. `current_asset_score_model.py`
+   - 목적: 장비 당일 `failure_points` 회귀와 정상·주의·위험·고위험 분류
+   - 모델 선택: 검증 MAE가 가장 낮은 회귀 모델, 검증 Macro F1이 가장 높은 분류 모델
+   - 실행: `python src/current_asset_score_model.py`
+   - 주의: `high_risk`는 실제 기계 정지를 확정하는 Target이 아님
+
+3. `forecast_asset_model.py`
    - 목적: 오늘까지의 정보로 향후 7일 장비 위험 예측
    - 기본 Target: 현재 정상 장비의 `target_new_risk_7d_ge_*`
    - 실행: `python src/forecast_asset_model.py --horizon 7 --risk-definition new`
    - 비교 실행: `--risk-definition any`
 
-3. `current_part_model.py`
+4. `current_part_model.py`
    - 목적: 부품의 당일 `breakdown_flag` 탐지
    - 실행: `python src/current_part_model.py`
 
-4. `forecast_part_model.py`
+5. `forecast_part_model.py`
    - 목적: 오늘 정상인 부품의 향후 7일 고장 예측
    - 실행: `python src/forecast_part_model.py --horizon 7`
 
-5. `eda.py`
+6. `eda.py`
    - 목적: 네 출력의 선택 모델 테스트 지표 비교
    - 실행: `python src/eda.py`
    - 주의: 학습은 하지 않으므로 먼저 네 모델 명령을 실행해야 함
@@ -78,6 +94,13 @@
 - `run_experiment_suite()`가 검증 Average Precision으로 모델을 선택합니다.
 - `choose_thresholds()`가 F1, 최소 Precision, 상위 비율 정책을 계산합니다.
 - `ranking_metrics()`가 상위 5/10/20% Precision·Recall·Lift를 계산합니다.
+
+### `industrial_regression.py`
+
+- `build_regression_model()`이 Dummy, Random Forest, HistGradientBoosting 회귀를 만듭니다.
+- `predicted_severity()`가 연속 예측점수를 0.5, 5.5, 11.5 경계로 등급화합니다.
+- `severity_classification_metrics()`가 고정된 등급 순서로 Macro F1과 고위험 지표를 계산합니다.
+- `run_asset_score_suite()`가 scope별 모델 선택, 테스트 평가, 예측·모델 저장을 담당합니다.
 
 ### `industrial_cli.py`
 
