@@ -1,10 +1,75 @@
+import joblib
+import numpy as np
+import pandas as pd
 import pytest
 
+from src.asset_features import SEVERITY_LEVELS
+from src.industrial_data import PreparedRegressionTask, PreparedTask
 from src.industrial_regression import (
     predicted_severity,
+    run_asset_score_suite,
     score_regression_metrics,
     severity_classification_metrics,
 )
+
+
+def _score_tasks(single_train_class: bool = False):
+    dates = pd.to_datetime(
+        [
+            "2023-12-01",
+            "2023-12-02",
+            "2023-12-03",
+            "2023-12-04",
+            "2024-01-01",
+            "2024-01-02",
+            "2024-01-03",
+            "2024-01-04",
+            "2024-07-01",
+            "2024-07-02",
+            "2024-07-03",
+            "2024-07-04",
+        ]
+    )
+    points = [0, 3, 8, 12] * 3
+    if single_train_class:
+        points[:4] = [0, 0, 0, 0]
+    frame = pd.DataFrame(
+        {
+            "transaction_date": dates,
+            "label_end_date": dates,
+            "machine_type": ["Press"] * 12,
+            "asset_tag": ["A-1", "A-2"] * 6,
+            "signal": np.arange(12, dtype=float),
+            "failure_points": points,
+        }
+    )
+    frame["severity_level"] = np.select(
+        [
+            frame.failure_points.eq(0),
+            frame.failure_points.le(5),
+            frame.failure_points.le(11),
+        ],
+        ["normal", "caution", "risk"],
+        default="high_risk",
+    )
+    features = ("machine_type", "asset_tag", "signal")
+    return (
+        PreparedRegressionTask(
+            frame,
+            features,
+            "failure_points",
+            "asset",
+            "current",
+        ),
+        PreparedTask(
+            frame,
+            features,
+            "severity_level",
+            "asset",
+            "current",
+            risk_definition="severity_4class",
+        ),
+    )
 
 
 def test_predicted_severity_uses_half_point_boundaries():
@@ -45,3 +110,78 @@ def test_severity_metrics_keep_fixed_class_order_when_class_is_absent():
         [0, 0, 0, 0],
     ]
     assert metrics["high_risk_support"] == 0
+
+
+def test_asset_score_suite_writes_all_outputs(tmp_path):
+    score_task, severity_task = _score_tasks()
+
+    regression, severity = run_asset_score_suite(
+        score_task,
+        severity_task,
+        output_dir=tmp_path,
+        scope="overall",
+        max_iter=10,
+    )
+
+    assert regression.query("selected_model == True").shape[0] == 2
+    assert severity.query("selected_model == True").shape[0] == 2
+    assert {
+        "regression_metrics.csv",
+        "severity_metrics.csv",
+        "test_predictions.csv",
+        "feature_importance.csv",
+        "run_config.json",
+    } <= {path.name for path in tmp_path.iterdir()}
+    predictions = pd.read_csv(tmp_path / "test_predictions.csv")
+    assert {
+        "actual_failure_points",
+        "predicted_failure_points",
+        "actual_severity_level",
+        "regression_severity_level",
+        "predicted_severity_level",
+        "prob_normal",
+        "prob_caution",
+        "prob_risk",
+        "prob_high_risk",
+    } <= set(predictions)
+
+
+def test_asset_score_suite_records_single_train_class_as_skipped(tmp_path):
+    score_task, severity_task = _score_tasks(single_train_class=True)
+
+    _, severity = run_asset_score_suite(
+        score_task,
+        severity_task,
+        output_dir=tmp_path,
+        scope="overall",
+        max_iter=10,
+    )
+
+    assert set(severity["status"]) == {"skipped"}
+    assert "single train class" in severity.iloc[0]["reason"]
+
+
+def test_saved_asset_score_models_reproduce_predictions_and_class_order(tmp_path):
+    score_task, severity_task = _score_tasks()
+    run_asset_score_suite(
+        score_task,
+        severity_task,
+        output_dir=tmp_path,
+        scope="overall",
+        max_iter=10,
+    )
+    regression_file = next((tmp_path / "models").glob("regression__*.joblib"))
+    severity_file = next((tmp_path / "models").glob("severity__*.joblib"))
+    regression_payload = joblib.load(regression_file)
+    severity_payload = joblib.load(severity_file)
+    rows = score_task.frame.loc[:, list(score_task.features)].head(3)
+
+    assert np.allclose(
+        regression_payload["pipeline"].predict(rows),
+        regression_payload["verification_predictions"],
+    )
+    assert severity_payload["class_order"] == list(SEVERITY_LEVELS)
+    assert np.allclose(
+        severity_payload["pipeline"].predict_proba(rows),
+        severity_payload["verification_probabilities"],
+    )
