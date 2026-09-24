@@ -1,7 +1,11 @@
 import numpy as np
+import pandas as pd
 from sklearn.metrics import f1_score
 
-from src.industrial_training import choose_threshold, choose_thresholds, ranking_metrics
+from src.industrial_data import PreparedTask
+from src.industrial_training import (
+    choose_threshold, choose_thresholds, ranking_metrics, run_experiment_suite,
+)
 
 
 def test_threshold_matches_original_search():
@@ -46,3 +50,23 @@ def test_ranking_metrics_uses_exact_top_count():
     assert result["precision_at_20pct"] == 1.0
     assert result["recall_at_20pct"] == 0.5
     assert result["lift_at_20pct"] == 2.5
+
+
+def test_experiment_suite_writes_common_outputs(tmp_path):
+    dates = pd.to_datetime([
+        "2023-12-01", "2023-12-02", "2023-12-03", "2023-12-04",
+        "2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04",
+        "2024-07-01", "2024-07-02", "2024-07-03", "2024-07-04",
+    ])
+    frame = pd.DataFrame({
+        "transaction_date": dates, "label_end_date": dates,
+        "machine_type": ["Press"] * 12, "asset_tag": ["A-1", "A-2"] * 6,
+        "signal": np.arange(12, dtype=float), "target": [0, 1] * 6,
+    })
+    task = PreparedTask(frame, ("machine_type", "asset_tag", "signal"),
+                        "target", "asset", "current")
+    metrics = run_experiment_suite([task], output_dir=tmp_path, scope="overall", max_iter=10)
+    assert {"logistic_regression", "random_forest", "hist_gradient_boosting"} <= set(metrics["model"])
+    assert metrics.query("selected_model == True").shape[0] > 0
+    for name in ("metrics.csv", "test_predictions.csv", "feature_importance.csv", "run_config.json"):
+        assert (tmp_path / name).exists()

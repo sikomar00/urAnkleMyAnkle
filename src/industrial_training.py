@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Sequence
 from typing import Any
 
 import joblib
@@ -30,11 +32,13 @@ from sklearn.metrics import (
 )
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.inspection import permutation_importance
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     __package__ = "src"
 
+from .industrial_data import PreparedTask
 from .industrial_features import iter_scopes, split_by_date
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -237,7 +241,10 @@ def build_model(
             random_state=random_state,
         )
     elif model_name == "logistic_regression":
-        classifier = LogisticRegression(max_iter=max(1000, max_iter), random_state=random_state)
+        classifier = LogisticRegression(
+            max_iter=max(1000, max_iter), class_weight="balanced",
+            random_state=random_state,
+        )
     elif model_name == "random_forest":
         classifier = RandomForestClassifier(
             n_estimators=max(50, max_iter),
@@ -251,6 +258,111 @@ def build_model(
             "logistic_regression, random_forest 중 하나를 사용하세요."
         )
     return Pipeline([("preprocess", preprocess), ("classifier", classifier)])
+
+
+MODEL_NAMES = ("logistic_regression", "random_forest", "hist_gradient_boosting")
+
+
+def run_experiment_suite(
+    tasks: Sequence[PreparedTask], *, output_dir: str | Path, scope: str = "all",
+    machine_type: str | None = None, asset_tag: str | None = None,
+    max_iter: int = 100, validation_start: str = "2024-01-01",
+    test_start: str = "2024-07-01",
+    threshold_policies: tuple[str, ...] = ("f1", "min_precision", "top_fraction"),
+    min_precision: float = 0.30, top_fraction: float = 0.10,
+    random_state: int = 42,
+) -> pd.DataFrame:
+    """여러 준비 과제를 같은 모델·평가 계약으로 학습하고 산출물을 저장한다."""
+    allowed = {"f1", "min_precision", "top_fraction"}
+    if not threshold_policies or not set(threshold_policies) <= allowed:
+        raise ValueError(f"threshold_policies는 {sorted(allowed)} 중 하나 이상이어야 합니다.")
+    output = Path(output_dir)
+    (output / "models").mkdir(parents=True, exist_ok=True)
+    metric_rows, prediction_rows, importance_rows = [], [], []
+    for task in tasks:
+        validate_features(list(task.features), task.target)
+        for scope_kind, scope_name, subset in iter_scopes(
+            task.frame, scope, machine_type, asset_tag
+        ):
+            parts = split_by_date(subset, validation_start, test_start)
+            train, valid, test = parts["train"], parts["valid"], parts["test"]
+            meta = {
+                "grain": task.grain, "mode": task.mode, "target": task.target,
+                "risk_definition": task.risk_definition,
+                "score_threshold": task.score_threshold, "horizon": task.horizon,
+                "scope_kind": scope_kind, "scope_name": scope_name,
+            }
+            if any(part.empty for part in parts.values()) or train[task.target].nunique() < 2 or valid[task.target].nunique() < 2:
+                metric_rows.append({**meta, "model": "none", "selected_model": False,
+                                    "split": "test", "status": "skipped",
+                                    "reason": "empty split or single training/validation class"})
+                continue
+            fitted = {}
+            validation_scores = {}
+            for model_name in MODEL_NAMES:
+                model = build_model(model_name, train[list(task.features)], max_iter, random_state)
+                model.fit(train[list(task.features)], train[task.target].astype(int))
+                fitted[model_name] = model
+                validation_scores[model_name] = model.predict_proba(valid[list(task.features)])[:, 1]
+            ap = {name: average_precision_score(valid[task.target], scores)
+                  for name, scores in validation_scores.items()}
+            selected_name = max(MODEL_NAMES, key=lambda name: (ap[name], -MODEL_NAMES.index(name)))
+            for model_name, model in fitted.items():
+                scores_by_split = {
+                    "validation": validation_scores[model_name],
+                    "test": model.predict_proba(test[list(task.features)])[:, 1],
+                }
+                selections = choose_thresholds(
+                    valid[task.target], scores_by_split["validation"],
+                    min_precision=min_precision, top_fraction=top_fraction,
+                )
+                for split_name, part in (("validation", valid), ("test", test)):
+                    scores = scores_by_split[split_name]
+                    ranks = ranking_metrics(part[task.target], scores)
+                    for selection in selections:
+                        if selection.policy not in threshold_policies:
+                            continue
+                        metrics = ({key: None for key in classification_metrics(part[task.target], scores, 0.5)}
+                                   if selection.cutoff is None else
+                                   classification_metrics(part[task.target], scores, selection.cutoff))
+                        metric_rows.append({
+                            **meta, "model": model_name,
+                            "selected_model": model_name == selected_name,
+                            "split": split_name, "status": selection.status, "reason": "",
+                            "threshold_policy": selection.policy,
+                            "probability_cutoff": selection.cutoff,
+                            "train_rows": len(train), "valid_rows": len(valid), "test_rows": len(test),
+                            "train_positive_rate": train[task.target].mean(),
+                            "valid_positive_rate": valid[task.target].mean(),
+                            "test_positive_rate": test[task.target].mean(), **metrics, **ranks,
+                        })
+                        if split_name == "test" and model_name == selected_name:
+                            pred = test[[c for c in ["transaction_date", "label_end_date", "asset_tag", "machine_type", "part_no", task.target] if c in test]].copy()
+                            pred.update({})
+                            pred = pred.assign(**meta, model=model_name,
+                                               threshold_policy=selection.policy,
+                                               probability_cutoff=selection.cutoff,
+                                               risk_score=scores,
+                                               prediction=(scores >= selection.cutoff).astype(int) if selection.cutoff is not None else pd.NA)
+                            prediction_rows.append(pred)
+            selected = fitted[selected_name]
+            model_path = output / "models" / f"{_safe_name(task.target)}__{_safe_name(scope_kind)}__{_safe_name(scope_name)}__{selected_name}__selected.joblib"
+            verification_rows = task.frame.loc[:, list(task.features)].head(3)
+            joblib.dump({"pipeline": selected, "feature_data": list(task.features),
+                         "target_data": task.target, "metadata": meta,
+                         "verification_scores": selected.predict_proba(verification_rows)[:, 1]}, model_path)
+            sample = valid.sample(min(1000, len(valid)), random_state=random_state)
+            perm = permutation_importance(selected, sample[list(task.features)], sample[task.target],
+                                          scoring="average_precision", n_repeats=3, random_state=random_state)
+            importance_rows.extend({**meta, "model": selected_name, "feature": feature,
+                                    "importance_mean": mean, "importance_std": std}
+                                   for feature, mean, std in zip(task.features, perm.importances_mean, perm.importances_std))
+    metrics_frame = pd.DataFrame(metric_rows)
+    metrics_frame.to_csv(output / "metrics.csv", index=False)
+    pd.concat(prediction_rows, ignore_index=True).to_csv(output / "test_predictions.csv", index=False) if prediction_rows else pd.DataFrame().to_csv(output / "test_predictions.csv", index=False)
+    pd.DataFrame(importance_rows).to_csv(output / "feature_importance.csv", index=False)
+    (output / "run_config.json").write_text(json.dumps({"models": MODEL_NAMES, "validation_start": validation_start, "test_start": test_start, "threshold_policies": threshold_policies, "random_state": random_state}, ensure_ascii=False, indent=2), encoding="utf-8")
+    return metrics_frame
 
 
 def _safe_name(value: str) -> str:
