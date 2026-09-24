@@ -1,10 +1,14 @@
+import numpy as np
 import pandas as pd
 import pytest
 
 from src.asset_features import (
+    add_asset_severity,
     build_asset_daily,
     prepare_asset_current,
     prepare_asset_forecast,
+    prepare_asset_score_current,
+    prepare_asset_severity_current,
 )
 
 
@@ -64,6 +68,43 @@ def test_asset_daily_rejects_conflicting_sensor_values():
 def test_asset_current_rejects_nonpositive_score_threshold():
     with pytest.raises(ValueError, match="1 이상"):
         prepare_asset_current(_rows(), score_threshold=0)
+
+
+def test_asset_severity_uses_all_integer_boundaries():
+    frame = pd.DataFrame({"failure_points": [0, 1, 5, 6, 11, 12, 30]})
+
+    result = add_asset_severity(frame)
+
+    assert result["severity_level"].astype("string").tolist() == [
+        "normal",
+        "caution",
+        "caution",
+        "risk",
+        "risk",
+        "high_risk",
+        "high_risk",
+    ]
+    assert result["severity_code"].tolist() == [0, 1, 1, 2, 2, 3, 3]
+
+
+@pytest.mark.parametrize("bad_value", [-1, np.nan, "bad"])
+def test_asset_severity_rejects_invalid_failure_points(bad_value):
+    with pytest.raises(ValueError, match="failure_points"):
+        add_asset_severity(pd.DataFrame({"failure_points": [bad_value]}))
+
+
+def test_asset_score_and_severity_tasks_keep_targets_out_of_features():
+    score_task = prepare_asset_score_current(_rows())
+    severity_task = prepare_asset_severity_current(_rows())
+
+    assert score_task.target == "failure_points"
+    assert severity_task.target == "severity_level"
+    assert "failure_points" not in score_task.features
+    assert "severity_level" not in severity_task.features
+    assert "severity_code" not in severity_task.features
+    assert score_task.frame["severity_level"].astype("string").tolist() == [
+        "high_risk"
+    ]
 
 
 @pytest.fixture

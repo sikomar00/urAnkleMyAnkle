@@ -84,6 +84,32 @@ class PreparedTask:
             raise ValueError(f"PreparedTask에 필요한 컬럼이 없습니다: {missing}")
 
 
+@dataclass(frozen=True)
+class PreparedRegressionTask:
+    """회귀 Feature, Target과 과제 메타데이터를 보관한다."""
+
+    frame: pd.DataFrame
+    features: tuple[str, ...]
+    target: str
+    grain: str
+    mode: str
+    risk_definition: str = "score"
+
+    def __post_init__(self) -> None:
+        """Feature와 Target의 기본 계약을 검사한다."""
+        if self.target in self.features:
+            raise ValueError("Target 컬럼을 Feature에 포함할 수 없습니다.")
+        missing = [
+            column
+            for column in (*self.features, self.target)
+            if column not in self.frame
+        ]
+        if missing:
+            raise ValueError(
+                f"PreparedRegressionTask에 필요한 컬럼이 없습니다: {missing}"
+            )
+
+
 def load_industrial_data(path: str | Path) -> pd.DataFrame:
     """원본 CSV를 읽고 공통 필수 컬럼과 고장값을 검증한다.
 

@@ -16,11 +16,14 @@ from .industrial_data import (
     MACHINE_COLUMN,
     PART_COLUMN,
     SENSOR_COLUMNS,
+    PreparedRegressionTask,
     PreparedTask,
     add_calendar_features,
 )
 
 CRITICALITY_WEIGHTS = {"A": 4, "B": 2, "C": 1}
+SEVERITY_LEVELS = ("normal", "caution", "risk", "high_risk")
+SEVERITY_CODE = {name: index for index, name in enumerate(SEVERITY_LEVELS)}
 
 ASSET_CURRENT_FEATURES = (
     MACHINE_COLUMN,
@@ -83,6 +86,30 @@ def build_asset_daily(frame: pd.DataFrame) -> pd.DataFrame:
     return add_calendar_features(daily)
 
 
+def add_asset_severity(frame: pd.DataFrame) -> pd.DataFrame:
+    """정수 고장점수를 정상·주의·위험·고위험으로 변환한다."""
+    if "failure_points" not in frame:
+        raise ValueError("failure_points 컬럼이 필요합니다.")
+
+    result = frame.copy()
+    scores = pd.to_numeric(result["failure_points"], errors="coerce")
+    if scores.isna().any() or scores.lt(0).any():
+        raise ValueError("failure_points는 결측이 없는 0 이상의 숫자여야 합니다.")
+
+    labels = pd.Series("high_risk", index=result.index, dtype="string")
+    labels.loc[scores.eq(0)] = "normal"
+    labels.loc[scores.between(1, 5, inclusive="both")] = "caution"
+    labels.loc[scores.between(6, 11, inclusive="both")] = "risk"
+    result["failure_points"] = scores
+    result["severity_level"] = pd.Categorical(
+        labels,
+        categories=SEVERITY_LEVELS,
+        ordered=True,
+    )
+    result["severity_code"] = labels.map(SEVERITY_CODE).astype(int)
+    return result
+
+
 def prepare_asset_current(
     frame: pd.DataFrame,
     score_threshold: int,
@@ -112,6 +139,31 @@ def prepare_asset_current(
         grain="asset",
         mode="current",
         score_threshold=score_threshold,
+    )
+
+
+def prepare_asset_score_current(frame: pd.DataFrame) -> PreparedRegressionTask:
+    """장비 당일 고장점수 회귀 과제를 준비한다."""
+    daily = add_asset_severity(build_asset_daily(frame))
+    return PreparedRegressionTask(
+        frame=daily,
+        features=ASSET_CURRENT_FEATURES,
+        target="failure_points",
+        grain="asset",
+        mode="current",
+    )
+
+
+def prepare_asset_severity_current(frame: pd.DataFrame) -> PreparedTask:
+    """장비 당일 4단계 위험도 분류 과제를 준비한다."""
+    daily = add_asset_severity(build_asset_daily(frame))
+    return PreparedTask(
+        frame=daily,
+        features=ASSET_CURRENT_FEATURES,
+        target="severity_level",
+        grain="asset",
+        mode="current",
+        risk_definition="severity_4class",
     )
 
 
