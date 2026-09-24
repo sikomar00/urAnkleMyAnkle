@@ -1,8 +1,7 @@
-"""현재 상태 분류 실행 진입점."""
+"""기존 명령을 부품 단위 당일 탐지 CLI로 연결하는 호환 실행 파일이다."""
 
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
 
@@ -10,34 +9,14 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     __package__ = "src"
 
-from .industrial_features import load_industrial_data, prepare_current
-from .industrial_training import DEFAULT_DATA, PROJECT_ROOT, run_experiments
+from .current_part_model import main as run_current_part
+from .industrial_training import PROJECT_ROOT
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="현재 breakdown_flag 분류 모델")
-    parser.add_argument("--data", default=DEFAULT_DATA)
-    parser.add_argument("--output", default=PROJECT_ROOT / "outputs" / "current_state")
-    parser.add_argument("--scope", choices=["all", "overall", "machine_type", "asset_tag"], default="all")
-    parser.add_argument("--machine-type")
-    parser.add_argument("--asset-tag")
-    parser.add_argument("--max-iter", type=int, default=100)
-    args = parser.parse_args()
-    raw = load_industrial_data(args.data)
-    frame, feature_data, target_data = prepare_current(raw)
-    run_experiments(
-        frame,
-        feature_data,
-        target_data,
-        output_dir=args.output,
-        mode="current",
-        scope=args.scope,
-        machine_type=args.machine_type,
-        asset_tag=args.asset_tag,
-        max_iter=args.max_iter,
-    )
+    """기존 기본 출력 경로를 유지하며 새 부품 당일 CLI를 실행한다."""
+    run_current_part(default_output=PROJECT_ROOT / "outputs" / "current_state")
 
 
 if __name__ == "__main__":
     main()
-
