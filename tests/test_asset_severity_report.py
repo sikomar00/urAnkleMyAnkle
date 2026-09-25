@@ -126,3 +126,90 @@ def test_summary_states_proxy_limit_and_threshold_difference():
         assert phrase in text
     assert "| 12 | high_risk | risk | 1 |" in text
     assert "| 13 | risk | risk | 1 |" in text
+    assert "| high_risk_threshold | actual_level | support | rate |" in text
+    assert "| 12 | high_risk | 1 | 1.0000 |" in text
+
+
+def test_summary_uses_machine_predictions_when_overall_is_absent():
+    metrics = pd.DataFrame(
+        [
+            {
+                "high_risk_threshold": 12,
+                "feature_set": "A",
+                "scope_kind": "machine_type",
+                "scope_name": "Press",
+                "model": "random_forest",
+                "selected_model": True,
+                "selected_feature_set": True,
+                "split": "test",
+                "status": "ok",
+                "macro_f1": 0.5,
+                "high_risk_precision": 0.4,
+                "high_risk_recall": 0.3,
+            }
+        ]
+    )
+    predictions = pd.DataFrame(
+        [
+            {
+                "high_risk_threshold": 12,
+                "feature_set": "A",
+                "scope_kind": "machine_type",
+                "scope_name": "Press",
+                "selected_feature_set": True,
+                "actual_failure_points": 12,
+                "actual_level": "high_risk",
+                "predicted_level": "risk",
+            }
+        ]
+    )
+    raw_rows, daily_rows = _profile_inputs()
+    profile = build_failure_profile(
+        raw_rows,
+        daily_rows,
+        high_risk_thresholds=(12,),
+        validation_start="2024-01-01",
+        test_start="2024-07-01",
+    )
+
+    text = render_experiment_summary(metrics, predictions, profile)
+
+    assert "| 12 | high_risk | risk | 1 |" in text
+    assert "| 12 | high_risk | 1 | 1.0000 |" in text
+
+
+def test_summary_includes_asset_performance():
+    metrics = pd.DataFrame(
+        [
+            {
+                "high_risk_threshold": 12,
+                "feature_set": "D",
+                "scope_kind": "asset_tag",
+                "scope_name": "A-1",
+                "source_scope_kind": "machine_type",
+                "source_scope_name": "Press",
+                "model": "logistic_regression",
+                "selected_model": True,
+                "selected_feature_set": True,
+                "split": "test",
+                "status": "ok",
+                "macro_f1": 0.51,
+                "high_risk_precision": 0.4,
+                "high_risk_recall": 0.3,
+            }
+        ]
+    )
+    predictions = pd.DataFrame()
+    raw_rows, daily_rows = _profile_inputs()
+    profile = build_failure_profile(
+        raw_rows,
+        daily_rows,
+        high_risk_thresholds=(12,),
+        validation_start="2024-01-01",
+        test_start="2024-07-01",
+    )
+
+    text = render_experiment_summary(metrics, predictions, profile)
+
+    assert "개별 장비별 성능" in text
+    assert "| 12 | A-1 | machine_type | Press | D | 0.5100 | 0.4000 | 0.3000 |" in text

@@ -7,6 +7,7 @@ from typing import Any
 
 import pandas as pd
 
+from .asset_features import SEVERITY_LEVELS
 from .industrial_data import ASSET_COLUMN, CURRENT_TARGET, DATE_COLUMN, MACHINE_COLUMN
 
 PROFILE_COLUMNS = (
@@ -147,6 +148,46 @@ def _selected_test_metrics(metrics: pd.DataFrame) -> pd.DataFrame:
     return metrics.loc[mask].copy()
 
 
+def _representative_predictions(predictions: pd.DataFrame) -> pd.DataFrame:
+    """전체 대표 예측을 우선하고, 없으면 기계별 대표 예측을 사용한다."""
+    if predictions.empty:
+        return predictions.copy()
+    selected = predictions.copy()
+    if "selected_feature_set" in selected:
+        selected = selected.loc[selected["selected_feature_set"].eq(True)]  # noqa: E712
+    if selected.empty or "scope_kind" not in selected:
+        return selected
+    pieces: list[pd.DataFrame] = []
+    for _, group in selected.groupby("high_risk_threshold", sort=True):
+        overall = group.loc[group["scope_kind"].eq("overall")]
+        pieces.append(overall if not overall.empty else group.loc[
+            group["scope_kind"].eq("machine_type")
+        ])
+    return pd.concat(pieces, ignore_index=True) if pieces else selected.iloc[0:0]
+
+
+def _severity_distribution(predictions: pd.DataFrame) -> pd.DataFrame:
+    if predictions.empty:
+        return pd.DataFrame(
+            columns=["high_risk_threshold", "actual_level", "support", "rate"]
+        )
+    rows: list[dict[str, Any]] = []
+    for threshold, group in predictions.groupby("high_risk_threshold", sort=True):
+        counts = group["actual_level"].value_counts()
+        total = len(group)
+        for level in SEVERITY_LEVELS:
+            support = int(counts.get(level, 0))
+            rows.append(
+                {
+                    "high_risk_threshold": int(threshold),
+                    "actual_level": level,
+                    "support": support,
+                    "rate": support / total if total else float("nan"),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
 def render_experiment_summary(
     metrics: pd.DataFrame,
     predictions: pd.DataFrame,
@@ -168,6 +209,9 @@ def render_experiment_summary(
         profile_test["scope_kind"].eq("machine_type")
     ]
     asset_profile = profile_test.loc[profile_test["scope_kind"].eq("asset_tag")]
+    asset_performance = selected.loc[
+        selected.get("scope_kind", pd.Series(index=selected.index)).eq("asset_tag")
+    ].sort_values(["high_risk_threshold", "scope_name"])
 
     feature_view = overall.sort_values(["high_risk_threshold", "feature_set"])
     machine_view = selected.loc[
@@ -179,15 +223,8 @@ def render_experiment_summary(
         ).eq(True)  # noqa: E712
     ].sort_values(["high_risk_threshold", "scope_name"])
 
-    selected_predictions = predictions.copy()
-    if not selected_predictions.empty and "selected_feature_set" in selected_predictions:
-        selected_predictions = selected_predictions.loc[
-            selected_predictions["selected_feature_set"].eq(True)  # noqa: E712
-        ]
-    if not selected_predictions.empty and "scope_kind" in selected_predictions:
-        selected_predictions = selected_predictions.loc[
-            selected_predictions["scope_kind"].eq("overall")
-        ]
+    selected_predictions = _representative_predictions(predictions)
+    severity_distribution = _severity_distribution(selected_predictions)
     score_12 = selected_predictions.loc[
         selected_predictions.get(
             "actual_failure_points",
@@ -205,22 +242,6 @@ def render_experiment_summary(
         if not score_12.empty
         else pd.DataFrame()
     )
-
-    threshold_distribution = representative[
-        [
-            column
-            for column in (
-                "high_risk_threshold",
-                "feature_set",
-                "model",
-                "accuracy",
-                "macro_f1",
-                "high_risk_precision",
-                "high_risk_recall",
-            )
-            if column in representative
-        ]
-    ].sort_values("high_risk_threshold") if not representative.empty else representative
 
     delta_text = "A와 D를 비교할 수 있는 전체 테스트 결과가 없습니다."
     if not feature_view.empty and {"A", "D"} <= set(feature_view["feature_set"]):
@@ -245,15 +266,12 @@ def render_experiment_summary(
             "12점 기준에서는 12점 이상을 고위험, 13점 기준에서는 13점 이상을 "
             "고위험으로 둡니다. 같은 12점 장비일은 전자에서 고위험, 후자에서 위험입니다.\n\n"
             + _markdown_table(
-                threshold_distribution,
+                severity_distribution,
                 (
                     "high_risk_threshold",
-                    "feature_set",
-                    "model",
-                    "accuracy",
-                    "macro_f1",
-                    "high_risk_precision",
-                    "high_risk_recall",
+                    "actual_level",
+                    "support",
+                    "rate",
                 ),
             ),
             "## 3. Feature A~D 성능 비교\n\n"
@@ -303,6 +321,20 @@ def render_experiment_summary(
                     "asset_issue_day_rate",
                     "asset_high_risk_day_rate",
                     "mean_failure_points",
+                ),
+            )
+            + "\n\n개별 장비별 성능:\n\n"
+            + _markdown_table(
+                asset_performance,
+                (
+                    "high_risk_threshold",
+                    "scope_name",
+                    "source_scope_kind",
+                    "source_scope_name",
+                    "feature_set",
+                    "macro_f1",
+                    "high_risk_precision",
+                    "high_risk_recall",
                 ),
             ),
             "## 6. 12점 장비일 분석\n\n"

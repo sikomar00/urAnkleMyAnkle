@@ -132,6 +132,19 @@ def test_history_lag_uses_previous_calendar_day(daily_sensor_rows):
     assert pd.isna(january_third["load_pct_lag1"])
 
 
+def test_history_mad_ignores_missing_calendar_days(daily_sensor_rows):
+    missing = daily_sensor_rows.loc[
+        ~daily_sensor_rows.transaction_date.eq(pd.Timestamp("2023-01-05"))
+    ]
+
+    result = build_sensor_history_features(missing)
+    january_ninth = result.loc[
+        result.transaction_date.eq(pd.Timestamp("2023-01-09"))
+    ].iloc[0]
+
+    assert january_ninth["load_pct_mad7"] == pytest.approx(2.0)
+
+
 def test_future_change_does_not_change_past_features(daily_sensor_rows):
     before = build_sensor_history_features(daily_sensor_rows)
     changed = daily_sensor_rows.copy()

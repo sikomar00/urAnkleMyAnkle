@@ -59,6 +59,58 @@ METRIC_ID_COLUMNS = (
     "train_rows",
     "valid_rows",
     "test_rows",
+    "source_scope_kind",
+    "source_scope_name",
+)
+METRIC_VALUE_COLUMNS = (
+    "accuracy",
+    "macro_precision",
+    "macro_recall",
+    "macro_f1",
+    "weighted_f1",
+    *(f"{level}_{metric}" for level in SEVERITY_LEVELS for metric in ("precision", "recall", "f1", "support")),
+    "high_risk_binary_f1",
+)
+METRIC_COLUMNS = (*METRIC_ID_COLUMNS, *METRIC_VALUE_COLUMNS)
+CLASS_METRIC_COLUMNS = (
+    *METRIC_ID_COLUMNS,
+    "level",
+    "precision",
+    "recall",
+    "f1",
+    "support",
+)
+CONFUSION_COLUMNS = (
+    *METRIC_ID_COLUMNS,
+    "actual_level",
+    "predicted_level",
+    "count",
+)
+PREDICTION_COLUMNS = (
+    DATE_COLUMN,
+    "label_end_date",
+    MACHINE_COLUMN,
+    ASSET_COLUMN,
+    "actual_failure_points",
+    "high_risk_threshold",
+    "feature_set",
+    "scope_kind",
+    "scope_name",
+    "model",
+    "selected_feature_set",
+    "actual_level",
+    "predicted_level",
+    *(f"prob_{level}" for level in SEVERITY_LEVELS),
+)
+IMPORTANCE_COLUMNS = (
+    "high_risk_threshold",
+    "feature_set",
+    "scope_kind",
+    "scope_name",
+    "model",
+    "feature",
+    "importance_mean",
+    "importance_std",
 )
 
 
@@ -263,6 +315,8 @@ def _base_row(
         "train_rows": len(parts["train"]),
         "valid_rows": len(parts["valid"]),
         "test_rows": len(parts["test"]),
+        "source_scope_kind": scope_kind,
+        "source_scope_name": scope_name,
     }
 
 
@@ -349,6 +403,65 @@ def _mark_selection(
                 row["selected_feature_set"] = True
 
 
+def _asset_performance_rows(
+    predictions: pd.DataFrame,
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    """대표 전체·기계 모델의 테스트 예측을 장비별 지표로 재집계한다."""
+    if predictions.empty:
+        return [], [], []
+    selected = predictions.loc[predictions["selected_feature_set"].eq(True)].copy()
+    metric_rows: list[dict[str, Any]] = []
+    class_rows: list[dict[str, Any]] = []
+    confusion_rows: list[dict[str, Any]] = []
+    for (threshold, asset_tag), asset_candidates in selected.groupby(
+        ["high_risk_threshold", ASSET_COLUMN], sort=True
+    ):
+        machine_rows = asset_candidates.loc[
+            asset_candidates["scope_kind"].eq("machine_type")
+        ]
+        source = machine_rows if not machine_rows.empty else asset_candidates.loc[
+            asset_candidates["scope_kind"].eq("overall")
+        ]
+        if source.empty:
+            continue
+        source_scope_kind = str(source.iloc[0]["scope_kind"])
+        source_scope_name = str(source.iloc[0]["scope_name"])
+        feature_set = str(source.iloc[0]["feature_set"])
+        model = str(source.iloc[0]["model"])
+        result = severity_classification_metrics(
+            source["actual_level"], source["predicted_level"]
+        )
+        identifiers = {
+            "high_risk_threshold": int(threshold),
+            "feature_set": feature_set,
+            "scope_kind": "asset_tag",
+            "scope_name": str(asset_tag),
+            "model": model,
+            "selected_model": True,
+            "selected_feature_set": True,
+            "split": "test",
+            "status": "ok",
+            "reason": "",
+            "train_rows": pd.NA,
+            "valid_rows": pd.NA,
+            "test_rows": len(source),
+            "source_scope_kind": source_scope_kind,
+            "source_scope_name": source_scope_name,
+        }
+        metric_rows.append({**identifiers, **_flatten_metrics(result)})
+        added_classes, added_confusion = _metric_detail_rows(
+            identifiers=identifiers,
+            metrics=result,
+        )
+        class_rows.extend(added_classes)
+        confusion_rows.extend(added_confusion)
+    return metric_rows, class_rows, confusion_rows
+
+
 def run_asset_severity_experiments(
     raw: pd.DataFrame,
     *,
@@ -375,6 +488,8 @@ def run_asset_severity_experiments(
         filtered_raw,
         validation_start=validation_start,
         min_normal_rows=min_normal_rows,
+        requested_feature_sets=selected_features,
+        allow_missing_baseline=True,
     )
     frame = prepared.frame.copy()
     output = Path(output_dir)
@@ -398,9 +513,15 @@ def run_asset_severity_experiments(
             issue = _split_issue(parts)
             selected_models: dict[str, str] = {}
             for feature_set in selected_features:
-                features = list(prepared.feature_sets[feature_set])
-                if issue or parts["train"][target].astype(str).nunique() < 2:
-                    reason = issue or "single train class"
+                single_class = parts["train"][target].astype(str).nunique() < 2
+                unavailable = prepared.unavailable_feature_sets.get(feature_set)
+                if issue or single_class or unavailable:
+                    if issue:
+                        reason = issue
+                    elif single_class:
+                        reason = "single train class"
+                    else:
+                        reason = str(unavailable)
                     metric_rows.append(
                         _base_row(
                             threshold=threshold,
@@ -415,6 +536,7 @@ def run_asset_severity_experiments(
                         )
                     )
                     continue
+                features = list(prepared.feature_sets[feature_set])
 
                 models: dict[str, Pipeline] = {}
                 valid_metrics: list[dict[str, Any]] = []
@@ -560,15 +682,27 @@ def run_asset_severity_experiments(
                     )
                     predictions.loc[mask, "selected_feature_set"] = True
 
-    metrics_frame = pd.DataFrame(metric_rows)
-    classes_frame = pd.DataFrame(class_rows)
-    confusion_frame = pd.DataFrame(confusion_rows)
     predictions_frame = (
         pd.concat(prediction_rows, ignore_index=True)
         if prediction_rows
-        else pd.DataFrame()
+        else pd.DataFrame(columns=PREDICTION_COLUMNS)
     )
-    importance_frame = pd.DataFrame(importance_rows)
+    asset_metrics, asset_classes, asset_confusions = _asset_performance_rows(
+        predictions_frame
+    )
+    metric_rows.extend(asset_metrics)
+    class_rows.extend(asset_classes)
+    confusion_rows.extend(asset_confusions)
+
+    metrics_frame = pd.DataFrame(metric_rows).reindex(columns=METRIC_COLUMNS)
+    classes_frame = pd.DataFrame(class_rows).reindex(columns=CLASS_METRIC_COLUMNS)
+    confusion_frame = pd.DataFrame(confusion_rows).reindex(
+        columns=CONFUSION_COLUMNS
+    )
+    predictions_frame = predictions_frame.reindex(columns=PREDICTION_COLUMNS)
+    importance_frame = pd.DataFrame(importance_rows).reindex(
+        columns=IMPORTANCE_COLUMNS
+    )
 
     metrics_frame.to_csv(output / "experiment_metrics.csv", index=False)
     classes_frame.to_csv(output / "class_metrics.csv", index=False)

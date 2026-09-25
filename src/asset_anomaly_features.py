@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -342,8 +343,8 @@ def build_sensor_history_features(daily: pd.DataFrame) -> pd.DataFrame:
             history[f"{sensor}_mad7"] = shifted.rolling(
                 7, min_periods=3
             ).apply(
-                lambda values: np.median(
-                    np.abs(values - np.median(values))
+                lambda values: np.nanmedian(
+                    np.abs(values - np.nanmedian(values))
                 ),
                 raw=True,
             )
@@ -365,7 +366,8 @@ class AssetExperimentFeatures:
     frame: pd.DataFrame
     feature_sets: dict[str, tuple[str, ...]]
     baselines: pd.DataFrame
-    baseline_transformer: RobustNormalBaseline
+    baseline_transformer: RobustNormalBaseline | None
+    unavailable_feature_sets: dict[str, str] = field(default_factory=dict)
 
 
 def _add_anomaly_summaries(frame: pd.DataFrame) -> pd.DataFrame:
@@ -392,45 +394,78 @@ def prepare_asset_experiment_features(
     *,
     validation_start: str | pd.Timestamp = "2024-01-01",
     min_normal_rows: int = 30,
+    requested_feature_sets: Sequence[str] = FEATURE_SET_NAMES,
+    allow_missing_baseline: bool = False,
 ) -> AssetExperimentFeatures:
     """학습 정상 기준과 과거값으로 A~D 실험 Feature를 준비한다."""
+    requested = tuple(dict.fromkeys(requested_feature_sets))
     daily = build_asset_daily(raw).sort_values(
         [ASSET_COLUMN, DATE_COLUMN]
     ).reset_index(drop=True)
     validation_start = pd.Timestamp(validation_start)
     train = daily.loc[daily["label_end_date"].lt(validation_start)]
-    if train.empty:
-        raise ValueError("정상 기준을 적합할 학습 구간이 비어 있습니다.")
-
-    baseline = RobustNormalBaseline(
-        min_normal_rows=min_normal_rows
-    ).fit(train)
-    with_z = baseline.transform(daily)
     with_history = build_sensor_history_features(daily)
-    history_columns = [DATE_COLUMN, MACHINE_COLUMN, ASSET_COLUMN, *HISTORY_FEATURES]
-    combined = with_z.merge(
-        with_history.loc[:, history_columns],
-        on=[DATE_COLUMN, MACHINE_COLUMN, ASSET_COLUMN],
-        how="left",
-        validate="one_to_one",
-    )
-    combined = _add_anomaly_summaries(combined)
-
     base = tuple(ASSET_CURRENT_FEATURES)
-    feature_sets = {
+    available = {
         "A": base,
-        "B": (*base, *ROBUST_Z_FEATURES),
         "C": (*base, *HISTORY_FEATURES),
-        "D": (
-            *base,
-            *ROBUST_Z_FEATURES,
-            *HISTORY_FEATURES,
-            *ANOMALY_SUMMARY_FEATURES,
-        ),
+    }
+    combined = with_history
+    baselines = pd.DataFrame(columns=BASELINE_COLUMNS)
+    baseline: RobustNormalBaseline | None = None
+    unavailable: dict[str, str] = {}
+
+    needs_baseline = bool({"B", "D"}.intersection(requested))
+    if needs_baseline:
+        baseline_error = ""
+        if train.empty:
+            baseline_error = "정상 기준을 적합할 학습 구간이 비어 있습니다."
+        else:
+            try:
+                baseline = RobustNormalBaseline(
+                    min_normal_rows=min_normal_rows
+                ).fit(train)
+            except ValueError as error:
+                baseline_error = str(error)
+        if baseline_error:
+            if not allow_missing_baseline:
+                raise ValueError(baseline_error)
+            unavailable.update(
+                {name: baseline_error for name in ("B", "D") if name in requested}
+            )
+        else:
+            with_z = baseline.transform(daily)
+            history_columns = [
+                DATE_COLUMN,
+                MACHINE_COLUMN,
+                ASSET_COLUMN,
+                *HISTORY_FEATURES,
+            ]
+            combined = with_z.merge(
+                with_history.loc[:, history_columns],
+                on=[DATE_COLUMN, MACHINE_COLUMN, ASSET_COLUMN],
+                how="left",
+                validate="one_to_one",
+            )
+            combined = _add_anomaly_summaries(combined)
+            baselines = baseline.baseline_table()
+            available["B"] = (*base, *ROBUST_Z_FEATURES)
+            available["D"] = (
+                *base,
+                *ROBUST_Z_FEATURES,
+                *HISTORY_FEATURES,
+                *ANOMALY_SUMMARY_FEATURES,
+            )
+
+    feature_sets = {
+        name: available[name]
+        for name in FEATURE_SET_NAMES
+        if name in requested and name in available
     }
     return AssetExperimentFeatures(
         frame=combined,
         feature_sets=feature_sets,
-        baselines=baseline.baseline_table(),
+        baselines=baselines,
         baseline_transformer=baseline,
+        unavailable_feature_sets=unavailable,
     )
