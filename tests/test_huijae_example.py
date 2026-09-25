@@ -97,10 +97,14 @@ def test_past_sensor_features_do_not_mix_assets_or_include_today():
     assert a.loc[1, f'{name}_diff1'] == b.loc[1, f'{name}_diff1'] == 1
     assert a.loc[3, f'{name}_mean7'] == 1  # 이전 0·1·2의 평균입니다.
     assert a.loc[3, f'{name}_std7'] == 1
+    assert a.loc[3, f'{name}_vs_mean7'] == 2
+    assert a.loc[3, f'{name}_anomaly7'] == 2
     assert a.loc[7, f'{name}_mean7'] == 3  # 현재 7은 평균에 포함되지 않습니다.
     assert a.loc[7, f'{name}_vs_mean30'] == 4
     assert b.loc[7, f'{name}_mean7'] == 103  # M1의 값이 M2의 과거에 섞이지 않습니다.
-    assert len(TEMPORAL_NUMERIC) == 40
+    assert b.loc[3, f'{name}_vs_mean7'] == 2
+    assert b.loc[3, f'{name}_anomaly7'] == 2
+    assert len(TEMPORAL_NUMERIC) == 56
 
 
 def test_temporal_pipeline_uses_allowed_columns_and_train_statistics():
