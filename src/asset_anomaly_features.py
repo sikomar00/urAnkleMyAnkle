@@ -8,9 +8,39 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .industrial_data import ASSET_COLUMN, MACHINE_COLUMN, SENSOR_COLUMNS
+from .asset_features import ASSET_CURRENT_FEATURES, build_asset_daily
+from .industrial_data import (
+    ASSET_COLUMN,
+    DATE_COLUMN,
+    MACHINE_COLUMN,
+    SENSOR_COLUMNS,
+)
 
 ROBUST_Z_FEATURES = tuple(f"{column}_robust_z" for column in SENSOR_COLUMNS)
+HISTORY_SUFFIXES = (
+    "lag1",
+    "lag3",
+    "lag7",
+    "diff1",
+    "diff7",
+    "median3",
+    "median7",
+    "mad7",
+    "slope7",
+)
+HISTORY_FEATURES = tuple(
+    f"{sensor}_{suffix}"
+    for sensor in SENSOR_COLUMNS
+    for suffix in HISTORY_SUFFIXES
+)
+ANOMALY_SUMMARY_FEATURES = (
+    "max_abs_robust_z",
+    "mean_abs_robust_z",
+    "sensor_count_abs_z_ge_2",
+    "sensor_count_abs_z_ge_3",
+    "temperature_and_vibration_anomaly",
+)
+FEATURE_SET_NAMES = ("A", "B", "C", "D")
 BASELINE_COLUMNS = (
     ASSET_COLUMN,
     MACHINE_COLUMN,
@@ -265,3 +295,142 @@ class RobustNormalBaseline:
         if self._table.empty:
             raise ValueError("RobustNormalBaseline.fit()을 먼저 호출해야 합니다.")
         return self._table.copy()
+
+
+def _rolling_slope(values: np.ndarray) -> float:
+    if np.isnan(values).any():
+        return np.nan
+    x = np.arange(len(values), dtype=float)
+    return float(np.polyfit(x, values.astype(float), 1)[0])
+
+
+def build_sensor_history_features(daily: pd.DataFrame) -> pd.DataFrame:
+    """장비별 이전 달력일 센서값으로 변화·추세 Feature를 만든다."""
+    required = {DATE_COLUMN, ASSET_COLUMN, *SENSOR_COLUMNS}
+    missing = sorted(required - set(daily.columns))
+    if missing:
+        raise ValueError(f"센서 이력에 필요한 컬럼이 없습니다: {missing}")
+    if daily.duplicated([DATE_COLUMN, ASSET_COLUMN]).any():
+        raise ValueError("같은 날짜·장비의 중복 행이 있습니다.")
+
+    pieces: list[pd.DataFrame] = []
+    for _, group in daily.groupby(ASSET_COLUMN, sort=False):
+        indexed = group.sort_values(DATE_COLUMN).set_index(DATE_COLUMN)
+        original_dates = indexed.index
+        calendar = indexed.reindex(
+            pd.date_range(original_dates.min(), original_dates.max(), freq="D")
+        )
+        calendar.index.name = DATE_COLUMN
+        history: dict[str, pd.Series] = {}
+        for sensor in SENSOR_COLUMNS:
+            shifted = calendar[sensor].shift(1)
+            history[f"{sensor}_lag1"] = calendar[sensor].shift(1)
+            history[f"{sensor}_lag3"] = calendar[sensor].shift(3)
+            history[f"{sensor}_lag7"] = calendar[sensor].shift(7)
+            history[f"{sensor}_diff1"] = (
+                calendar[sensor] - history[f"{sensor}_lag1"]
+            )
+            history[f"{sensor}_diff7"] = (
+                calendar[sensor] - history[f"{sensor}_lag7"]
+            )
+            history[f"{sensor}_median3"] = shifted.rolling(
+                3, min_periods=2
+            ).median()
+            history[f"{sensor}_median7"] = shifted.rolling(
+                7, min_periods=3
+            ).median()
+            history[f"{sensor}_mad7"] = shifted.rolling(
+                7, min_periods=3
+            ).apply(
+                lambda values: np.median(
+                    np.abs(values - np.median(values))
+                ),
+                raw=True,
+            )
+            history[f"{sensor}_slope7"] = shifted.rolling(
+                7, min_periods=7
+            ).apply(_rolling_slope, raw=True)
+        history_frame = pd.DataFrame(history, index=calendar.index)
+        calendar = pd.concat([calendar, history_frame], axis=1)
+        pieces.append(calendar.loc[original_dates].reset_index())
+    if not pieces:
+        return daily.copy()
+    return pd.concat(pieces, ignore_index=True)
+
+
+@dataclass(frozen=True)
+class AssetExperimentFeatures:
+    """실험용 장비 일별 Frame, Feature 집합과 정상 기준을 보관한다."""
+
+    frame: pd.DataFrame
+    feature_sets: dict[str, tuple[str, ...]]
+    baselines: pd.DataFrame
+    baseline_transformer: RobustNormalBaseline
+
+
+def _add_anomaly_summaries(frame: pd.DataFrame) -> pd.DataFrame:
+    result = frame.copy()
+    absolute = result.loc[:, ROBUST_Z_FEATURES].abs()
+    result["max_abs_robust_z"] = absolute.max(axis=1)
+    result["mean_abs_robust_z"] = absolute.mean(axis=1)
+    result["sensor_count_abs_z_ge_2"] = absolute.ge(2).sum(axis=1)
+    result["sensor_count_abs_z_ge_3"] = absolute.ge(3).sum(axis=1)
+    temperature = absolute[
+        ["temp_bearing_degC_robust_z", "temp_motor_degC_robust_z"]
+    ].ge(2).any(axis=1)
+    vibration = absolute[
+        ["vibration_h_mms_robust_z", "vibration_v_mms_robust_z"]
+    ].ge(2).any(axis=1)
+    result["temperature_and_vibration_anomaly"] = (
+        temperature & vibration
+    ).astype(int)
+    return result
+
+
+def prepare_asset_experiment_features(
+    raw: pd.DataFrame,
+    *,
+    validation_start: str | pd.Timestamp = "2024-01-01",
+    min_normal_rows: int = 30,
+) -> AssetExperimentFeatures:
+    """학습 정상 기준과 과거값으로 A~D 실험 Feature를 준비한다."""
+    daily = build_asset_daily(raw).sort_values(
+        [ASSET_COLUMN, DATE_COLUMN]
+    ).reset_index(drop=True)
+    validation_start = pd.Timestamp(validation_start)
+    train = daily.loc[daily["label_end_date"].lt(validation_start)]
+    if train.empty:
+        raise ValueError("정상 기준을 적합할 학습 구간이 비어 있습니다.")
+
+    baseline = RobustNormalBaseline(
+        min_normal_rows=min_normal_rows
+    ).fit(train)
+    with_z = baseline.transform(daily)
+    with_history = build_sensor_history_features(daily)
+    history_columns = [DATE_COLUMN, MACHINE_COLUMN, ASSET_COLUMN, *HISTORY_FEATURES]
+    combined = with_z.merge(
+        with_history.loc[:, history_columns],
+        on=[DATE_COLUMN, MACHINE_COLUMN, ASSET_COLUMN],
+        how="left",
+        validate="one_to_one",
+    )
+    combined = _add_anomaly_summaries(combined)
+
+    base = tuple(ASSET_CURRENT_FEATURES)
+    feature_sets = {
+        "A": base,
+        "B": (*base, *ROBUST_Z_FEATURES),
+        "C": (*base, *HISTORY_FEATURES),
+        "D": (
+            *base,
+            *ROBUST_Z_FEATURES,
+            *HISTORY_FEATURES,
+            *ANOMALY_SUMMARY_FEATURES,
+        ),
+    }
+    return AssetExperimentFeatures(
+        frame=combined,
+        feature_sets=feature_sets,
+        baselines=baseline.baseline_table(),
+        baseline_transformer=baseline,
+    )
