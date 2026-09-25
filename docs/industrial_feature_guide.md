@@ -48,6 +48,44 @@ L(S)=
 
 ## 3. 장비 단위 당일 탐지
 
+### 3.1 12점·13점 4단계 비교
+
+고위험 경계가 결과에 미치는 영향을 보기 위해 다음 두 공통 기준을 별도 Target으로
+비교합니다. 기계별로 경계를 바꾸지는 않으며, 기계별 발생률과 성능은 따로 보고합니다.
+
+| 기준 | normal | caution | risk | high_risk |
+|---|---:|---:|---:|---:|
+| 12점 | 0 | 1~5 | 6~11 | 12 이상 |
+| 13점 | 0 | 1~5 | 6~12 | 13 이상 |
+
+센서 8개 각각에 대해 학습 구간의 `failure_points == 0`인 정상 장비일만 사용하여
+다음 Robust Z-score를 적합합니다.
+
+\[
+z_{\mathrm{robust}}=
+\frac{x-\operatorname{median}(x_{\mathrm{normal}})}
+{1.4826\operatorname{MAD}(x_{\mathrm{normal}})}.
+\]
+
+장비별 정상행이 기본 30건보다 적으면 기계 종류별, 전체 학습 정상행 순으로
+대체합니다. 전체 MAD가 0이면 표준편차를 쓰고, 표준편차도 0인 상수 센서는
+Z-score를 0으로 기록합니다. 검증·테스트 데이터로 기준을 다시 계산하지 않습니다.
+
+| 실험군 | 포함 Feature | 확인 목적 |
+|---|---|---|
+| A | 센서 원값, 기계·장비 식별자, 달력 | 기존 기준선 |
+| B | A + 센서별 Robust Z-score | 장비 정상 범위 대비 편차 |
+| C | A + 1·3·7일 lag, 변화량, 과거 중앙값·MAD·기울기 | 시간 변화와 추세 |
+| D | A + B + C + 동시 이상 요약 | 모든 이상 신호의 결합 |
+
+발생률은 다음 세 가지를 섞지 않습니다.
+
+1. `part_breakdown_rate`: 원본 부품 행 중 `breakdown_flag == 1`인 비율
+2. `asset_issue_day_rate`: `failure_points >= 1`인 장비일 비율
+3. `asset_high_risk_day_rate`: 해당 12점 또는 13점 이상인 장비일 비율
+
+세 값은 모두 합성 대리 정답에서 계산하므로 실제 기계 정지율이 아닙니다.
+
 - 그룹 키: `transaction_date + machine_type + asset_tag`
 - Target:
 

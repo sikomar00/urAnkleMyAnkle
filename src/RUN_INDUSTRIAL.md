@@ -10,6 +10,9 @@
 ```bash
 python src/current_asset_model.py
 python src/current_asset_score_model.py
+python src/current_asset_severity_experiments.py \
+  --data dataVerification/synthetic_industrial_machine_data.csv \
+  --high-risk-thresholds 12 13 --feature-sets A B C D --scope all --max-iter 100
 python src/forecast_asset_model.py --horizon 7 --risk-definition new
 python src/forecast_asset_model.py --horizon 7 --risk-definition any
 python src/current_part_model.py
@@ -28,6 +31,9 @@ python src/eda.py
 ```powershell
 .\venv\Scripts\python.exe src\current_asset_model.py
 .\venv\Scripts\python.exe src\current_asset_score_model.py
+.\venv\Scripts\python.exe src\current_asset_severity_experiments.py `
+  --data dataVerification\synthetic_industrial_machine_data.csv `
+  --high-risk-thresholds 12 13 --feature-sets A B C D --scope all --max-iter 100
 .\venv\Scripts\python.exe src\forecast_asset_model.py --horizon 7 --risk-definition new
 .\venv\Scripts\python.exe src\forecast_asset_model.py --horizon 7 --risk-definition any
 .\venv\Scripts\python.exe src\current_part_model.py
@@ -48,6 +54,7 @@ python -m pytest -v
 |---|---|---|---|
 | `current_asset_model.py` | 장비·날짜 | 당일 고장점수 12/13/14 이상 | `outputs/asset_current` |
 | `current_asset_score_model.py` | 장비·날짜 | 당일 `failure_points`와 4단계 위험도 | `outputs/asset_score_current` |
+| `current_asset_severity_experiments.py` | 장비·날짜 | 12·13점 4단계와 센서 Feature A~D 비교 | `outputs/asset_severity_experiments` |
 | `forecast_asset_model.py` | 장비·날짜 | 향후 7일 신규 또는 전체 위험 | `outputs/asset_forecast_7d_new` 또는 `_any` |
 | `current_part_model.py` | 장비·부품·날짜 | 당일 `breakdown_flag` | `outputs/part_current` |
 | `forecast_part_model.py` | 장비·부품·날짜 | 향후 7일 신규 고장 | `outputs/part_forecast_7d` |
@@ -122,6 +129,33 @@ LightGBM은 macOS의 `libomp` 같은 네이티브 의존성 문제를 피하기 
 
 이 실험에서는 Accuracy만으로 판단하지 말고 `macro_f1`과
 `high_risk_precision`, `high_risk_recall`, `high_risk_binary_f1`을 함께 봐야 합니다.
+
+### 센서 이상·이력 Feature 비교 실험
+
+```bash
+/Users/kodohyeon/Documents/project_LS/venv/bin/python src/current_asset_severity_experiments.py \
+  --data dataVerification/synthetic_industrial_machine_data.csv \
+  --high-risk-thresholds 12 13 \
+  --feature-sets A B C D \
+  --scope all \
+  --max-iter 100
+```
+
+이 명령은 12점과 13점 고위험 기준을 각각 A~D Feature로 평가합니다. 결과는
+`outputs/asset_severity_experiments/`에 저장되며, 핵심 파일은 다음과 같습니다.
+
+- `experiment_summary.md`: 12·13점, A~D, 기계·장비별 결과를 정리한 한글 보고서
+- `experiment_metrics.csv`: 모든 모델의 검증·테스트 지표와 선택 여부
+- `class_metrics.csv`, `confusion_matrices.csv`: 등급별 지표와 혼동행렬
+- `machine_failure_profile.csv`: 서로 구분한 세 가지 발생률
+- `test_predictions.csv`, `feature_importance.csv`: 테스트 예측과 Feature 중요도
+- `zscore_baselines.csv`: 학습 정상행으로 고정한 센서별 기준
+- `run_config.json`, `models/`: 실행 설정과 다시 사용할 수 있는 모델
+
+`machine_failure_profile.csv`의 세 비율은 의미가 다릅니다. 부품 행 기준
+`part_breakdown_rate`, 점수가 1 이상인 장비일 기준 `asset_issue_day_rate`, 임계값
+이상인 장비일 기준 `asset_high_risk_day_rate`이며, 어느 것도 실제 기계 정지율로
+간주하면 안 됩니다.
 
 ## 6. 기존 명령 호환
 

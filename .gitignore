@@ -234,6 +234,7 @@ models/*.joblib
 
 # 장비 점수·4단계 모델 실행 산출물(재생성 가능, 대용량 모델 포함)
 outputs/asset_score_current/
+outputs/asset_severity_experiments/
 
 # 💻 OS 잡파일
 .DS_Store
