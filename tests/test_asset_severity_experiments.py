@@ -141,6 +141,8 @@ def test_runner_writes_threshold_outputs(tmp_path, experiment_raw):
         "test_predictions.csv",
         "feature_importance.csv",
         "zscore_baselines.csv",
+        "machine_failure_profile.csv",
+        "experiment_summary.md",
         "run_config.json",
         "models",
     }

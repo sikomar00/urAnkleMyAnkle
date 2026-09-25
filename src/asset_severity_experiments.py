@@ -23,6 +23,7 @@ from .asset_anomaly_features import (
     prepare_asset_experiment_features,
 )
 from .asset_features import SEVERITY_LEVELS, severity_labels
+from .asset_severity_report import build_failure_profile, render_experiment_summary
 from .industrial_data import (
     ASSET_COLUMN,
     DATE_COLUMN,
@@ -575,6 +576,18 @@ def run_asset_severity_experiments(
     predictions_frame.to_csv(output / "test_predictions.csv", index=False)
     importance_frame.to_csv(output / "feature_importance.csv", index=False)
     prepared.baselines.to_csv(output / "zscore_baselines.csv", index=False)
+    profile_frame = build_failure_profile(
+        filtered_raw,
+        frame,
+        high_risk_thresholds=thresholds,
+        validation_start=validation_start,
+        test_start=test_start,
+    )
+    profile_frame.to_csv(output / "machine_failure_profile.csv", index=False)
+    (output / "experiment_summary.md").write_text(
+        render_experiment_summary(metrics_frame, predictions_frame, profile_frame),
+        encoding="utf-8",
+    )
     config = {
         "high_risk_thresholds": list(thresholds),
         "feature_sets": list(selected_features),
