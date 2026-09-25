@@ -9,6 +9,7 @@ from src.asset_features import (
     prepare_asset_forecast,
     prepare_asset_score_current,
     prepare_asset_severity_current,
+    severity_labels,
 )
 
 
@@ -85,6 +86,25 @@ def test_asset_severity_uses_all_integer_boundaries():
         "high_risk",
     ]
     assert result["severity_code"].tolist() == [0, 1, 1, 2, 2, 3, 3]
+
+
+@pytest.mark.parametrize(
+    ("threshold", "expected"),
+    [
+        (12, ["risk", "high_risk", "high_risk"]),
+        (13, ["risk", "risk", "high_risk"]),
+    ],
+)
+def test_severity_labels_support_high_risk_threshold(threshold, expected):
+    result = severity_labels([11, 12, 13], high_risk_threshold=threshold)
+
+    assert result.astype("string").tolist() == expected
+
+
+@pytest.mark.parametrize("bad_threshold", [True, 6, 12.5])
+def test_severity_labels_reject_invalid_threshold(bad_threshold):
+    with pytest.raises(ValueError, match="7 이상의 정수"):
+        severity_labels([0, 1, 12], high_risk_threshold=bad_threshold)
 
 
 @pytest.mark.parametrize("bad_value", [-1, np.nan, "bad"])

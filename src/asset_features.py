@@ -7,6 +7,8 @@ Target으로 준비한다. 같은 장비·날짜의 센서가 서로 다르면 �
 
 from __future__ import annotations
 
+from typing import Any
+
 import pandas as pd
 
 from .industrial_data import (
@@ -86,27 +88,48 @@ def build_asset_daily(frame: pd.DataFrame) -> pd.DataFrame:
     return add_calendar_features(daily)
 
 
-def add_asset_severity(frame: pd.DataFrame) -> pd.DataFrame:
-    """정수 고장점수를 정상·주의·위험·고위험으로 변환한다."""
+def severity_labels(
+    scores: Any,
+    high_risk_threshold: int = 12,
+) -> pd.Categorical:
+    """0 이상의 점수를 공통 4단계 등급으로 변환한다."""
+    if (
+        isinstance(high_risk_threshold, bool)
+        or not isinstance(high_risk_threshold, int)
+        or high_risk_threshold < 7
+    ):
+        raise ValueError("high_risk_threshold는 7 이상의 정수여야 합니다.")
+    values = pd.to_numeric(pd.Series(scores), errors="coerce")
+    if values.isna().any() or values.lt(0).any():
+        raise ValueError("failure_points는 결측이 없는 0 이상의 숫자여야 합니다.")
+    labels = pd.Series("high_risk", index=values.index, dtype="string")
+    labels.loc[values.eq(0)] = "normal"
+    labels.loc[values.between(1, 5, inclusive="both")] = "caution"
+    labels.loc[
+        values.between(6, high_risk_threshold - 1, inclusive="both")
+    ] = "risk"
+    return pd.Categorical(labels, categories=SEVERITY_LEVELS, ordered=True)
+
+
+def add_asset_severity(
+    frame: pd.DataFrame,
+    high_risk_threshold: int = 12,
+) -> pd.DataFrame:
+    """정수 고장점수를 임계값별 정상·주의·위험·고위험으로 변환한다."""
     if "failure_points" not in frame:
         raise ValueError("failure_points 컬럼이 필요합니다.")
 
     result = frame.copy()
-    scores = pd.to_numeric(result["failure_points"], errors="coerce")
-    if scores.isna().any() or scores.lt(0).any():
-        raise ValueError("failure_points는 결측이 없는 0 이상의 숫자여야 합니다.")
-
-    labels = pd.Series("high_risk", index=result.index, dtype="string")
-    labels.loc[scores.eq(0)] = "normal"
-    labels.loc[scores.between(1, 5, inclusive="both")] = "caution"
-    labels.loc[scores.between(6, 11, inclusive="both")] = "risk"
-    result["failure_points"] = scores
-    result["severity_level"] = pd.Categorical(
-        labels,
-        categories=SEVERITY_LEVELS,
-        ordered=True,
+    result["severity_level"] = severity_labels(
+        result["failure_points"],
+        high_risk_threshold=high_risk_threshold,
     )
-    result["severity_code"] = labels.map(SEVERITY_CODE).astype(int)
+    result["failure_points"] = pd.to_numeric(
+        result["failure_points"], errors="coerce"
+    )
+    result["severity_code"] = (
+        result["severity_level"].astype("string").map(SEVERITY_CODE).astype(int)
+    )
     return result
 
 
