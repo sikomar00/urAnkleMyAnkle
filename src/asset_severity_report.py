@@ -184,6 +184,10 @@ def render_experiment_summary(
         selected_predictions = selected_predictions.loc[
             selected_predictions["selected_feature_set"].eq(True)  # noqa: E712
         ]
+    if not selected_predictions.empty and "scope_kind" in selected_predictions:
+        selected_predictions = selected_predictions.loc[
+            selected_predictions["scope_kind"].eq("overall")
+        ]
     score_12 = selected_predictions.loc[
         selected_predictions.get(
             "actual_failure_points",

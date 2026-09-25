@@ -91,6 +91,19 @@ def test_summary_states_proxy_limit_and_threshold_difference():
             }
             for threshold in (12, 13)
         ]
+        + [
+            {
+                "high_risk_threshold": threshold,
+                "feature_set": "D",
+                "scope_kind": "machine_type",
+                "scope_name": "Press",
+                "selected_feature_set": True,
+                "actual_failure_points": 12,
+                "actual_level": "high_risk" if threshold == 12 else "risk",
+                "predicted_level": "risk",
+            }
+            for threshold in (12, 13)
+        ]
     )
     raw_rows, daily_rows = _profile_inputs()
     profile = build_failure_profile(
@@ -111,3 +124,5 @@ def test_summary_states_proxy_limit_and_threshold_difference():
         "Macro F1",
     ):
         assert phrase in text
+    assert "| 12 | high_risk | risk | 1 |" in text
+    assert "| 13 | risk | risk | 1 |" in text
