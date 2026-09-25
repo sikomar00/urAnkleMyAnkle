@@ -2,7 +2,7 @@
 
 실행 예: python src/huijae_example.py --data "C:/data/synthetic_industrial_machine_data.csv"
 필요 패키지: numpy, pandas, scikit-learn, matplotlib
-미래 정답이나 과거 이동평균은 만들지 않습니다. 원본 CSV는 읽기만 합니다.
+미래 정답은 만들지 않습니다. 과거 센서 통계는 해당 설비의 이전 기록만 사용합니다.
 """
 
 import argparse  # 명령창에서 CSV 경로와 실행 옵션을 받습니다.
@@ -35,8 +35,11 @@ CATEGORICAL = ['machine_type', 'plant_code']  # 설비 번호는 모델 입력�
 DIFF_FEATURES = [f'{sensor}_diff1' for sensor in SENSORS]
 MEAN7_FEATURES = [f'{sensor}_mean7' for sensor in SENSORS]
 STD7_FEATURES = [f'{sensor}_std7' for sensor in SENSORS]
+VS_MEAN7_FEATURES = [f'{sensor}_vs_mean7' for sensor in SENSORS]
+ANOMALY7_FEATURES = [f'{sensor}_anomaly7' for sensor in SENSORS]
 VS_MEAN30_FEATURES = [f'{sensor}_vs_mean30' for sensor in SENSORS]
-TEMPORAL_NUMERIC = SENSORS + DIFF_FEATURES + MEAN7_FEATURES + STD7_FEATURES + VS_MEAN30_FEATURES
+TEMPORAL_NUMERIC = (SENSORS + DIFF_FEATURES + MEAN7_FEATURES + STD7_FEATURES
+                    + VS_MEAN7_FEATURES + ANOMALY7_FEATURES + VS_MEAN30_FEATURES)
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -103,6 +106,12 @@ def prepare_machine_data(raw):
             lambda series: series.shift(1).rolling(window=7, min_periods=3).mean())
         machine[f'{sensor}_std7'] = current.transform(
             lambda series: series.shift(1).rolling(window=7, min_periods=3).std())
+        # 현재 값이 이전 7개 관측치의 평균보다 얼마나 높거나 낮은지 계산합니다.
+        machine[f'{sensor}_vs_mean7'] = machine[sensor] - machine[f'{sensor}_mean7']
+        # 이상 점수는 평균에서 벗어난 크기를 과거 표준편차로 나눈 값입니다.
+        # 과거 값의 표준편차가 0이면 나눌 수 없으므로 결측으로 남겨 Train 중앙값으로 채웁니다.
+        past_std = machine[f'{sensor}_std7'].replace(0, np.nan)
+        machine[f'{sensor}_anomaly7'] = machine[f'{sensor}_vs_mean7'].abs() / past_std
         past_30_mean = current.transform(
             lambda series: series.shift(1).rolling(window=30, min_periods=7).mean())
         machine[f'{sensor}_vs_mean30'] = machine[sensor] - past_30_mean
