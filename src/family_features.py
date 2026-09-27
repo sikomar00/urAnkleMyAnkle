@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import dataclass
+
 import pandas as pd
 
+from .asset_anomaly_features import HISTORY_FEATURES, build_sensor_history_features
 from .industrial_data import (
     ASSET_COLUMN,
     CURRENT_TARGET,
@@ -28,6 +32,22 @@ FAMILY_NAMES: tuple[str, ...] = (
     "Fastener",
 )
 FAMILY_TARGETS: tuple[str, ...] = ("affected", "severe")
+FAMILY_HISTORY_FEATURES: tuple[str, ...] = (
+    "affected_lag1",
+    "affected_count_7d",
+    "affected_count_30d",
+    "days_since_last_affected",
+    "severe_lag1",
+    "severe_count_30d",
+)
+FAMILY_STATIC_FEATURES: tuple[str, ...] = (
+    MACHINE_COLUMN,
+    ASSET_COLUMN,
+    *SENSOR_COLUMNS,
+    "day_of_week",
+    "month_sin",
+    "month_cos",
+)
 
 FAMILY_COLUMN = "part_family"
 _ASSET_DAY = [DATE_COLUMN, MACHINE_COLUMN, ASSET_COLUMN]
@@ -191,3 +211,121 @@ def build_family_target_profile(family_daily: pd.DataFrame) -> pd.DataFrame:
                 row[f"{target}_rate"] = count / row_count if row_count else float("nan")
             rows.append(row)
     return pd.DataFrame(rows)
+
+
+def _family_target_history(group: pd.DataFrame) -> pd.DataFrame:
+    """한 장비·Family의 과거 Target을 빈 달력일까지 보존해 계산한다."""
+    indexed = group.sort_values(DATE_COLUMN).set_index(DATE_COLUMN)
+    original_dates = indexed.index
+    calendar = indexed.reindex(
+        pd.date_range(original_dates.min(), original_dates.max(), freq="D")
+    )
+    calendar.index.name = DATE_COLUMN
+
+    shifted_affected = calendar["affected"].shift(1)
+    shifted_severe = calendar["severe"].shift(1)
+    calendar["affected_lag1"] = shifted_affected
+    calendar["affected_count_7d"] = shifted_affected.rolling(
+        7, min_periods=1
+    ).sum()
+    calendar["affected_count_30d"] = shifted_affected.rolling(
+        30, min_periods=1
+    ).sum()
+    previous_dates = calendar.index.to_series() - pd.Timedelta(days=1)
+    last_affected_date = previous_dates.where(shifted_affected.eq(1)).ffill()
+    calendar["days_since_last_affected"] = (
+        calendar.index.to_series() - last_affected_date
+    ).dt.days
+    calendar["severe_lag1"] = shifted_severe
+    calendar["severe_count_30d"] = shifted_severe.rolling(
+        30, min_periods=1
+    ).sum()
+    return calendar.loc[original_dates].reset_index()
+
+
+def build_family_history_features(family_daily: pd.DataFrame) -> pd.DataFrame:
+    """Family 과거 상태와 장비 센서 과거 Feature를 누수 없이 추가한다."""
+    required = {
+        DATE_COLUMN,
+        MACHINE_COLUMN,
+        ASSET_COLUMN,
+        FAMILY_COLUMN,
+        "affected",
+        "severe",
+        *SENSOR_COLUMNS,
+    }
+    missing = sorted(required - set(family_daily.columns))
+    if missing:
+        raise ValueError(f"Family 이력에 필요한 컬럼이 없습니다: {missing}")
+    if family_daily.duplicated(_FAMILY_DAY).any():
+        raise ValueError("같은 장비·날짜·Family 행이 중복되었습니다.")
+
+    frame = family_daily.copy()
+    frame[DATE_COLUMN] = pd.to_datetime(frame[DATE_COLUMN])
+    family_pieces = [
+        _family_target_history(group)
+        for _, group in frame.groupby(
+            [ASSET_COLUMN, FAMILY_COLUMN], observed=True, sort=False
+        )
+    ]
+    with_family_history = pd.concat(family_pieces, ignore_index=True)
+
+    sensor_keys = [DATE_COLUMN, MACHINE_COLUMN, ASSET_COLUMN]
+    asset_daily = frame[[*sensor_keys, *SENSOR_COLUMNS]].drop_duplicates()
+    if asset_daily.duplicated([DATE_COLUMN, ASSET_COLUMN]).any():
+        raise ValueError("같은 장비·날짜에 서로 다른 센서 행이 있습니다.")
+    sensor_history = build_sensor_history_features(asset_daily)
+    sensor_history = sensor_history[[*sensor_keys, *HISTORY_FEATURES]]
+    result = with_family_history.merge(
+        sensor_history,
+        on=sensor_keys,
+        how="left",
+        validate="many_to_one",
+    )
+    return result.sort_values(
+        [DATE_COLUMN, ASSET_COLUMN, FAMILY_COLUMN]
+    ).reset_index(drop=True)
+
+
+@dataclass(frozen=True)
+class FamilyDiagnosisFeatures:
+    """Family 진단 Frame과 실험별 Feature 목록을 함께 보관한다."""
+
+    frame: pd.DataFrame
+    feature_sets: dict[str, tuple[str, ...]]
+    residual_transformer: object | None = None
+
+
+def prepare_family_features(
+    raw: pd.DataFrame,
+    validation_start: str | pd.Timestamp = "2024-01-01",
+    feature_sets: Sequence[str] = ("A", "B"),
+) -> FamilyDiagnosisFeatures:
+    """원본 부품 행에서 정적 A와 과거 이력 B 실험 입력을 준비한다."""
+    requested = tuple(dict.fromkeys(feature_sets))
+    unknown = sorted(set(requested) - {"A", "B"})
+    if unknown:
+        raise ValueError(f"지원하지 않는 Feature 집합입니다: {unknown}")
+    if not requested:
+        raise ValueError("Feature 집합을 하나 이상 요청해야 합니다.")
+    pd.Timestamp(validation_start)
+
+    frame = build_family_history_features(build_family_daily(raw))
+    available = {
+        "A": FAMILY_STATIC_FEATURES,
+        "B": (*FAMILY_STATIC_FEATURES, *HISTORY_FEATURES, *FAMILY_HISTORY_FEATURES),
+    }
+    selected = {name: tuple(available[name]) for name in requested}
+    forbidden = {
+        CURRENT_TARGET,
+        "affected",
+        "severe",
+        "all_failed",
+        "failed_parts",
+        "failed_a_parts",
+    }
+    for name, columns in selected.items():
+        overlap = sorted(forbidden.intersection(columns))
+        if overlap:
+            raise ValueError(f"{name} Feature 집합에 Target 열이 포함됐습니다: {overlap}")
+    return FamilyDiagnosisFeatures(frame=frame, feature_sets=selected)

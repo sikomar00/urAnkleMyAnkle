@@ -2,10 +2,14 @@ import pandas as pd
 import pytest
 
 from src.family_features import (
+    FAMILY_HISTORY_FEATURES,
     FAMILY_NAMES,
     build_family_daily,
+    build_family_history_features,
     build_family_target_profile,
+    prepare_family_features,
 )
+from src.industrial_data import SENSOR_COLUMNS
 
 
 PARTS = (
@@ -183,3 +187,58 @@ def test_family_target_profile_contains_all_periods_and_rates(raw_family_rows):
         "Sensor",
         "Fastener",
     )
+
+
+def test_family_lag_uses_previous_calendar_day(raw_family_rows):
+    daily = build_family_daily(raw_family_rows)
+    daily = daily.loc[
+        ~daily["transaction_date"].eq(pd.Timestamp("2023-01-02"))
+    ]
+
+    result = build_family_history_features(daily)
+
+    row = select_day(result, "Bearing", "2023-01-03")
+    assert pd.isna(row["affected_lag1"])
+    assert pd.isna(row["load_pct_lag1"])
+
+
+def test_future_target_change_does_not_change_past_history(raw_family_rows):
+    before = build_family_history_features(build_family_daily(raw_family_rows))
+    changed = raw_family_rows.copy()
+    changed.loc[
+        changed["transaction_date"].eq(pd.Timestamp("2023-01-03")),
+        "breakdown_flag",
+    ] = 1
+    after = build_family_history_features(build_family_daily(changed))
+    columns = ["affected_lag1", "affected_count_7d", "severe_count_30d"]
+
+    pd.testing.assert_series_equal(
+        select_day(before, "Bearing", "2023-01-02")[columns],
+        select_day(after, "Bearing", "2023-01-02")[columns],
+    )
+
+
+def test_prepare_family_features_builds_nested_a_and_b_without_targets(
+    raw_family_rows,
+):
+    prepared = prepare_family_features(raw_family_rows)
+
+    assert tuple(prepared.feature_sets) == ("A", "B")
+    assert set(prepared.feature_sets["A"]) < set(prepared.feature_sets["B"])
+    assert set(SENSOR_COLUMNS) <= set(prepared.feature_sets["A"])
+    assert set(FAMILY_HISTORY_FEATURES) <= set(prepared.feature_sets["B"])
+    forbidden = {
+        "breakdown_flag",
+        "affected",
+        "severe",
+        "all_failed",
+        "failed_parts",
+        "failed_a_parts",
+    }
+    assert not forbidden.intersection(prepared.feature_sets["B"])
+    assert prepared.residual_transformer is None
+
+
+def test_prepare_family_features_rejects_unknown_feature_set(raw_family_rows):
+    with pytest.raises(ValueError, match="Feature 집합"):
+        prepare_family_features(raw_family_rows, feature_sets=("A", "Z"))
