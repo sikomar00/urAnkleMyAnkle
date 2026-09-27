@@ -33,6 +33,10 @@ DEFAULT_DATA_PATH = (
 # 세그먼트와의 연동은 이번 작업 범위 밖이다.
 HIGH_RISK_THRESHOLD = 12
 
+# 화면 ②의 "현재 등급" 표시 전용 — severity_level(영문) 매핑. load_screen1_kpis()/
+# load_priority_table()의 high_risk 판정 로직은 severity_level 원문을 그대로 쓴다.
+SEVERITY_LABELS_KO = {"normal": "정상", "caution": "주의", "risk": "경계", "high_risk": "위험"}
+
 
 def _data_path() -> Path:
     """MACHINE_DATA_PATH 환경변수가 있으면 우선하고, 없으면 기본 원본 CSV 경로."""
@@ -188,7 +192,9 @@ def load_asset_detail_kpis(asset_tag: str) -> dict:
         "asset_tag": asset_tag,
         "machine_type": info[MACHINE_COLUMN],
         "plant_code": info[PLANT_COLUMN],
-        "current_grade": str(latest_row["severity_level"]),
+        "current_grade": SEVERITY_LABELS_KO.get(
+            str(latest_row["severity_level"]), str(latest_row["severity_level"])
+        ),
         "risk_score": float(latest_row["failure_points"]),
         "last_failure_date": last_failure_date_str,
         "failure_days_count": int((asset_daily["failure_points"] > 0).sum()),
