@@ -7,6 +7,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      # Windows 러너의 기본 콘솔 코드페이지(cp1252 등)로는 한글 print가
+      # UnicodeEncodeError를 낸다. Python을 UTF-8 모드로 강제해 OS와 무관하게
+      # 동일한 인코딩으로 동작하게 한다 (PEP 540, Python 3.7+).
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
