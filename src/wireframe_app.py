@@ -160,14 +160,13 @@ SCREENS = [
 ]
 
 # ------------------------------------------------------------
-# 필터바 상호작용 — 이 옵션 목록은 전부 임시(placeholder)다.
-# 실제 데이터가 붙으면 공장/기계 종류/기계 옵션은 데이터셋의 고유값으로
-# 교체해야 한다(PUN-01 외 3곳만 Plantfloor 디자인 시스템 README에서 확인됨,
-# 기계 종류 5종은 이름이 정해지지 않아 "종류 1..5"로 임시 표기).
+# 필터바 상호작용 — 확인된 실제 값(2026-09-27 기준
+# synthetic_industrial_machine_data.csv 고유값).
 # ------------------------------------------------------------
-PLANT_OPTIONS = ["PUN-01", "PUN-02", "PUN-03"]          # 확인됨 (디자인 시스템 README)
-MACHINE_TYPE_OPTIONS = [f"종류 {i+1}" for i in range(5)]  # 미확인 — 실제 이름으로 교체 필요
-MACHINE_OPTIONS = [f"기계 {i+1:03d}" for i in range(20)]  # 미확인 — 실제 기계 ID로 교체 필요
+PLANT_OPTIONS = ["CHN-02", "DHR-03", "PUN-01"]
+MACHINE_TYPE_OPTIONS = ["Belt Conveyor", "CNC Lathe", "EOT Crane",
+                        "Hydraulic Press", "Screw Compressor"]
+MACHINE_OPTIONS = load_asset_list()
 PERIOD_PRESETS = ["프리셋 1", "프리셋 2", "프리셋 3", "전체"]
 
 DEFAULT_FILTERS = {
@@ -693,7 +692,7 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
         ("관측 기계 (대)", f"{kpis['observed_machines']:,}", None),
         ("고장 표시 기계·일", f"{kpis['failure_machine_days']:,}", None),
         ("종합 고장율 (%)", f"{kpis['failure_rate_pct']:.1f}%", KPI_FAILRATE_ID),
-        ("평균 소비 전력 (kW)", f"{kpis['avg_power_kw']:,.1f}", None),
+        ("평균 소비 전력 (kW)", f"{kpis['avg_power_kw']:,.2f}", None),
         ("최고 베어링 온도 (°C)", f"{kpis['max_bearing_temp']:.1f}", None),
         ("부품 출고 금액 (누적, INR)", f"{kpis['parts_issue_value_inr']:,.0f}", None),
     ]
@@ -818,7 +817,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
          metric("위험도", 120, f"{detail['risk_score']:,.0f}"),
          metric("최근 고장 표시일", 140, detail["last_failure_date"] or "—"),
          metric("고장 표시 일수 (일)", 140, f"{detail['failure_days_count']:,}"),
-         metric("평균 소비 전력 (kW)", 140, f"{detail['avg_power_30d_kw']:,.1f}"),
+         metric("평균 소비 전력 (kW)", 140, f"{detail['avg_power_30d_kw']:,.2f}"),
          dim(1880, 88)],
         style={"width": "1880px", "height": "88px", "boxSizing": "border-box", "background": CARD,
                "outline": f"1px solid {HAIR}", "outlineOffset": "-1px", "borderRadius": "4px",
