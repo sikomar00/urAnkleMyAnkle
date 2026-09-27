@@ -33,9 +33,17 @@
 """
 
 import io
+import sys
 from datetime import datetime
+from pathlib import Path
 
 from dash import Dash, html, dcc, Input, Output, State, ALL, ctx, no_update
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    __package__ = "src"
+
+from .dashboard_data import load_priority_table, load_screen1_kpis  # noqa: E402
 
 # ============================================================
 # 디자인 토큰 (Plantfloor, 그레이스케일만 — 계열/상태/강조 색은 쓰지 않는다)
@@ -596,6 +604,66 @@ def filter_bar():
 # 화면 ① 현황 — 행 96 / 460 / 340
 # ============================================================
 
+def kpi_value_tile(label, value_text, w=300, h=96, tid=None):
+    """tile()과 같은 치수·토큰을 쓰지만, slot()의 'w×h' 주석 대신 실제 값
+    문자열을 그대로 보여준다. tile()/slot()은 화면 ③·④에서도 쓰는 공용
+    와이어프레임 자리표시자라 여기서는 건드리지 않고, 화면 ①에서만 쓰는
+    이 함수로 실제 값 표시를 대신한다."""
+    style = {"width": f"{w}px", "height": f"{h}px", "flexShrink": "0", "boxSizing": "border-box",
+             "background": CARD, "outline": f"1px solid {CTRL if tid else HAIR}", "outlineOffset": "-1px",
+             "borderRadius": "4px", "padding": "16px", "display": "flex",
+             "flexDirection": "column", "gap": "8px",
+             "cursor": "pointer" if tid else "default"}
+    kwargs = {"id": tid, "n_clicks": 0} if tid else {}
+    return html.Div(
+        [html.Div([html.Span(label, style=LABEL_12), dim(w, h)],
+                   style={"height": "16px", "display": "flex", "justifyContent": "space-between", "gap": "8px"}),
+         html.Div(html.Span(value_text, style={"fontFamily": MONO, "fontSize": "22px",
+                                                 "fontWeight": "600", "color": INK}),
+                  style={"height": "32px", "display": "flex", "alignItems": "center"})],
+        style=style, **kwargs,
+    )
+
+
+def priority_table(cols, records, row_h, head_h=32, sort_col=None):
+    """table_placeholder()와 같은 헤더/셀 스타일을 쓰되, 자리표시 막대 대신
+    load_priority_table()이 만든 실제 자산별 값을 채운다. table_placeholder()
+    자체는 화면 ③·④에서도 쓰므로 건드리지 않는다."""
+    thead = html.Tr(
+        [html.Th(f"{l}{' ▼' if i == sort_col else (' ▲▼' if sort_col is not None else '')}",
+                 style={"width": f"{w}px", "boxSizing": "border-box", "padding": "0 8px",
+                        "textAlign": a, **LABEL_12, "whiteSpace": "nowrap", "overflow": "hidden",
+                        "borderBottom": f"1px solid {CTRL}"})
+         for i, (l, w, a) in enumerate(cols)],
+        style={"height": f"{head_h}px", "background": CARD},
+    )
+    field_order = ["rank", "asset_tag", "machine_type", "plant_code", "failure_points",
+                   "threshold_exceeded", "last_failure_date", "failed_part_count"]
+    body_rows = []
+    for record in records:
+        cells = []
+        for (l, w, a), field in zip(cols, field_order):
+            value = record[field]
+            if field == "failure_points":
+                text = f"{value:,.0f}"
+            elif field == "threshold_exceeded":
+                text = "예" if value else "아니오"
+            elif field == "last_failure_date":
+                text = value or "—"
+            else:
+                text = str(value)
+            cell_style = {"fontFamily": MONO, "fontSize": "12px", "color": MUTED} if field == "rank" else NUM_12
+            cells.append(html.Td(html.Span(text, style=cell_style),
+                                  style={"boxSizing": "border-box", "padding": "0 8px",
+                                         "textAlign": a, "borderBottom": f"1px solid {HAIR}"}))
+        body_rows.append(html.Tr(cells, style={"height": f"{row_h}px"}))
+    tw = sum(c[1] for c in cols)
+    return html.Table(
+        [html.Thead(thead), html.Tbody(body_rows)],
+        style={"width": f"{tw}px", "tableLayout": "fixed", "borderCollapse": "collapse", "flexShrink": "0"},
+    )
+
+
 def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
     # 절충안: 6타일 중 "위험 기준선 초과 기계 (대)" 한 자리만 종합 고장율(%)로
     # 바꾼다. 그 지표는 원래 절대 건수(분자)만 보여줘서 "전체 대비 얼마나
@@ -615,15 +683,16 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
     # 일반 문자열 id로 Input을 걸면 그 화면들에서 "ID not found in layout"
     # 콘솔 경고가 뜬다 — 패턴 매칭 id({"type":...})를 쓰면 Dash가 "지금 이
     # id를 가진 컴포넌트가 0개일 수 있다"를 정상 상태로 취급해 경고가 안 뜬다.
+    kpis = load_screen1_kpis()
     kpi_specs = [
-        ("관측 기계 (대)", "값 · value-28", None),
-        ("고장 표시 기계·일", "값 · value-28", None),
-        ("종합 고장율 (%)", "값 · value-16", KPI_FAILRATE_ID),
-        ("평균 소비 전력 (kW)", "값 · value-28", None),
-        ("최고 베어링 온도 (°C)", "값 · value-28", None),
-        ("부품 출고 금액 (INR)", "값 · value-28", None),
+        ("관측 기계 (대)", f"{kpis['observed_machines']:,}", None),
+        ("고장 표시 기계·일", f"{kpis['failure_machine_days']:,}", None),
+        ("종합 고장율 (%)", f"{kpis['failure_rate_pct']:.1f}%", KPI_FAILRATE_ID),
+        ("평균 소비 전력 (kW)", f"{kpis['avg_power_kw']:,.1f}", None),
+        ("최고 베어링 온도 (°C)", f"{kpis['max_bearing_temp']:.1f}", None),
+        ("부품 출고 금액 (누적, INR)", f"{kpis['parts_issue_value_inr']:,.0f}", None),
     ]
-    row_a = row(ROW_KPI, [tile(label, sub=sub, tid=tid) for label, sub, tid in kpi_specs])
+    row_a = row(ROW_KPI, [kpi_value_tile(label, value_text, tid=tid) for label, value_text, tid in kpi_specs])
 
     prio_cols = [("순위", 48, "right"), ("대상", 200, "left"), ("종류", 110, "left"), ("공장", 100, "left"),
                  ("등급가중 고장점수", 150, "right"), ("기준선 초과", 110, "center"),
@@ -631,8 +700,9 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
     sort_idx = 5 if prio_sort == "threshold" else 4
     sort_hint = ("정렬: 기준선 초과 (KPI '종합 고장율' 클릭으로 이동함)" if prio_sort == "threshold"
                  else "정렬: 등급가중 고장점수 (기본)")
+    priority_records = load_priority_table(prio_sort)
     prio = card("점검 우선순위", 1090, ROW_MAIN,
-                table_placeholder(prio_cols, 11, 32, head_h=32, first_idx=True, sort_col=sort_idx),
+                priority_table(prio_cols, priority_records, 32, head_h=32, sort_col=sort_idx),
                 right=note(f"대상 = 엔티티 무관 (현재 기계 행만) · 헤더 고정 · 행 클릭 → ② · {sort_hint}"))
 
     def machine_tile():
