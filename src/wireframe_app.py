@@ -43,7 +43,12 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     __package__ = "src"
 
-from .dashboard_data import load_priority_table, load_screen1_kpis  # noqa: E402
+from .dashboard_data import (  # noqa: E402
+    load_asset_detail_kpis,
+    load_asset_list,
+    load_priority_table,
+    load_screen1_kpis,
+)
 
 # ============================================================
 # 디자인 토큰 (Plantfloor, 그레이스케일만 — 계열/상태/강조 색은 쓰지 않는다)
@@ -774,19 +779,46 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
 # 화면 ② 기계 상세 — 행 88 / 520 / 288
 # ============================================================
 
-def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE):
-    def metric(label, w):
-        return html.Div([html.Span(label, style={**LABEL_12, "whiteSpace": "nowrap"}), slot("값", w, 26)],
+def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
+    def value_box(text, w, h=26, mono=False):
+        """slot()의 점선 테두리/치수 주석 대신 실제 값을 그대로 보여준다 —
+        strip 전용, screen_2() 안에서만 쓰인다."""
+        return html.Div(
+            html.Span(text, style={"fontFamily": MONO if mono else "inherit", "fontSize": "13px",
+                                    "color": INK, "whiteSpace": "nowrap", "overflow": "hidden",
+                                    "textOverflow": "ellipsis"}),
+            style={"width": f"{w}px", "height": f"{h}px", "boxSizing": "border-box",
+                   "display": "flex", "alignItems": "center", "overflow": "hidden"},
+        )
+
+    def metric(label, w, value_text):
+        return html.Div([html.Span(label, style={**LABEL_12, "whiteSpace": "nowrap"}),
+                          value_box(value_text, w)],
                          style={"width": f"{w}px", "display": "flex", "flexDirection": "column", "gap": "4px"})
 
+    def nav_btn(label, index):
+        """공용 btn()은 id 타입이 항상 "ghost-btn"이라 전역 echo_action이
+        같이 반응해 '미구현' 문구를 띄운다. 여기서는 실제 기계 전환 콜백만
+        반응하도록 다른 id 타입을 쓴다."""
+        return html.Button(label, id={"type": "machine-nav-btn", "index": index},
+                            n_clicks=0, style=btn_style())
+
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
+    detail = load_asset_detail_kpis(asset_tag)
+
     strip = html.Section(
-        [btn("‹ 이전 기계"),
-         html.Div([slot("기계 태그 · value-20 mono", 220, 26), slot("종류 · 공장", 220, 22)],
+        [nav_btn("‹ 이전 기계", "prev"),
+         html.Div([value_box(detail["asset_tag"], 220, mono=True),
+                   value_box(f"{detail['machine_type']} · {detail['plant_code']}", 220, h=22)],
                   style={"display": "flex", "flexDirection": "column", "gap": "4px"}),
-         btn("다음 기계 ›"),
+         nav_btn("다음 기계 ›", "next"),
          html.Div(style={"flexGrow": "1"}),
-         metric("현재 등급", 120), metric("위험도", 120), metric("최근 고장 표시일", 140),
-         metric("고장 표시 일수 (일)", 140), metric("평균 소비 전력 (kW)", 140),
+         metric("현재 등급", 120, detail["current_grade"]),
+         metric("위험도", 120, f"{detail['risk_score']:,.0f}"),
+         metric("최근 고장 표시일", 140, detail["last_failure_date"] or "—"),
+         metric("고장 표시 일수 (일)", 140, f"{detail['failure_days_count']:,}"),
+         metric("평균 소비 전력 (kW)", 140, f"{detail['avg_power_30d_kw']:,.1f}"),
          dim(1880, 88)],
         style={"width": "1880px", "height": "88px", "boxSizing": "border-box", "background": CARD,
                "outline": f"1px solid {HAIR}", "outlineOffset": "-1px", "borderRadius": "4px",
@@ -1374,6 +1406,9 @@ app.layout = html.Div(
         dcc.Store(id="filter-store", data=DEFAULT_FILTERS, storage_type="local"),
         dcc.Store(id="seg-store", data=DEFAULT_SEG, storage_type="local"),
         dcc.Store(id="prio-sort-store", data=DEFAULT_PRIO_SORT),
+        # ②의 "‹ 이전 기계"/"다음 기계 ›"가 바꾸는, 현재 상세를 보고 있는 기계.
+        # prio-sort-store와 동일하게 세션 메모리(storage_type 미지정)로 둔다.
+        dcc.Store(id="selected-asset-store", data=load_asset_list()[0]),
         dcc.Store(id="theme-store", data="light", storage_type="local"),
         app_header(),
         filter_bar(),
@@ -1398,12 +1433,38 @@ app.layout = html.Div(
     Input("seg-store", "data"),
     Input("report-audience-dd", "value"),
     Input("prio-sort-store", "data"),
+    Input("selected-asset-store", "data"),
 )
-def render_screen(active, seg_state, audience, prio_sort):
+def render_screen(active, seg_state, audience, prio_sort, selected_asset):
     kwargs = {"seg_state": seg_state, "audience": audience or DEFAULT_AUDIENCE}
     if active == "1":
         kwargs["prio_sort"] = prio_sort or DEFAULT_PRIO_SORT
+    if active == "2":
+        kwargs["asset_tag"] = selected_asset
     return SCREEN_BUILDERS[active](**kwargs)
+
+
+# ②의 "‹ 이전 기계"/"다음 기계 ›" — 알파벳순으로 순환 이동한다. nav_btn()이
+# 공용 ghost-btn과 다른 id 타입을 쓰므로 echo_action과 겹치지 않는다.
+@app.callback(
+    Output("selected-asset-store", "data"),
+    Input({"type": "machine-nav-btn", "index": ALL}, "n_clicks"),
+    State("selected-asset-store", "data"),
+    prevent_initial_call=True,
+)
+def cycle_selected_asset(_clicks, current_asset):
+    triggered = ctx.triggered_id
+    if not triggered:
+        return no_update
+    assets = load_asset_list()
+    idx = assets.index(current_asset) if current_asset in assets else 0
+    if triggered["index"] == "next":
+        idx = (idx + 1) % len(assets)
+    elif triggered["index"] == "prev":
+        idx = (idx - 1) % len(assets)
+    else:
+        return no_update
+    return assets[idx]
 
 
 # ------------------------------------------------------------
