@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from dataclasses import dataclass
@@ -14,7 +15,13 @@ import pandas as pd
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import average_precision_score
 
-from .family_features import FAMILY_TARGETS, FamilyDiagnosisFeatures
+from .asset_anomaly_features import HISTORY_FEATURES
+from .family_features import (
+    FAMILY_TARGETS,
+    FamilyDiagnosisFeatures,
+    build_family_target_profile,
+)
+from .family_residual_features import RESIDUAL_FEATURES
 from .industrial_data import ASSET_COLUMN, DATE_COLUMN, MACHINE_COLUMN, split_by_date
 from .industrial_training import (
     MODEL_NAMES,
@@ -161,6 +168,18 @@ def choose_family_thresholds(y_true: Any, scores: Any) -> list[ThresholdSelectio
 
 def _safe_name(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("_")
+
+
+def _atomic_csv(frame: pd.DataFrame, path: Path) -> None:
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    frame.to_csv(temporary, index=False)
+    temporary.replace(path)
+
+
+def _atomic_text(text: str, path: Path) -> None:
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(text, encoding="utf-8")
+    temporary.replace(path)
 
 
 def _metric_row(
@@ -346,7 +365,33 @@ def run_family_experiments(
             for row in candidate_rows:
                 row["selected_model"] = row["model"] == selected_models[row["feature_set"]]
                 row["selected_feature_set"] = row["feature_set"] == selected_feature
+            candidate_test_rows: list[dict[str, Any]] = []
+            for feature_set, feature_model in selected_models.items():
+                feature_names = list(prepared.feature_sets[feature_set])
+                feature_valid_scores = valid_scores[(feature_set, feature_model)]
+                feature_test_scores = fitted[(feature_set, feature_model)].predict_proba(
+                    test[feature_names]
+                )[:, 1]
+                feature_threshold = choose_family_thresholds(
+                    valid[target], feature_valid_scores
+                )[0]
+                candidate_test_rows.append(
+                    _metric_row(
+                        family=family,
+                        target=target,
+                        feature_set=feature_set,
+                        model_name=feature_model,
+                        split_name="test",
+                        y_true=test[target],
+                        scores=feature_test_scores,
+                        threshold=feature_threshold,
+                        prior_ap=prior_ap,
+                        selected_model=True,
+                        selected_feature_set=feature_set == selected_feature,
+                    )
+                )
             metric_rows.extend(candidate_rows)
+            metric_rows.extend(candidate_test_rows)
 
             features = list(prepared.feature_sets[selected_feature])
             model = fitted[(selected_feature, selected_model)]
@@ -453,7 +498,9 @@ def run_family_experiments(
             key = f"{family}__{target}"
             model_paths[key] = model_path
             completed[(family, target)] = {
-                "metrics": pd.DataFrame([*candidate_rows, *selected_rows]),
+                "metrics": pd.DataFrame(
+                    [*candidate_rows, *candidate_test_rows, *selected_rows]
+                ),
                 "predictions": target_prediction_frame,
                 "importances": target_importances,
                 "model_path": model_path,
@@ -466,11 +513,92 @@ def run_family_experiments(
         else pd.DataFrame()
     )
     importances = pd.DataFrame(importance_rows)
+    metrics["temporal_importance"] = 0.0
+    temporal_features = set(HISTORY_FEATURES) | set(RESIDUAL_FEATURES)
+    if not importances.empty:
+        temporal = importances.loc[importances["feature"].isin(temporal_features)].copy()
+        temporal["positive_importance"] = pd.to_numeric(
+            temporal["importance_mean"], errors="coerce"
+        ).clip(lower=0).fillna(0.0)
+        for keys, group in temporal.groupby(
+            ["part_family", "target", "feature_set", "model"], sort=False
+        ):
+            mask = (
+                metrics["part_family"].eq(keys[0])
+                & metrics["target"].eq(keys[1])
+                & metrics["feature_set"].eq(keys[2])
+                & metrics["model"].eq(keys[3])
+            )
+            metrics.loc[mask, "temporal_importance"] = float(
+                group["positive_importance"].sum()
+            )
     multilabel_input = (
         predictions.loc[predictions["threshold_policy"].eq("f1")].copy()
         if not predictions.empty
         else pd.DataFrame()
     )
+    from .family_diagnosis_report import (
+        build_multilabel_metrics,
+        evaluate_sequence_gate,
+        render_family_summary,
+    )
+
+    multilabel_metrics = (
+        build_multilabel_metrics(multilabel_input)
+        if not multilabel_input.empty
+        else pd.DataFrame()
+    )
+    profile = build_family_target_profile(prepared.frame)
+    sequence_gate = evaluate_sequence_gate(metrics)
+    residual_baselines = (
+        prepared.residual_transformer.artifact_table()
+        if prepared.residual_transformer is not None
+        else pd.DataFrame(
+            columns=[
+                ASSET_COLUMN,
+                "sensor",
+                "normal_rows",
+                "selected_scope",
+                "fallback_reason",
+                "residual_median",
+                "residual_mad",
+                "residual_std",
+                "residual_scale",
+                "scale_method",
+            ]
+        )
+    )
+    run_config = {
+        "random_state": random_state,
+        "max_iter": max_iter,
+        "validation_start": "2024-01-01",
+        "test_start": "2024-07-01",
+        "feature_sets": {
+            name: list(features) for name, features in prepared.feature_sets.items()
+        },
+        "targets": {
+            "affected": "failed_parts >= 1",
+            "severe": "failed_parts >= 2 or failed_a_parts >= 1",
+            "all_failed": "통계 전용",
+        },
+        "threshold_policies": list(THRESHOLD_POLICIES),
+        "sequence_gate": sequence_gate,
+    }
+    summary = render_family_summary(
+        metrics, multilabel_metrics, profile, sequence_gate
+    )
+    output.mkdir(parents=True, exist_ok=True)
+    _atomic_csv(metrics, output / "metrics.csv")
+    _atomic_csv(multilabel_metrics, output / "multilabel_metrics.csv")
+    _atomic_csv(profile, output / "target_profile.csv")
+    _atomic_csv(predictions, output / "test_predictions.csv")
+    _atomic_csv(importances, output / "feature_importance.csv")
+    _atomic_csv(residual_baselines, output / "residual_baselines.csv")
+    _atomic_text(
+        json.dumps(run_config, ensure_ascii=False, indent=2),
+        output / "run_config.json",
+    )
+    _atomic_text(summary, output / "experiment_summary.md")
     return FamilyExperimentResult(
         metrics=metrics,
         predictions=predictions,

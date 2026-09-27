@@ -133,8 +133,10 @@ def _prepared_family_experiment(*, flip_test: bool = False) -> FamilyDiagnosisFe
                     "part_family": family,
                     "signal": float(affected) + (split_index % 3) * 0.01,
                     "noise": float(split_index % 5),
+                    "total_parts": 2,
                     "affected": affected,
                     "severe": severe,
+                    "all_failed": int(affected and severe),
                 }
             )
     return FamilyDiagnosisFeatures(
@@ -162,6 +164,17 @@ def test_runner_reuses_identical_target_and_skips_insufficient_positive_rows(
     ]
     assert "identical_target" in set(bearing_severe["status"])
     assert "insufficient_positive_rows" in set(filter_severe["status"])
+    expected_outputs = {
+        "metrics.csv",
+        "multilabel_metrics.csv",
+        "target_profile.csv",
+        "test_predictions.csv",
+        "feature_importance.csv",
+        "residual_baselines.csv",
+        "run_config.json",
+        "experiment_summary.md",
+    }
+    assert expected_outputs <= {path.name for path in tmp_path.iterdir()}
 
 
 def test_runner_keeps_validation_selection_and_saved_predictions_reproducible(
