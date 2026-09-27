@@ -1,0 +1,3 @@
+﻿model,rows,actual_failures,failure_rate,always_normal_accuracy,Accuracy,Precision,Recall,F1,PR_AUC,TN,FP,FN,TP,predicted_alerts,probability_cutoff,note
+로지스틱 회귀,29600,2853,0.09638513513513514,0.9036148648648649,0.9036148648648649,0.0,0.0,0.0,0.12627983833027936,26747,0,2853,0,0,0.5,예측 경보 0건: Precision 해석 불가
+랜덤 포레스트,29600,2853,0.09638513513513514,0.9036148648648649,0.903581081081081,0.0,0.0,0.0,0.10839985084525854,26746,1,2853,0,1,0.5,
