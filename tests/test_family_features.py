@@ -9,6 +9,7 @@ from src.family_features import (
     build_family_target_profile,
     prepare_family_features,
 )
+from src.family_residual_features import RESIDUAL_FEATURES
 from src.industrial_data import SENSOR_COLUMNS
 
 
@@ -221,7 +222,7 @@ def test_future_target_change_does_not_change_past_history(raw_family_rows):
 def test_prepare_family_features_builds_nested_a_and_b_without_targets(
     raw_family_rows,
 ):
-    prepared = prepare_family_features(raw_family_rows)
+    prepared = prepare_family_features(raw_family_rows, feature_sets=("A", "B"))
 
     assert tuple(prepared.feature_sets) == ("A", "B")
     assert set(prepared.feature_sets["A"]) < set(prepared.feature_sets["B"])
@@ -242,3 +243,14 @@ def test_prepare_family_features_builds_nested_a_and_b_without_targets(
 def test_prepare_family_features_rejects_unknown_feature_set(raw_family_rows):
     with pytest.raises(ValueError, match="Feature 집합"):
         prepare_family_features(raw_family_rows, feature_sets=("A", "Z"))
+
+
+def test_prepare_family_features_adds_residual_feature_set_c(raw_family_rows):
+    prepared = prepare_family_features(
+        raw_family_rows,
+        feature_sets=("A", "B", "C"),
+    )
+
+    assert set(prepared.feature_sets["B"]) < set(prepared.feature_sets["C"])
+    assert set(RESIDUAL_FEATURES) <= set(prepared.feature_sets["C"])
+    assert prepared.residual_transformer is not None

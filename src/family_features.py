@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from .asset_anomaly_features import HISTORY_FEATURES, build_sensor_history_features
+from .family_residual_features import RESIDUAL_FEATURES, OperatingResidualTransformer
 from .industrial_data import (
     ASSET_COLUMN,
     CURRENT_TARGET,
@@ -299,22 +300,30 @@ class FamilyDiagnosisFeatures:
 def prepare_family_features(
     raw: pd.DataFrame,
     validation_start: str | pd.Timestamp = "2024-01-01",
-    feature_sets: Sequence[str] = ("A", "B"),
+    feature_sets: Sequence[str] = ("A", "B", "C"),
 ) -> FamilyDiagnosisFeatures:
-    """원본 부품 행에서 정적 A와 과거 이력 B 실험 입력을 준비한다."""
+    """원본에서 정적 A, 과거 이력 B, 운전조건 잔차 C 입력을 준비한다."""
     requested = tuple(dict.fromkeys(feature_sets))
-    unknown = sorted(set(requested) - {"A", "B"})
+    unknown = sorted(set(requested) - {"A", "B", "C"})
     if unknown:
         raise ValueError(f"지원하지 않는 Feature 집합입니다: {unknown}")
     if not requested:
         raise ValueError("Feature 집합을 하나 이상 요청해야 합니다.")
-    pd.Timestamp(validation_start)
+    validation_start = pd.Timestamp(validation_start)
 
     frame = build_family_history_features(build_family_daily(raw))
     available = {
         "A": FAMILY_STATIC_FEATURES,
         "B": (*FAMILY_STATIC_FEATURES, *HISTORY_FEATURES, *FAMILY_HISTORY_FEATURES),
     }
+    residual_transformer: OperatingResidualTransformer | None = None
+    if "C" in requested:
+        train = frame.loc[frame["label_end_date"].lt(validation_start)]
+        if train.empty:
+            raise ValueError("잔차 모델을 적합할 학습 구간이 비어 있습니다.")
+        residual_transformer = OperatingResidualTransformer().fit(train)
+        frame = residual_transformer.transform(frame)
+        available["C"] = (*available["B"], *RESIDUAL_FEATURES)
     selected = {name: tuple(available[name]) for name in requested}
     forbidden = {
         CURRENT_TARGET,
@@ -328,4 +337,8 @@ def prepare_family_features(
         overlap = sorted(forbidden.intersection(columns))
         if overlap:
             raise ValueError(f"{name} Feature 집합에 Target 열이 포함됐습니다: {overlap}")
-    return FamilyDiagnosisFeatures(frame=frame, feature_sets=selected)
+    return FamilyDiagnosisFeatures(
+        frame=frame,
+        feature_sets=selected,
+        residual_transformer=residual_transformer,
+    )
