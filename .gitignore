@@ -227,6 +227,7 @@ data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/raw/synthetic_industrial_machine_data.csv
 
 # 🤖 학습된 모델 — 코드 실행하면 다시 생성됨
 models/*.joblib

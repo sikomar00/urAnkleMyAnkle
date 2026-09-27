@@ -26,7 +26,7 @@ from .industrial_data import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_PATH = (
-    PROJECT_ROOT / "dataVerification" / "synthetic_industrial_machine_data.csv"
+    PROJECT_ROOT / "data" / "raw" / "synthetic_industrial_machine_data.csv"
 )
 
 # 화면 ③ 세그먼트 컨트롤의 위험 기준선(12/13/14) 중 기본값과 동일하게 고정한다.
