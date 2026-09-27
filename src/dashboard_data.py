@@ -51,6 +51,12 @@ def _daily() -> pd.DataFrame:
     return add_asset_severity(daily, high_risk_threshold=HIGH_RISK_THRESHOLD)
 
 
+def _last_failure_date_by_asset(daily: pd.DataFrame) -> pd.Series:
+    """자산별 failure_points > 0인 가장 최근 날짜 (전체 기간 내)."""
+    failed_days = daily[daily["failure_points"] > 0]
+    return failed_days.groupby(ASSET_COLUMN)[DATE_COLUMN].max()
+
+
 def load_screen1_kpis() -> dict:
     """화면 ① KPI 타일 6개의 값을 계산한다 (필터 미반영, 전체 스냅샷)."""
     raw = _load_raw()
@@ -95,8 +101,7 @@ def load_priority_table(sort_by: str = "grade") -> list[dict]:
         .set_index(ASSET_COLUMN)
     )
 
-    failed_days = daily[daily["failure_points"] > 0]
-    last_failure_date = failed_days.groupby(ASSET_COLUMN)[DATE_COLUMN].max()
+    last_failure_date = _last_failure_date_by_asset(daily)
 
     rows = []
     for asset_tag, info in asset_info.iterrows():
@@ -142,3 +147,50 @@ def load_priority_table(sort_by: str = "grade") -> list[dict]:
     for rank, row in enumerate(rows, start=1):
         row["rank"] = rank
     return rows
+
+
+def load_asset_list() -> list[str]:
+    """전체 자산 태그를 알파벳 오름차순으로 반환한다."""
+    raw = _load_raw()
+    return sorted(raw[ASSET_COLUMN].unique().tolist())
+
+
+def load_asset_detail_kpis(asset_tag: str) -> dict:
+    """화면 ② 상단 스트립의 값을 계산한다 (선택된 자산 1개 기준).
+
+    Raises:
+        ValueError: asset_tag가 데이터에 없을 때.
+    """
+    assets = load_asset_list()
+    if asset_tag not in assets:
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+
+    raw = _load_raw()
+    daily = _daily()
+    asset_daily = daily[daily[ASSET_COLUMN].eq(asset_tag)]
+
+    info = raw[raw[ASSET_COLUMN].eq(asset_tag)].iloc[0]
+
+    latest_date = daily[DATE_COLUMN].max()
+    latest_row = asset_daily[asset_daily[DATE_COLUMN].eq(latest_date)].iloc[0]
+
+    last_failure_date = _last_failure_date_by_asset(daily).get(asset_tag)
+    last_failure_date_str = (
+        last_failure_date.strftime("%Y-%m-%d") if pd.notna(last_failure_date) else None
+    )
+
+    window_start = latest_date - pd.Timedelta(days=29)
+    recent_30d = asset_daily[
+        asset_daily[DATE_COLUMN].between(window_start, latest_date, inclusive="both")
+    ]
+
+    return {
+        "asset_tag": asset_tag,
+        "machine_type": info[MACHINE_COLUMN],
+        "plant_code": info[PLANT_COLUMN],
+        "current_grade": str(latest_row["severity_level"]),
+        "risk_score": float(latest_row["failure_points"]),
+        "last_failure_date": last_failure_date_str,
+        "failure_days_count": int((asset_daily["failure_points"] > 0).sum()),
+        "avg_power_30d_kw": float(recent_30d["power_consumption_kw"].mean()),
+    }
