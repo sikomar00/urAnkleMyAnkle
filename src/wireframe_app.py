@@ -99,6 +99,16 @@ THEME_CSS = """
 /* 캔버스가 1920 고정폭이라 넓은 화면에서는 좌우 여백이 생긴다 —
    다크에서 그 여백이 흰색으로 남지 않도록 body에도 같은 배경을 준다. */
 html, body { margin:0; background:var(--pf-page); }
+
+/* 드롭다운 팝업이 카드 밑에 깔리는 문제 방지 (Dash 버전 호환).
+   이 환경(Dash 4.x)의 dcc.Dropdown은 position:fixed + z-index:500인
+   팝업(.dash-dropdown-content)을 쓰지만, 설치된 Dash 버전이 다르면
+   z-index 없는 position:absolute짜리 구버전 react-select 팝업
+   (.Select-menu-outer 등)을 쓸 수 있다 — 그 경우 헤더/필터바가
+   DOM에서 main보다 먼저 나와 z-index 없이는 뒤에 그려지는 카드가
+   위로 깔린다. 두 세대 모두 항상 최상단에 오도록 강제한다. */
+.dash-dropdown-content, .Select-menu-outer { z-index: 1000 !important; }
+.Select-menu-outer { position: absolute !important; }
 """
 
 INDEX_STRING = """<!DOCTYPE html>
@@ -225,6 +235,13 @@ SEG_GROUPS = {
 }
 DEFAULT_SEG = {"task": 0, "threshold": 0, "dataset": 0}
 
+# ① 화면의 "점검 우선순위" 표 정렬 축. KPI "종합 고장율" 타일을 클릭하면
+# "grade"(등급가중 고장점수, 기본) → "threshold"(기준선 초과)로 바뀐다.
+DEFAULT_PRIO_SORT = "grade"
+
+# ①에만 있는 타일이라 패턴 매칭 id를 쓴다 — 이유는 tile() 호출부 주석 참고.
+KPI_FAILRATE_ID = {"type": "kpi-drill", "index": "failrate"}
+
 
 # ============================================================
 # 공용 프리미티브
@@ -309,17 +326,23 @@ def hstack(children, gap=8, style=None):
     return html.Div(children, style=s)
 
 
-def tile(label, w=300, h=96, sub="값 · value-28"):
+def tile(label, w=300, h=96, sub="값 · value-28", tid=None):
+    """tid를 주면 클릭 가능한 KPI 타일이 된다 — html.Div도 n_clicks를 받으므로
+    버튼으로 바꾸지 않아도 된다. 클릭 가능하다는 걸 시각적으로도 드러내려고
+    커서와 살짝 진한 테두리를 준다."""
+    style = {"width": f"{w}px", "height": f"{h}px", "flexShrink": "0", "boxSizing": "border-box",
+             "background": CARD, "outline": f"1px solid {CTRL if tid else HAIR}", "outlineOffset": "-1px",
+             "borderRadius": "4px", "padding": "16px", "display": "flex",
+             "flexDirection": "column", "gap": "8px",
+             "cursor": "pointer" if tid else "default"}
+    kwargs = {"id": tid, "n_clicks": 0} if tid else {}
     return html.Div(
         [
             html.Div([html.Span(label, style=LABEL_12), dim(w, h)],
                       style={"height": "16px", "display": "flex", "justifyContent": "space-between", "gap": "8px"}),
             slot(sub, 168, 32),
         ],
-        style={"width": f"{w}px", "height": f"{h}px", "flexShrink": "0", "boxSizing": "border-box",
-               "background": CARD, "outline": f"1px solid {HAIR}", "outlineOffset": "-1px",
-               "borderRadius": "4px", "padding": "16px", "display": "flex",
-               "flexDirection": "column", "gap": "8px"},
+        style=style, **kwargs,
     )
 
 
@@ -503,7 +526,11 @@ def app_header():
          html.Button("테마 전환", id="theme-btn", n_clicks=0, style=btn_style(w=104)),
          dcc.Download(id="report-download")],
         style={"display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "8px",
-               "minWidth": "0", "overflow": "hidden"},
+               # overflow:hidden을 여기 두면 "보고서 대상" 드롭다운 팝업까지
+               # 잘라버릴 수 있다(설치된 Dash 버전에 따라 팝업이 position:fixed가
+               # 아니라 absolute일 수 있음) — 가로 폭은 이미 자식 실측으로
+               # 맞춰뒀으니 clip 없이도 넘치지 않는다.
+               "minWidth": "0"},
     )
     return html.Header(
         [left, center, right],
@@ -512,7 +539,14 @@ def app_header():
                # center를 max-content로 못박아야 탭 5개가 잘리지 않는다
                # (auto면 1fr 두 열이 먼저 자리를 가져가 탭이 깎인다).
                "display": "grid", "gridTemplateColumns": "minmax(0, 1fr) max-content minmax(0, 1fr)",
-               "alignItems": "center", "gap": "16px", "fontFamily": SANS, "color": INK},
+               "alignItems": "center", "gap": "16px", "fontFamily": SANS, "color": INK,
+               # 헤더/필터바가 DOM에서 main보다 먼저 나오는데, 설치된 Dash
+               # 버전에 따라 드롭다운 팝업이 z-index 없는 position:absolute로
+               # 뜨는 구버전 컴포넌트를 쓸 수도 있다 — 그 경우 position:static인
+               # 두 요소는 "나중에 그려지는 쪽이 위" 규칙을 따르므로 main(카드들)이
+               # 위로 깔린다. 헤더 자체에 명시적 position+z-index를 줘서 어느
+               # Dash 버전이든 항상 main보다 위에 그려지게 만든다.
+               "position": "relative", "zIndex": 30},
     )
 
 
@@ -546,7 +580,15 @@ def filter_bar():
         style={"width": f"{CANVAS_W}px", "height": f"{FILTERBAR_H}px", "boxSizing": "border-box",
                "padding": f"0 {MARGIN}px", "background": CARD, "borderBottom": f"1px solid {HAIR}",
                "display": "flex", "alignItems": "center", "gap": "10px", "fontFamily": SANS, "color": INK,
-               "overflow": "hidden"},
+               # overflow:hidden을 쓰면 자식(드롭다운 팝업 메뉴)까지 clip돼서
+               # 목록이 잘리거나 다른 카드 밑에 깔린 것처럼 보인다. 가로 폭은
+               # 이미 자식 폭 실측으로 1920px에 맞춰뒀으니(각 자식 flexShrink:0)
+               # overflow는 넣지 않고 줄바꿈만 막는다.
+               "flexWrap": "nowrap",
+               # app_header()와 같은 이유 — 설치된 Dash 버전이 옛 방식(z-index
+               # 없는 position:absolute) 드롭다운을 쓸 경우를 대비해 필터바
+               # 자체를 main보다 항상 위에 오도록 고정한다.
+               "position": "relative", "zIndex": 20},
     )
 
 
@@ -554,17 +596,44 @@ def filter_bar():
 # 화면 ① 현황 — 행 96 / 460 / 340
 # ============================================================
 
-def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE):
-    kpi_labels = ["관측 기계 (대)", "고장 표시 기계·일", "위험 기준선 초과 기계 (대)",
-                  "평균 소비 전력 (kW)", "최고 베어링 온도 (°C)", "부품 출고 금액 (INR)"]
-    row_a = row(ROW_KPI, [tile(k) for k in kpi_labels])
+def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
+    # 절충안: 6타일 중 "위험 기준선 초과 기계 (대)" 한 자리만 종합 고장율(%)로
+    # 바꾼다. 그 지표는 원래 절대 건수(분자)만 보여줘서 "전체 대비 얼마나
+    # 심각한가"를 암산해야 했는데, 비율로 바꾸면 그 계산이 필요 없어진다.
+    # 나머지 5개(관측 기계·고장 표시 기계·일·전력·온도·부품 금액)는 그대로 —
+    # 전부 원자료 수준 지표라 "지금 뭐가 몇 대냐"에 즉답하는 역할을 유지한다.
+    #
+    # 정의(확정): 종합 고장율(%) = 위험 기준선 초과 기계 수 ÷ 전체 관측 기계 수 × 100
+    # — ③에서 고른 위험 기준선(등급가중 고장점수 12/13/14)을 그대로 물려받는다.
+    #
+    # 이 값은 "전체 중 몇 %가 위험선을 넘었나"라는 집계 하나뿐이라, 그것만으로는
+    # "어느 공장·기계·부품이 원인인가"를 알 수 없다 — 그래서 새 카드를 더
+    # 만드는 대신, 클릭하면 아래 "점검 우선순위" 표가 기준선 초과 기준으로
+    # 다시 정렬되게 연결한다. 새 화면 공간을 쓰지 않고 이미 있는 표를 재사용.
+    prio_sort = prio_sort or DEFAULT_PRIO_SORT
+    # kpi-failrate-tile은 화면 ①에만 존재하고 ②~⑤로 넘어가면 DOM에서 사라진다.
+    # 일반 문자열 id로 Input을 걸면 그 화면들에서 "ID not found in layout"
+    # 콘솔 경고가 뜬다 — 패턴 매칭 id({"type":...})를 쓰면 Dash가 "지금 이
+    # id를 가진 컴포넌트가 0개일 수 있다"를 정상 상태로 취급해 경고가 안 뜬다.
+    kpi_specs = [
+        ("관측 기계 (대)", "값 · value-28", None),
+        ("고장 표시 기계·일", "값 · value-28", None),
+        ("종합 고장율 (%)", "값 · value-16", KPI_FAILRATE_ID),
+        ("평균 소비 전력 (kW)", "값 · value-28", None),
+        ("최고 베어링 온도 (°C)", "값 · value-28", None),
+        ("부품 출고 금액 (INR)", "값 · value-28", None),
+    ]
+    row_a = row(ROW_KPI, [tile(label, sub=sub, tid=tid) for label, sub, tid in kpi_specs])
 
     prio_cols = [("순위", 48, "right"), ("대상", 200, "left"), ("종류", 110, "left"), ("공장", 100, "left"),
                  ("등급가중 고장점수", 150, "right"), ("기준선 초과", 110, "center"),
                  ("최근 고장 표시일", 150, "left"), ("당일 고장 표시 부품 수", 190, "right")]
+    sort_idx = 5 if prio_sort == "threshold" else 4
+    sort_hint = ("정렬: 기준선 초과 (KPI '종합 고장율' 클릭으로 이동함)" if prio_sort == "threshold"
+                 else "정렬: 등급가중 고장점수 (기본)")
     prio = card("점검 우선순위", 1090, ROW_MAIN,
-                table_placeholder(prio_cols, 11, 32, head_h=32, first_idx=True, sort_col=4),
-                right=note("대상 = 엔티티 무관 (현재 기계 행만) · 헤더 고정 · 정렬 · 행 클릭 → ②"))
+                table_placeholder(prio_cols, 11, 32, head_h=32, first_idx=True, sort_col=sort_idx),
+                right=note(f"대상 = 엔티티 무관 (현재 기계 행만) · 헤더 고정 · 행 클릭 → ② · {sort_hint}"))
 
     def machine_tile():
         return html.Div(
@@ -1234,6 +1303,7 @@ app.layout = html.Div(
         # (관리자가 매번 같은 공장·기간을 다시 고르던 문제)
         dcc.Store(id="filter-store", data=DEFAULT_FILTERS, storage_type="local"),
         dcc.Store(id="seg-store", data=DEFAULT_SEG, storage_type="local"),
+        dcc.Store(id="prio-sort-store", data=DEFAULT_PRIO_SORT),
         dcc.Store(id="theme-store", data="light", storage_type="local"),
         app_header(),
         filter_bar(),
@@ -1257,9 +1327,13 @@ app.layout = html.Div(
     Input("screen-tabs", "value"),
     Input("seg-store", "data"),
     Input("report-audience-dd", "value"),
+    Input("prio-sort-store", "data"),
 )
-def render_screen(active, seg_state, audience):
-    return SCREEN_BUILDERS[active](seg_state=seg_state, audience=audience or DEFAULT_AUDIENCE)
+def render_screen(active, seg_state, audience, prio_sort):
+    kwargs = {"seg_state": seg_state, "audience": audience or DEFAULT_AUDIENCE}
+    if active == "1":
+        kwargs["prio_sort"] = prio_sort or DEFAULT_PRIO_SORT
+    return SCREEN_BUILDERS[active](**kwargs)
 
 
 # ------------------------------------------------------------
@@ -1389,6 +1463,30 @@ def echo_action(_clicks):
     tid = ctx.triggered_id
     label = tid["index"] if isinstance(tid, dict) else str(tid)
     return f"'{label}' 클릭됨 — 동작 미구현 ({NO_DATA_MARK})"
+
+
+# ------------------------------------------------------------
+# ① KPI "종합 고장율" 드릴다운 — 클릭할 때마다 "점검 우선순위" 표 정렬을
+# 등급가중 고장점수 ↔ 기준선 초과 사이로 토글한다. 화면을 새로 만들지 않고
+# 이미 있는 표를 재사용해 원인(어느 공장·기계·부품)까지 이어지게 한다.
+# ------------------------------------------------------------
+@app.callback(
+    Output("prio-sort-store", "data"),
+    Output("action-echo", "children", allow_duplicate=True),
+    Input({"type": "kpi-drill", "index": ALL}, "n_clicks"),
+    State("prio-sort-store", "data"),
+    prevent_initial_call=True,
+)
+def drill_failrate_to_priority(n_clicks_list, current):
+    # ALL 패턴이라 리스트로 온다 — ①이 화면에 없을 땐 빈 리스트, 있을 땐 [n].
+    # 화면 재렌더로 타일이 다시 만들어질 때의 n_clicks=0도 함께 무시한다.
+    if not n_clicks_list or not any(n_clicks_list):
+        return no_update, no_update
+    new = "grade" if (current or DEFAULT_PRIO_SORT) == "threshold" else "threshold"
+    msg = ("'종합 고장율' 클릭 → 점검 우선순위를 기준선 초과 기준으로 정렬"
+           if new == "threshold" else
+           "'종합 고장율' 다시 클릭 → 점검 우선순위를 등급가중 고장점수 기준으로 복귀")
+    return new, msg
 
 
 # ------------------------------------------------------------
