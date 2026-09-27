@@ -240,9 +240,23 @@ def run_family_experiments(
     output_dir: str | Path,
     max_iter: int = 100,
     random_state: int = 42,
+    targets: tuple[str, ...] = FAMILY_TARGETS,
+    validation_start: str | pd.Timestamp = "2024-01-01",
+    test_start: str | pd.Timestamp = "2024-07-01",
 ) -> FamilyExperimentResult:
     """Family별 이진 모델을 검증에서 선택하고 테스트 결과와 모델을 저장한다."""
     frame = prepared.frame.copy()
+    targets = tuple(dict.fromkeys(targets))
+    unknown_targets = sorted(set(targets) - set(FAMILY_TARGETS))
+    if not targets or unknown_targets:
+        raise ValueError(
+            "targets는 affected, severe 중 하나 이상이어야 합니다: "
+            f"{unknown_targets}"
+        )
+    validation_start = pd.Timestamp(validation_start)
+    test_start = pd.Timestamp(test_start)
+    if validation_start >= test_start:
+        raise ValueError("validation_start는 test_start보다 빨라야 합니다.")
     output = Path(output_dir)
     model_dir = output / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
@@ -255,7 +269,7 @@ def run_family_experiments(
     families = list(dict.fromkeys(frame["part_family"].astype(str)))
     for family in families:
         family_frame = frame.loc[frame["part_family"].astype(str).eq(family)].copy()
-        for target in FAMILY_TARGETS:
+        for target in targets:
             if target not in family_frame:
                 metric_rows.append(
                     _skip_row(family, target, "missing_target", f"{target} 컬럼 없음")
@@ -288,7 +302,7 @@ def run_family_experiments(
                 }
                 continue
 
-            parts = split_by_date(family_frame)
+            parts = split_by_date(family_frame, validation_start, test_start)
             train, valid, test = parts["train"], parts["valid"], parts["test"]
             issue = ""
             for split_name, subset in (("train", train), ("validation", valid)):
@@ -548,7 +562,9 @@ def run_family_experiments(
         if not multilabel_input.empty
         else pd.DataFrame()
     )
-    profile = build_family_target_profile(prepared.frame)
+    profile = build_family_target_profile(
+        prepared.frame, validation_start, test_start
+    )
     sequence_gate = evaluate_sequence_gate(metrics)
     residual_baselines = (
         prepared.residual_transformer.artifact_table()
@@ -571,8 +587,8 @@ def run_family_experiments(
     run_config = {
         "random_state": random_state,
         "max_iter": max_iter,
-        "validation_start": "2024-01-01",
-        "test_start": "2024-07-01",
+        "validation_start": validation_start.strftime("%Y-%m-%d"),
+        "test_start": test_start.strftime("%Y-%m-%d"),
         "feature_sets": {
             name: list(features) for name, features in prepared.feature_sets.items()
         },

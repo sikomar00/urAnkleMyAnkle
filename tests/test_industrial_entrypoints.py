@@ -11,6 +11,11 @@ from src.current_asset_severity_experiments import (
     DEFAULT_OUTPUT as SEVERITY_EXPERIMENT_OUTPUT,
     build_parser as build_severity_experiment_parser,
 )
+from src.current_family_diagnosis import (
+    DEFAULT_OUTPUT as FAMILY_DEFAULT_OUTPUT,
+    build_parser as build_family_parser,
+)
+from src.industrial_training import DEFAULT_DATA
 from src.forecast_asset_model import build_parser, default_output_path
 
 
@@ -18,6 +23,7 @@ from src.forecast_asset_model import build_parser, default_output_path
     "src/current_asset_model.py", "src/current_asset_score_model.py",
     "src/forecast_asset_model.py",
     "src/current_asset_severity_experiments.py",
+    "src/current_family_diagnosis.py",
     "src/current_part_model.py", "src/forecast_part_model.py",
     "src/current_state_model.py", "src/timeseries_model.py",
 ])
@@ -49,6 +55,44 @@ def test_asset_severity_experiment_defaults():
     assert args.feature_sets == ["A", "B", "C", "D"]
     assert args.scope == "all"
     assert args.min_normal_rows == 30
+
+
+def test_current_family_diagnosis_defaults():
+    args = build_family_parser().parse_args([])
+
+    assert args.data == DEFAULT_DATA
+    assert args.output == FAMILY_DEFAULT_OUTPUT
+    assert args.feature_sets == ["A", "B", "C"]
+    assert args.targets == ["affected", "severe"]
+    assert args.max_iter == 100
+    assert args.random_state == 42
+    assert args.validation_start == "2024-01-01"
+    assert args.test_start == "2024-07-01"
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--feature-sets", "Z"],
+        ["--targets", "all_failed"],
+    ],
+)
+def test_current_family_diagnosis_rejects_unknown_choices(arguments):
+    with pytest.raises(SystemExit):
+        build_family_parser().parse_args(arguments)
+
+
+def test_current_family_diagnosis_module_help():
+    result = subprocess.run(
+        [sys.executable, "-m", "src.current_family_diagnosis", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Family" in result.stdout
+    assert "당일" in result.stdout
 
 
 def test_forecast_asset_risk_definitions_use_different_default_outputs():

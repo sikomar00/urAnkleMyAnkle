@@ -166,7 +166,11 @@ def build_family_daily(raw: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def build_family_target_profile(family_daily: pd.DataFrame) -> pd.DataFrame:
+def build_family_target_profile(
+    family_daily: pd.DataFrame,
+    validation_start: str | pd.Timestamp = "2024-01-01",
+    test_start: str | pd.Timestamp = "2024-07-01",
+) -> pd.DataFrame:
     """Family별 전체·학습·검증·테스트 Target 발생률을 반환한다."""
     required = {
         DATE_COLUMN,
@@ -182,8 +186,10 @@ def build_family_target_profile(family_daily: pd.DataFrame) -> pd.DataFrame:
 
     frame = family_daily.copy()
     frame[DATE_COLUMN] = pd.to_datetime(frame[DATE_COLUMN])
-    validation_start = pd.Timestamp("2024-01-01")
-    test_start = pd.Timestamp("2024-07-01")
+    validation_start = pd.Timestamp(validation_start)
+    test_start = pd.Timestamp(test_start)
+    if validation_start >= test_start:
+        raise ValueError("validation_start는 test_start보다 빨라야 합니다.")
     periods = {
         "overall": pd.Series(True, index=frame.index),
         "train": frame[DATE_COLUMN].lt(validation_start),

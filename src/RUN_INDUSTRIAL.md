@@ -3,6 +3,35 @@
 이 프로젝트는 장비/부품과 당일/미래를 섞지 않고 네 과제로 따로 실행합니다.
 터미널의 현재 위치는 프로젝트 루트(`urAnkleMyAnkle`)여야 합니다.
 
+## 0. 당일 Family 이상·심각 진단
+
+미래 예측 전에 다음 명령으로 당일 Family 진단부터 실행합니다.
+
+```bash
+/Users/kodohyeon/Documents/project_LS/venv/bin/python -m src.current_family_diagnosis \
+  --data dataVerification/synthetic_industrial_machine_data.csv \
+  --feature-sets A B C \
+  --targets affected severe \
+  --scope overall \
+  --max-iter 100
+```
+
+1. `affected`: Family 구성품이 하나 이상 고장 표시된 점검 필요 Target
+2. `severe`: 두 개 이상 또는 A등급 부품이 고장 표시된 심각 Target
+3. Feature A: 당일 센서, 기계·장비, 달력 정보
+4. Feature B: A와 과거 센서·Family 상태
+5. Feature C: B와 운전조건 보정 잔차·잔차 이력
+
+결과는 `outputs/family_current/`에 저장됩니다. 핵심 파일은
+`metrics.csv`, `multilabel_metrics.csv`, `target_profile.csv`,
+`test_predictions.csv`, `feature_importance.csv`, `residual_baselines.csv`,
+`run_config.json`, `experiment_summary.md`, `models/`입니다.
+
+Accuracy는 정상 비율 때문에 높게 보일 수 있으므로 Family별 Average Precision,
+Precision·Recall·F1과 다중라벨 Macro·Micro 지표를 함께 봅니다. Precision 0.70·0.80을
+달성할 수 없는 정책은 `unavailable`로 남습니다. 당일 진단이 정적 기준선보다 안정적으로
+개선되지 않으면 내일·3일·7일 미래 예측으로 넘어가지 않습니다.
+
 ## 1. macOS·Linux
 
 가상환경을 활성화했다면 다음처럼 실행합니다.
