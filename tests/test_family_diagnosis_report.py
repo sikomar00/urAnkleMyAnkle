@@ -107,7 +107,11 @@ def test_korean_summary_contains_required_sections_and_limitations():
     unavailable = metrics.iloc[[0]].copy()
     unavailable["threshold_policy"] = "min_precision_80"
     unavailable["status"] = "unavailable"
-    metrics = pd.concat([metrics, unavailable], ignore_index=True)
+    unavailable_duplicate = unavailable.copy()
+    unavailable_duplicate["split"] = "test"
+    metrics = pd.concat(
+        [metrics, unavailable, unavailable_duplicate], ignore_index=True
+    )
     multilabel = build_multilabel_metrics(_multilabel_predictions())
     profile = pd.DataFrame(
         {
@@ -135,3 +139,4 @@ def test_korean_summary_contains_required_sections_and_limitations():
         "고장 확정이 아닙니다",
     ):
         assert phrase in text
+    assert "`unavailable`로 기록된 행은 1건" in text

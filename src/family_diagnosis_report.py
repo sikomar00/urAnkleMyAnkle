@@ -142,6 +142,8 @@ def evaluate_sequence_gate(metrics: pd.DataFrame) -> dict[str, object]:
     if missing:
         raise ValueError(f"순차 모델 판정에 필요한 컬럼이 없습니다: {missing}")
     selected = metrics.loc[metrics["target"].eq("affected")].copy()
+    if "scope_kind" in selected:
+        selected = selected.loc[selected["scope_kind"].eq("overall")]
     if "threshold_policy" in selected:
         selected = selected.loc[selected["threshold_policy"].eq("f1")]
     if "selected_model" in selected:
@@ -251,12 +253,26 @@ def render_family_summary(
     sequence_gate: dict[str, object],
 ) -> str:
     """실험 결과와 제한을 숨김없이 설명하는 한글 Markdown을 만든다."""
-    validation = metrics.loc[metrics.get("split", pd.Series(index=metrics.index)).eq("validation")]
-    precision_rows = metrics.loc[
-        metrics.get("threshold_policy", pd.Series(index=metrics.index)).isin(
-            ["min_precision_70", "min_precision_80"]
-        )
-    ]
+    validation_mask = metrics.get(
+        "split", pd.Series(index=metrics.index)
+    ).eq("validation")
+    validation_mask &= metrics.get(
+        "scope_kind", pd.Series("overall", index=metrics.index)
+    ).eq("overall")
+    if "selected_policy" in metrics:
+        validation_mask &= ~metrics["selected_policy"].fillna(False)
+    validation = metrics.loc[validation_mask]
+    precision_mask = metrics.get(
+        "threshold_policy", pd.Series(index=metrics.index)
+    ).isin(["min_precision_70", "min_precision_80"])
+    precision_mask &= metrics.get(
+        "scope_kind", pd.Series("overall", index=metrics.index)
+    ).eq("overall")
+    if "selected_policy" in metrics:
+        precision_mask &= metrics["selected_policy"].fillna(False)
+    precision_rows = metrics.loc[precision_mask].drop_duplicates(
+        ["part_family", "target", "threshold_policy"]
+    )
     unavailable = int(precision_rows.get("status", pd.Series(index=precision_rows.index)).eq("unavailable").sum())
     gate_text = "진행 가능" if sequence_gate.get("eligible") else "진행 보류"
     reasons = sequence_gate.get("reasons") or ["조건을 모두 충족했습니다."]
@@ -334,6 +350,9 @@ def render_family_summary(
                 metrics.get("scope_kind", pd.Series(index=metrics.index)).isin(
                     ["machine_type", "asset_tag"]
                 )
+                & metrics.get(
+                    "threshold_policy", pd.Series(index=metrics.index)
+                ).eq("f1")
             ],
             (
                 "scope_kind",

@@ -1,3 +1,5 @@
+import warnings
+
 import joblib
 import numpy as np
 import pandas as pd
@@ -164,6 +166,9 @@ def test_runner_reuses_identical_target_and_skips_insufficient_positive_rows(
     ]
     assert "identical_target" in set(bearing_severe["status"])
     assert "insufficient_positive_rows" in set(filter_severe["status"])
+    assert {"overall", "machine_type", "asset_tag"} <= set(
+        result.metrics["scope_kind"]
+    )
     expected_outputs = {
         "metrics.csv",
         "multilabel_metrics.csv",
@@ -226,3 +231,23 @@ def test_runner_keeps_validation_selection_and_saved_predictions_reproducible(
         & original.predictions["threshold_policy"].eq("f1")
     ]["risk_score"].to_numpy()
     assert np.allclose(reloaded_scores, recorded)
+
+
+def test_runner_does_not_emit_futurewarning_for_unavailable_thresholds(tmp_path):
+    prepared = _prepared_family_experiment()
+    prepared.frame.loc[:, ["signal", "noise"]] = 0.0
+
+    with warnings.catch_warnings(record=True) as recorded:
+        warnings.simplefilter("always")
+        run_family_experiments(
+            prepared,
+            output_dir=tmp_path,
+            max_iter=5,
+        )
+
+    future_warnings = [
+        item for item in recorded if issubclass(item.category, FutureWarning)
+    ]
+    assert not future_warnings, [
+        (str(item.message), item.filename, item.lineno) for item in future_warnings
+    ]

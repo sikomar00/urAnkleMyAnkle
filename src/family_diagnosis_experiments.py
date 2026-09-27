@@ -235,6 +235,41 @@ def _skip_row(
     }
 
 
+def _scope_metric_rows(predictions: pd.DataFrame) -> list[dict[str, Any]]:
+    """선택 테스트 예측을 기계 종류·장비 범위로 나눠 재평가한다."""
+    rows: list[dict[str, Any]] = []
+    if predictions.empty:
+        return rows
+    group_keys = ["part_family", "target", "threshold_policy"]
+    for scope_kind, scope_column in (
+        ("machine_type", MACHINE_COLUMN),
+        ("asset_tag", ASSET_COLUMN),
+    ):
+        for keys, group in predictions.groupby(
+            [*group_keys, scope_column], sort=False, dropna=False
+        ):
+            cutoff = float(group["probability_cutoff"].iloc[0])
+            threshold = ThresholdSelection(str(keys[2]), cutoff, "ok")
+            row = _metric_row(
+                family=str(keys[0]),
+                target=str(keys[1]),
+                feature_set=str(group["feature_set"].iloc[0]),
+                model_name=str(group["model"].iloc[0]),
+                split_name="test",
+                y_true=group["actual"].astype(int),
+                scores=group["risk_score"].to_numpy(),
+                threshold=threshold,
+                prior_ap=float(group["actual"].mean()),
+                selected_model=True,
+                selected_feature_set=True,
+                selected_policy=True,
+            )
+            row["scope_kind"] = scope_kind
+            row["scope_name"] = str(keys[3])
+            rows.append(row)
+    return rows
+
+
 def run_family_experiments(
     prepared: FamilyDiagnosisFeatures,
     output_dir: str | Path,
@@ -435,6 +470,8 @@ def run_family_experiments(
                             selected_policy=True,
                         )
                     )
+                if selection.cutoff is None:
+                    continue
                 predictions = test[
                     [DATE_COLUMN, "label_end_date", MACHINE_COLUMN, ASSET_COLUMN]
                 ].copy()
@@ -446,10 +483,10 @@ def run_family_experiments(
                 predictions["threshold_policy"] = selection.policy
                 predictions["probability_cutoff"] = selection.cutoff
                 predictions["risk_score"] = test_scores
-                predictions["prediction"] = (
-                    (test_scores >= selection.cutoff).astype(int)
-                    if selection.cutoff is not None
-                    else pd.NA
+                predictions["prediction"] = pd.Series(
+                    (test_scores >= selection.cutoff).astype(int),
+                    index=predictions.index,
+                    dtype="Int64",
                 )
                 target_predictions.append(predictions)
             metric_rows.extend(selected_rows)
@@ -521,12 +558,17 @@ def run_family_experiments(
             }
 
     metrics = pd.DataFrame(metric_rows)
+    metrics["scope_kind"] = "overall"
+    metrics["scope_name"] = "all"
     predictions = (
         pd.concat(prediction_frames, ignore_index=True)
         if prediction_frames
         else pd.DataFrame()
     )
     importances = pd.DataFrame(importance_rows)
+    scope_rows = _scope_metric_rows(predictions)
+    if scope_rows:
+        metrics = pd.concat([metrics, pd.DataFrame(scope_rows)], ignore_index=True)
     metrics["temporal_importance"] = 0.0
     temporal_features = set(HISTORY_FEATURES) | set(RESIDUAL_FEATURES)
     if not importances.empty:
