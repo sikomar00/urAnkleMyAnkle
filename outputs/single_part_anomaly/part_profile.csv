@@ -1,0 +1,81 @@
+period,part_no,part_family,isolated_rows,case_assets,all_clean_rows,multiple_rows_excluded
+overall,MRO-10045,Bearing,95,10,3574,6061
+overall,MRO-10046,Bearing,91,10,3574,6061
+overall,MRO-10047,Bearing,72,10,3574,6061
+overall,MRO-20031,Seal & Gasket,78,10,3574,6061
+overall,MRO-20032,Seal & Gasket,37,10,3574,6061
+overall,MRO-20033,Seal & Gasket,69,10,3574,6061
+overall,MRO-30011,Drive Belt,60,10,3574,6061
+overall,MRO-30012,Drive Belt,46,10,3574,6061
+overall,MRO-40021,Filter,58,10,3574,6061
+overall,MRO-40022,Filter,79,10,3574,6061
+overall,MRO-50008,Electrical,62,10,3574,6061
+overall,MRO-50009,Electrical,72,10,3574,6061
+overall,MRO-60015,Coupling,63,10,3574,6061
+overall,MRO-60016,Coupling,67,10,3574,6061
+overall,MRO-70004,Lubrication,55,10,3574,6061
+overall,MRO-70005,Lubrication,51,9,3574,6061
+overall,MRO-80001,Sensor,94,10,3574,6061
+overall,MRO-80002,Sensor,66,10,3574,6061
+overall,MRO-90011,Fastener,51,10,3574,6061
+overall,MRO-90012,Fastener,49,10,3574,6061
+train,MRO-10045,Bearing,62,10,2388,4016
+train,MRO-10046,Bearing,58,10,2388,4016
+train,MRO-10047,Bearing,53,10,2388,4016
+train,MRO-20031,Seal & Gasket,51,10,2388,4016
+train,MRO-20032,Seal & Gasket,31,9,2388,4016
+train,MRO-20033,Seal & Gasket,50,10,2388,4016
+train,MRO-30011,Drive Belt,39,10,2388,4016
+train,MRO-30012,Drive Belt,30,10,2388,4016
+train,MRO-40021,Filter,35,10,2388,4016
+train,MRO-40022,Filter,60,10,2388,4016
+train,MRO-50008,Electrical,42,10,2388,4016
+train,MRO-50009,Electrical,50,10,2388,4016
+train,MRO-60015,Coupling,35,9,2388,4016
+train,MRO-60016,Coupling,47,10,2388,4016
+train,MRO-70004,Lubrication,35,10,2388,4016
+train,MRO-70005,Lubrication,32,9,2388,4016
+train,MRO-80001,Sensor,63,10,2388,4016
+train,MRO-80002,Sensor,43,10,2388,4016
+train,MRO-90011,Fastener,29,10,2388,4016
+train,MRO-90012,Fastener,31,9,2388,4016
+valid,MRO-10045,Bearing,14,6,591,1009
+valid,MRO-10046,Bearing,15,7,591,1009
+valid,MRO-10047,Bearing,9,7,591,1009
+valid,MRO-20031,Seal & Gasket,8,6,591,1009
+valid,MRO-20032,Seal & Gasket,4,4,591,1009
+valid,MRO-20033,Seal & Gasket,11,6,591,1009
+valid,MRO-30011,Drive Belt,11,6,591,1009
+valid,MRO-30012,Drive Belt,8,5,591,1009
+valid,MRO-40021,Filter,13,7,591,1009
+valid,MRO-40022,Filter,7,5,591,1009
+valid,MRO-50008,Electrical,11,7,591,1009
+valid,MRO-50009,Electrical,7,4,591,1009
+valid,MRO-60015,Coupling,13,7,591,1009
+valid,MRO-60016,Coupling,14,7,591,1009
+valid,MRO-70004,Lubrication,12,6,591,1009
+valid,MRO-70005,Lubrication,11,5,591,1009
+valid,MRO-80001,Sensor,18,9,591,1009
+valid,MRO-80002,Sensor,13,7,591,1009
+valid,MRO-90011,Fastener,13,8,591,1009
+valid,MRO-90012,Fastener,8,6,591,1009
+test,MRO-10045,Bearing,19,7,595,1036
+test,MRO-10046,Bearing,18,8,595,1036
+test,MRO-10047,Bearing,10,8,595,1036
+test,MRO-20031,Seal & Gasket,19,7,595,1036
+test,MRO-20032,Seal & Gasket,2,2,595,1036
+test,MRO-20033,Seal & Gasket,8,6,595,1036
+test,MRO-30011,Drive Belt,10,8,595,1036
+test,MRO-30012,Drive Belt,8,5,595,1036
+test,MRO-40021,Filter,10,6,595,1036
+test,MRO-40022,Filter,12,6,595,1036
+test,MRO-50008,Electrical,9,7,595,1036
+test,MRO-50009,Electrical,15,8,595,1036
+test,MRO-60015,Coupling,15,6,595,1036
+test,MRO-60016,Coupling,6,5,595,1036
+test,MRO-70004,Lubrication,8,7,595,1036
+test,MRO-70005,Lubrication,8,6,595,1036
+test,MRO-80001,Sensor,13,9,595,1036
+test,MRO-80002,Sensor,10,7,595,1036
+test,MRO-90011,Fastener,9,3,595,1036
+test,MRO-90012,Fastener,10,9,595,1036

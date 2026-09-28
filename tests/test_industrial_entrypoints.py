@@ -15,6 +15,10 @@ from src.current_family_diagnosis import (
     DEFAULT_OUTPUT as FAMILY_DEFAULT_OUTPUT,
     build_parser as build_family_parser,
 )
+from src.current_single_part_anomaly import (
+    DEFAULT_OUTPUT as SINGLE_PART_DEFAULT_OUTPUT,
+    build_parser as build_single_part_parser,
+)
 from src.industrial_training import DEFAULT_DATA
 from src.forecast_asset_model import build_parser, default_output_path
 
@@ -24,6 +28,7 @@ from src.forecast_asset_model import build_parser, default_output_path
     "src/forecast_asset_model.py",
     "src/current_asset_severity_experiments.py",
     "src/current_family_diagnosis.py",
+    "src/current_single_part_anomaly.py",
     "src/current_part_model.py", "src/forecast_part_model.py",
     "src/current_state_model.py", "src/timeseries_model.py",
 ])
@@ -68,6 +73,19 @@ def test_current_family_diagnosis_defaults():
     assert args.random_state == 42
     assert args.validation_start == "2024-01-01"
     assert args.test_start == "2024-07-01"
+
+
+def test_single_part_anomaly_defaults():
+    args = build_single_part_parser().parse_args([])
+
+    assert args.data == DEFAULT_DATA
+    assert args.output == SINGLE_PART_DEFAULT_OUTPUT
+    assert args.validation_start == "2024-01-01"
+    assert args.test_start == "2024-07-01"
+    assert args.min_normal_rows == 30
+    assert args.bootstrap_samples == 1_000
+    assert args.expected_parts_per_asset == 20
+    assert args.skip_residual is False
 
 
 @pytest.mark.parametrize(
