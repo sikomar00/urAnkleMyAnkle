@@ -1064,7 +1064,7 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE):
                       missing_text, record["description"]]
             cells = []
             for (l, w, a), text in zip(dict_cols, values):
-                if l == "설명":
+                if l in ("컬럼명", "설명"):
                     span_style = {**NUM_12, "whiteSpace": "nowrap", "overflow": "hidden",
                                   "textOverflow": "ellipsis", "display": "block"}
                     span = html.Span(text, style=span_style, title=text)
@@ -1095,15 +1095,24 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE):
         )
 
     q = load_data_quality_summary()
-    quality_texts = [
-        f"중복: 복합키(transaction_date+asset_tag+part_no) 중복 {q['composite_key_duplicates']:,}건 · "
-        f"완전 중복 {q['full_duplicates']:,}건",
-        f"wo_type: '작업 없음' 범주 {q['wo_type_blank_count']:,}행 ({q['wo_type_blank_pct']:.2f}%) · 결측 아님",
-        f"기간: {q['period_days']:,}일 ({q['period_start']}~{q['period_end']})",
-        f"센서값 반복: 기계×날짜 {q['group_count']:,}개 그룹, 그룹당 부품 행 {q['rows_per_group']:,}개에 "
-        f"센서값 동일 반복",
+    period_tile = html.Div(
+        [html.Span(f"기간: {q['period_days']:,}일",
+                    style={"fontSize": "12px", "lineHeight": "16px", "color": INK}),
+         html.Span(f"{q['period_start']} ~ {q['period_end']}",
+                    style={"fontSize": "12px", "lineHeight": "16px", "color": INK, "whiteSpace": "nowrap"})],
+        style={"width": "213px", "height": "94px", "boxSizing": "border-box", "overflow": "hidden",
+               "display": "flex", "flexDirection": "column"},
+    )
+    quality_tiles = [
+        info_box(f"중복: 복합키(날짜·기계·부품) 중복 {q['composite_key_duplicates']:,}건 · "
+                 f"완전 중복 {q['full_duplicates']:,}건", 213),
+        info_box(f"wo_type: '작업 없음' 범주 {q['wo_type_blank_count']:,}행 ({q['wo_type_blank_pct']:.2f}%) · "
+                 f"결측 아님", 213),
+        period_tile,
+        info_box(f"센서값 반복: 기계×날짜 {q['group_count']:,}개 그룹, 그룹당 부품 행 {q['rows_per_group']:,}개에 "
+                 f"센서값 동일 반복", 213),
     ]
-    qual = card("품질 요약", 932, 162, hstack([info_box(t, 213) for t in quality_texts], 16))
+    qual = card("품질 요약", 932, 162, hstack(quality_tiles, 16))
 
     s = load_source_info()
     source_lines = "\n".join([s["source_name"], f"{s['row_count']:,}행 × {s['col_count']}열",
