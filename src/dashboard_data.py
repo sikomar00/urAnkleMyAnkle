@@ -21,6 +21,7 @@ from .industrial_data import (
     MACHINE_COLUMN,
     PART_COLUMN,
     PLANT_COLUMN,
+    SENSOR_COLUMNS,
     load_industrial_data,
 )
 
@@ -36,6 +37,35 @@ HIGH_RISK_THRESHOLD = 12
 # 화면 ②의 "현재 등급" 표시 전용 — severity_level(영문) 매핑. load_screen1_kpis()/
 # load_priority_table()의 high_risk 판정 로직은 severity_level 원문을 그대로 쓴다.
 SEVERITY_LABELS_KO = {"normal": "정상", "caution": "주의", "risk": "경계", "high_risk": "위험"}
+
+# 화면 ④ "데이터 사전" 전용 — pandas dtype.kind → 4종 라벨.
+DTYPE_LABELS = {"M": "날짜", "O": "문자열", "i": "정수", "f": "실수"}
+
+# 화면 ④ "데이터 사전"의 단위·설명 — 지시서 표 그대로, CSV 컬럼 순서.
+DATA_DICTIONARY_META = {
+    "transaction_date": ("—", "관측일(일 단위)"),
+    "asset_tag": ("—", "기계 고유 ID"),
+    "machine_type": ("—", "기계 종류"),
+    "plant_code": ("—", "공장 코드"),
+    "part_no": ("—", "부품 고유 번호"),
+    "part_description": ("—", "부품 설명"),
+    "part_family": ("—", "부품 범주"),
+    "criticality": ("—", "중요도 ABC (A=높음, C=낮음)"),
+    "uom": ("—", "수량 단위 (EA 등)"),
+    "unit_cost_inr": ("INR", "부품 단가"),
+    "qty_issued": ("EA", "출고 수량 (0=수요 없음)"),
+    "issue_value_inr": ("INR", "출고 금액 (수량×단가)"),
+    "temp_bearing_degC": ("°C", "베어링 온도"),
+    "temp_motor_degC": ("°C", "모터 온도"),
+    "vibration_h_mms": ("mm/s", "수평 진동 (RMS)"),
+    "vibration_v_mms": ("mm/s", "수직 진동 (RMS)"),
+    "oil_pressure_bar": ("bar", "오일·유압"),
+    "load_pct": ("%", "정격 대비 부하율"),
+    "shaft_rpm": ("rpm", "축 회전 속도"),
+    "power_consumption_kw": ("kW", "소비 전력"),
+    "breakdown_flag": ("—", "고장 표시 (1=있음, 0=없음)"),
+    "wo_type": ("—", "작업지시 유형 (BD·PM·작업 없음). 결측이 아니라 범주"),
+}
 
 
 def _data_path() -> Path:
@@ -199,4 +229,79 @@ def load_asset_detail_kpis(asset_tag: str) -> dict:
         "last_failure_date": last_failure_date_str,
         "failure_days_count": int((asset_daily["failure_points"] > 0).sum()),
         "avg_power_30d_kw": float(recent_30d["power_consumption_kw"].mean()),
+    }
+
+
+def load_data_dictionary() -> list[dict]:
+    """화면 ④ "데이터 사전" 22행을 CSV 컬럼 순서 그대로 반환한다."""
+    raw = _load_raw()
+    n = len(raw)
+
+    rows = []
+    for column in raw.columns:
+        dtype_label = DTYPE_LABELS[raw[column].dtype.kind]
+        if column == "wo_type":
+            missing_pct = None  # 결측이 아니라 "작업 없음" 범주 — 화면에서 "—"로 표시
+        else:
+            missing_pct = round(float(raw[column].isna().sum()) / n * 100, 2)
+        unit, description = DATA_DICTIONARY_META[column]
+        rows.append({
+            "column": column,
+            "dtype_label": dtype_label,
+            "unit": unit,
+            "missing_pct": missing_pct,
+            "description": description,
+        })
+    return rows
+
+
+def load_data_quality_summary() -> dict:
+    """화면 ④ "품질 요약" 타일 4개의 값을 계산한다."""
+    raw = _load_raw()
+    n = len(raw)
+
+    composite_key_duplicates = int(raw.duplicated([DATE_COLUMN, ASSET_COLUMN, PART_COLUMN]).sum())
+    full_duplicates = int(raw.duplicated().sum())
+
+    wo_type_blank_count = int(raw["wo_type"].isna().sum())
+    wo_type_blank_pct = round(wo_type_blank_count / n * 100, 2)
+
+    period_start = raw[DATE_COLUMN].min()
+    period_end = raw[DATE_COLUMN].max()
+    period_days = int((period_end - period_start).days) + 1
+
+    group_keys = [DATE_COLUMN, MACHINE_COLUMN, ASSET_COLUMN]
+    group_sizes = raw.groupby(group_keys).size()
+    sensor_counts = raw.groupby(group_keys)[SENSOR_COLUMNS].nunique(dropna=False)
+    identical_sensor_groups = int(sensor_counts.le(1).all(axis=1).sum())
+
+    return {
+        "composite_key_duplicates": composite_key_duplicates,
+        "full_duplicates": full_duplicates,
+        "wo_type_blank_count": wo_type_blank_count,
+        "wo_type_blank_pct": wo_type_blank_pct,
+        "period_days": period_days,
+        "period_start": period_start.strftime("%Y-%m-%d"),
+        "period_end": period_end.strftime("%Y-%m-%d"),
+        "group_count": int(len(group_sizes)),
+        "rows_per_group": int(group_sizes.iloc[0]) if len(group_sizes) else 0,
+        "identical_sensor_groups": identical_sensor_groups,
+    }
+
+
+def load_source_info() -> dict:
+    """화면 ④ "출처 · 라이선스 · 합성 데이터 한계" 카드의 값을 계산한다."""
+    raw = _load_raw()
+    row_count, col_count = raw.shape
+
+    return {
+        "row_count": row_count,
+        "col_count": col_count,
+        "source_name": "Kaggle — Machine Demand & Failure Prediction Dataset",
+        "access_date_note": "다운로드일: 2026-09-22 이전 (정확한 날짜 미기록)",
+        "license": "CC BY-SA 4.0 (2026-09-21 게시 페이지 확인 기준)",
+        "limitations": (
+            "물리적 정확성이 아닌 통계적 현실성을 목표로 만든 합성 데이터이며 결과를 "
+            "실제 설비의 고장 기준·정비 효과로 일반화하지 않는다"
+        ),
     }
