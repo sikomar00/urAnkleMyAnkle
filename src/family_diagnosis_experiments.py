@@ -17,6 +17,7 @@ from sklearn.metrics import average_precision_score
 
 from .asset_anomaly_features import HISTORY_FEATURES
 from .family_features import (
+    FAMILY_NAMES,
     FAMILY_TARGETS,
     FamilyDiagnosisFeatures,
     build_family_target_profile,
@@ -192,7 +193,6 @@ def _metric_row(
     y_true: pd.Series,
     scores: np.ndarray,
     threshold: ThresholdSelection,
-    prior_ap: float,
     selected_model: bool = False,
     selected_feature_set: bool = False,
     selected_policy: bool = False,
@@ -207,7 +207,7 @@ def _metric_row(
         "reason": "",
         "threshold_policy": threshold.policy,
         "probability_cutoff": threshold.cutoff,
-        "prior_average_precision": prior_ap,
+        "prior_average_precision": float(y_true.mean()) if len(y_true) else np.nan,
         "selected_model": selected_model,
         "selected_feature_set": selected_feature_set,
         "selected_policy": selected_policy,
@@ -259,7 +259,6 @@ def _scope_metric_rows(predictions: pd.DataFrame) -> list[dict[str, Any]]:
                 y_true=group["actual"].astype(int),
                 scores=group["risk_score"].to_numpy(),
                 threshold=threshold,
-                prior_ap=float(group["actual"].mean()),
                 selected_model=True,
                 selected_feature_set=True,
                 selected_policy=True,
@@ -281,13 +280,14 @@ def run_family_experiments(
 ) -> FamilyExperimentResult:
     """Family별 이진 모델을 검증에서 선택하고 테스트 결과와 모델을 저장한다."""
     frame = prepared.frame.copy()
-    targets = tuple(dict.fromkeys(targets))
-    unknown_targets = sorted(set(targets) - set(FAMILY_TARGETS))
-    if not targets or unknown_targets:
+    requested_targets = tuple(dict.fromkeys(targets))
+    unknown_targets = sorted(set(requested_targets) - set(FAMILY_TARGETS))
+    if not requested_targets or unknown_targets:
         raise ValueError(
             "targets는 affected, severe 중 하나 이상이어야 합니다: "
             f"{unknown_targets}"
         )
+    targets = tuple(target for target in FAMILY_TARGETS if target in requested_targets)
     validation_start = pd.Timestamp(validation_start)
     test_start = pd.Timestamp(test_start)
     if validation_start >= test_start:
@@ -328,12 +328,21 @@ def run_family_experiments(
                 copied_importances = cached["importances"].copy()
                 copied_importances["target"] = target
                 importance_rows.extend(copied_importances.to_dict("records"))
-                model_paths[f"{family}__{target}"] = cached["model_path"]
+                reused_payload = dict(joblib.load(cached["model_path"]))
+                reused_payload["target"] = target
+                reused_payload["reused_from_target"] = "affected"
+                model_path = model_dir / (
+                    f"{_safe_name(family)}__{target}__"
+                    f"{reused_payload['feature_set']}__{reused_payload['model']}.joblib"
+                )
+                joblib.dump(reused_payload, model_path)
+                model_paths[f"{family}__{target}"] = model_path
                 completed[(family, target)] = {
                     **cached,
                     "metrics": copied_metrics,
                     "predictions": copied_predictions,
                     "importances": copied_importances,
+                    "model_path": model_path,
                 }
                 continue
 
@@ -362,7 +371,6 @@ def run_family_experiments(
             candidate_rows: list[dict[str, Any]] = []
             fitted: dict[tuple[str, str], Any] = {}
             valid_scores: dict[tuple[str, str], np.ndarray] = {}
-            prior_ap = float(valid[target].mean())
             for feature_set, features in prepared.feature_sets.items():
                 feature_names = list(features)
                 for model_name in MODEL_ORDER:
@@ -387,7 +395,6 @@ def run_family_experiments(
                             y_true=valid[target],
                             scores=scores,
                             threshold=f1_threshold,
-                            prior_ap=prior_ap,
                         )
                     )
 
@@ -434,7 +441,6 @@ def run_family_experiments(
                         y_true=test[target],
                         scores=feature_test_scores,
                         threshold=feature_threshold,
-                        prior_ap=prior_ap,
                         selected_model=True,
                         selected_feature_set=feature_set == selected_feature,
                     )
@@ -464,7 +470,6 @@ def run_family_experiments(
                             y_true=subset[target],
                             scores=scores,
                             threshold=selection,
-                            prior_ap=prior_ap,
                             selected_model=True,
                             selected_feature_set=True,
                             selected_policy=True,
@@ -536,6 +541,7 @@ def run_family_experiments(
                     "pipeline": model,
                     "part_family": family,
                     "target": target,
+                    "model": selected_model,
                     "feature_set": selected_feature,
                     "features": features,
                     "thresholds": {
@@ -556,6 +562,15 @@ def run_family_experiments(
                 "importances": target_importances,
                 "model_path": model_path,
             }
+
+    active_model_paths = {path.resolve() for path in model_paths.values()}
+    for family in FAMILY_NAMES:
+        for target in FAMILY_TARGETS:
+            for stale_model in model_dir.glob(
+                f"{_safe_name(family)}__{target}__*.joblib"
+            ):
+                if stale_model.resolve() not in active_model_paths:
+                    stale_model.unlink()
 
     metrics = pd.DataFrame(metric_rows)
     metrics["scope_kind"] = "overall"
@@ -634,7 +649,8 @@ def run_family_experiments(
         "feature_sets": {
             name: list(features) for name, features in prepared.feature_sets.items()
         },
-        "targets": {
+        "targets": list(targets),
+        "target_definitions": {
             "affected": "failed_parts >= 1",
             "severe": "failed_parts >= 2 or failed_a_parts >= 1",
             "all_failed": "통계 전용",

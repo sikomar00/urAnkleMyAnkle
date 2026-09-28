@@ -265,8 +265,8 @@
 
 | target | threshold_policy | macro_average_precision | macro_f1 | micro_average_precision | micro_f1 | hamming_loss | exact_match_ratio | excluded_families |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| affected | f1 | 0.2993 | 0.4262 | 0.3075 | 0.4367 | 0.4867 | 0.2735 | - |
-| severe | f1 | 0.1364 | 0.1900 | 0.2375 | 0.3873 | 0.2314 | 0.2881 | - |
+| affected | f1 | 0.2993 | 0.4262 | 0.3075 | 0.4367 | 0.4867 | 0.2735 |  |
+| severe | f1 | 0.1364 | 0.1900 | 0.2375 | 0.3873 | 0.2314 | 0.2881 |  |
 
 ## 5. 기계 종류·장비별 결과
 

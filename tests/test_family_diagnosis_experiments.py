@@ -1,8 +1,10 @@
+import json
 import warnings
 
 import joblib
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.family_diagnosis_experiments import (
     choose_family_thresholds,
@@ -251,3 +253,105 @@ def test_runner_does_not_emit_futurewarning_for_unavailable_thresholds(tmp_path)
     assert not future_warnings, [
         (str(item.message), item.filename, item.lineno) for item in future_warnings
     ]
+
+
+def test_runner_records_each_splits_own_prior_average_precision(tmp_path):
+    prepared = _prepared_family_experiment()
+    bearing_test = (
+        prepared.frame["part_family"].eq("Bearing")
+        & prepared.frame["transaction_date"].ge("2024-07-01")
+    )
+    prepared.frame.loc[bearing_test, ["affected", "severe"]] = [
+        [int(index < 15), int(index < 15)]
+        for index in range(int(bearing_test.sum()))
+    ]
+
+    result = run_family_experiments(prepared, output_dir=tmp_path, max_iter=5)
+    bearing = result.metrics.loc[
+        result.metrics["part_family"].eq("Bearing")
+        & result.metrics["target"].eq("affected")
+        & result.metrics["scope_kind"].eq("overall")
+    ]
+
+    assert set(bearing.loc[bearing["split"].eq("validation"), "prior_average_precision"]) == {0.5}
+    assert set(bearing.loc[bearing["split"].eq("test"), "prior_average_precision"]) == {0.75}
+
+
+def test_runner_reuses_identical_target_regardless_of_requested_order(tmp_path):
+    result = run_family_experiments(
+        _prepared_family_experiment(),
+        output_dir=tmp_path,
+        max_iter=5,
+        targets=("severe", "affected"),
+    )
+
+    bearing_severe = result.metrics.loc[
+        result.metrics["part_family"].eq("Bearing")
+        & result.metrics["target"].eq("severe")
+        & result.metrics["scope_kind"].eq("overall")
+    ]
+    assert set(bearing_severe["status"]) == {"identical_target"}
+
+
+def test_reused_target_has_its_own_self_describing_model_artifact(tmp_path):
+    result = run_family_experiments(
+        _prepared_family_experiment(), output_dir=tmp_path, max_iter=5
+    )
+
+    affected_path = result.models["Bearing__affected"]
+    severe_path = result.models["Bearing__severe"]
+    severe_payload = joblib.load(severe_path)
+
+    assert severe_path != affected_path
+    assert severe_payload["target"] == "severe"
+    assert severe_payload["reused_from_target"] == "affected"
+
+
+def test_run_config_records_requested_targets_separately_from_definitions(tmp_path):
+    run_family_experiments(
+        _prepared_family_experiment(),
+        output_dir=tmp_path,
+        max_iter=5,
+        targets=("affected",),
+    )
+
+    config = json.loads((tmp_path / "run_config.json").read_text(encoding="utf-8"))
+    assert config["targets"] == ["affected"]
+    assert config["target_definitions"] == {
+        "affected": "failed_parts >= 1",
+        "severe": "failed_parts >= 2 or failed_a_parts >= 1",
+        "all_failed": "통계 전용",
+    }
+
+
+def test_rerun_removes_stale_model_files_from_previous_configuration(tmp_path):
+    run_family_experiments(
+        _prepared_family_experiment(), output_dir=tmp_path, max_iter=5
+    )
+    assert list((tmp_path / "models").glob("*__severe__*.joblib"))
+
+    run_family_experiments(
+        _prepared_family_experiment(),
+        output_dir=tmp_path,
+        max_iter=5,
+        targets=("affected",),
+    )
+
+    assert not list((tmp_path / "models").glob("*__severe__*.joblib"))
+
+
+def test_failed_rerun_preserves_models_from_last_successful_run(tmp_path):
+    run_family_experiments(
+        _prepared_family_experiment(), output_dir=tmp_path, max_iter=5
+    )
+    previous_models = {path.name for path in (tmp_path / "models").glob("*.joblib")}
+    invalid = _prepared_family_experiment()
+    invalid = FamilyDiagnosisFeatures(
+        frame=invalid.frame,
+        feature_sets={"A": ("missing_feature",)},
+    )
+
+    with pytest.raises(KeyError):
+        run_family_experiments(invalid, output_dir=tmp_path, max_iter=5)
+
+    assert {path.name for path in (tmp_path / "models").glob("*.joblib")} == previous_models

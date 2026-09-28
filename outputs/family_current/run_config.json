@@ -281,7 +281,11 @@
       "oil_pressure_bar_residual_robust_z_slope7"
     ]
   },
-  "targets": {
+  "targets": [
+    "affected",
+    "severe"
+  ],
+  "target_definitions": {
     "affected": "failed_parts >= 1",
     "severe": "failed_parts >= 2 or failed_a_parts >= 1",
     "all_failed": "통계 전용"
