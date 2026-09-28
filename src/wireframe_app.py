@@ -46,8 +46,11 @@ if __package__ in {None, ""}:
 from .dashboard_data import (  # noqa: E402
     load_asset_detail_kpis,
     load_asset_list,
+    load_data_dictionary,
+    load_data_quality_summary,
     load_priority_table,
     load_screen1_kpis,
+    load_source_info,
 )
 
 # ============================================================
@@ -1042,15 +1045,81 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE):
 
     dict_cols = [("컬럼명", 130, "left"), ("타입", 64, "left"), ("단위", 56, "left"),
                  ("결측률 (%)", 72, "right"), ("설명", 120, "left")]
-    def dict_half():
-        return html.Div(table_placeholder(dict_cols, 11, 22, head_h=24, width=442, cell_h=6),
-                         style={"width": "442px"})
-    ddict = card("데이터 사전 (22열)", 932, ROW_SUB, hstack([dict_half(), dict_half()], 16),
+
+    def dict_table(records):
+        """table_placeholder()와 같은 헤더 스타일이되, "설명" 칸만 말줄임+title
+        툴팁을 쓴다 — screen_4 전용, table_placeholder() 자체는 건드리지 않는다."""
+        thead = html.Tr(
+            [html.Th(l, style={"width": f"{w}px", "boxSizing": "border-box", "padding": "0 8px",
+                                "textAlign": a, **LABEL_12, "whiteSpace": "nowrap", "overflow": "hidden",
+                                "borderBottom": f"1px solid {CTRL}"})
+             for l, w, a in dict_cols],
+            style={"height": "24px", "background": CARD},
+        )
+        body_rows = []
+        for record in records:
+            missing_pct = record["missing_pct"]
+            missing_text = "—" if missing_pct is None else f"{missing_pct:.2f}"
+            values = [record["column"], record["dtype_label"], record["unit"],
+                      missing_text, record["description"]]
+            cells = []
+            for (l, w, a), text in zip(dict_cols, values):
+                if l in ("컬럼명", "설명"):
+                    span_style = {**NUM_12, "whiteSpace": "nowrap", "overflow": "hidden",
+                                  "textOverflow": "ellipsis", "display": "block"}
+                    span = html.Span(text, style=span_style, title=text)
+                else:
+                    span = html.Span(text, style=NUM_12)
+                cells.append(html.Td(span, style={"boxSizing": "border-box", "padding": "0 8px",
+                                                   "textAlign": a, "borderBottom": f"1px solid {HAIR}"}))
+            body_rows.append(html.Tr(cells, style={"height": "22px"}))
+        tw = sum(c[1] for c in dict_cols)
+        return html.Table([html.Thead(thead), html.Tbody(body_rows)],
+                           style={"width": f"{tw}px", "tableLayout": "fixed",
+                                  "borderCollapse": "collapse", "flexShrink": "0"})
+
+    def dict_half(records):
+        return html.Div(dict_table(records), style={"width": "442px"})
+
+    dict_rows = load_data_dictionary()
+    ddict = card("데이터 사전 (22열)", 932, ROW_SUB,
+                 hstack([dict_half(dict_rows[:11]), dict_half(dict_rows[11:])], 16),
                  right=note("11행 × 2단 · 행 22"))
 
-    qual = card("품질 요약", 932, 162, hstack([slot(f"[품질 항목 {i+1}]", 213, 94) for i in range(4)], 16))
+    def info_box(text, w, h=94):
+        """slot()의 점선 테두리 대신 실제 문장을 보여준다 — screen_4 전용."""
+        return html.Div(
+            html.Span(text, style={"fontSize": "12px", "lineHeight": "16px", "color": INK,
+                                    "whiteSpace": "pre-line", "wordBreak": "keep-all"}),
+            style={"width": f"{w}px", "height": f"{h}px", "boxSizing": "border-box", "overflow": "hidden"},
+        )
+
+    q = load_data_quality_summary()
+    period_tile = html.Div(
+        [html.Span(f"기간: {q['period_days']:,}일",
+                    style={"fontSize": "12px", "lineHeight": "16px", "color": INK}),
+         html.Span(f"{q['period_start']} ~ {q['period_end']}",
+                    style={"fontSize": "12px", "lineHeight": "16px", "color": INK, "whiteSpace": "nowrap"})],
+        style={"width": "213px", "height": "94px", "boxSizing": "border-box", "overflow": "hidden",
+               "display": "flex", "flexDirection": "column"},
+    )
+    quality_tiles = [
+        info_box(f"중복: 복합키(날짜·기계·부품) 중복 {q['composite_key_duplicates']:,}건 · "
+                 f"완전 중복 {q['full_duplicates']:,}건", 213),
+        info_box(f"wo_type: '작업 없음' 범주 {q['wo_type_blank_count']:,}행 ({q['wo_type_blank_pct']:.2f}%) · "
+                 f"결측 아님", 213),
+        period_tile,
+        info_box(f"센서값 반복: 기계×날짜 {q['group_count']:,}개 그룹, 그룹당 부품 행 {q['rows_per_group']:,}개에 "
+                 f"센서값 동일 반복", 213),
+    ]
+    qual = card("품질 요약", 932, 162, hstack(quality_tiles, 16))
+
+    s = load_source_info()
+    source_lines = "\n".join([s["source_name"], f"{s['row_count']:,}행 × {s['col_count']}열",
+                               s["access_date_note"]])
     src = card("출처 · 라이선스 · 합성 데이터 한계", 932, 162,
-               hstack([slot("출처", 288, 94), slot("라이선스", 288, 94), slot("합성 데이터 한계", 292, 94)], 16))
+               hstack([info_box(source_lines, 288), info_box(s["license"], 288),
+                       info_box(s["limitations"], 292)], 16))
     row_c = row(ROW_SUB, [ddict, col(932, ROW_SUB, [qual, src])])
 
     return html.Div([toolbar, row(524, [dtable]), row_c],
