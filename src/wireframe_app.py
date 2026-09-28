@@ -48,6 +48,7 @@ from .dashboard_data import (  # noqa: E402
     load_asset_list,
     load_data_dictionary,
     load_data_quality_summary,
+    load_data_reference_date,
     load_priority_table,
     load_screen1_kpis,
     load_source_info,
@@ -506,7 +507,8 @@ def app_header():
 
     left = html.Div(
         [slot("시스템명 · title-16", 180, 28),
-         html.Div([html.Span("데이터 기준일", style=LABEL_12), slot("YYYY-MM-DD", 108, 24)],
+         html.Div([html.Span("데이터 기준일", style=LABEL_12),
+                   html.Span(load_data_reference_date(), style=NUM_12)],
                   style={"display": "flex", "alignItems": "center", "gap": "6px"}),
          note("1920 × 56")],
         style={"display": "flex", "alignItems": "center", "gap": "12px", "minWidth": "0"},
