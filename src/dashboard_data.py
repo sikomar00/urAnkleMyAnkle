@@ -305,3 +305,9 @@ def load_source_info() -> dict:
             "실제 설비의 고장 기준·정비 효과로 일반화하지 않는다"
         ),
     }
+
+
+def load_data_reference_date() -> str:
+    """앱 헤더 "데이터 기준일" — 원본 데이터의 최신 transaction_date."""
+    raw = _load_raw()
+    return raw[DATE_COLUMN].max().strftime("%Y-%m-%d")
