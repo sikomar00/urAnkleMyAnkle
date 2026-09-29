@@ -35,3 +35,25 @@ def test_failure_trend_shape_and_dtypes():
 def test_failure_trend_last_30_days_sum():
     trend = dd.load_failure_trend()
     assert trend.tail(30)['failure_days'].sum() == 211
+
+
+def test_asset_sensor_series_shape_and_flags():
+    series = dd.load_asset_sensor_series('AST-1041')
+    assert len(series) == 1095
+    assert list(series.columns) == [
+        'transaction_date', 'temp_bearing_degC', 'temp_motor_degC',
+        'vibration_h_mms', 'vibration_v_mms', 'oil_pressure_bar', 'load_pct',
+        'shaft_rpm', 'power_consumption_kw', 'is_failure_day', 'is_high_risk_day',
+    ]
+    assert series['transaction_date'].is_monotonic_increasing
+    assert series['is_failure_day'].dtype.kind == 'b'
+    assert series['is_high_risk_day'].dtype.kind == 'b'
+    assert int(series['is_failure_day'].sum()) == 738
+    assert int(series['is_high_risk_day'].sum()) == 114
+    # 위험 기준선 초과일은 고장 표시일의 부분집합이다.
+    assert not (series['is_high_risk_day'] & ~series['is_failure_day']).any()
+
+
+def test_asset_sensor_series_rejects_unknown_asset():
+    with pytest.raises(ValueError):
+        dd.load_asset_sensor_series('AST-9999')
