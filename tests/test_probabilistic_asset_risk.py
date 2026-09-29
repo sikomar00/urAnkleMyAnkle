@@ -10,6 +10,7 @@ from src.probabilistic_asset_risk import (
     choose_model_from_selection_metrics,
     fit_calibrated_part_model,
     predict_part_probabilities,
+    run_probabilistic_asset_risk,
     select_part_model,
 )
 from src.probabilistic_risk_features import (
@@ -223,3 +224,41 @@ def test_select_and_calibration_reject_single_class_periods():
     with pytest.raises(ValueError, match="보정 구간.*단일 클래스"):
         fit_calibrated_part_model(bad_calibration, selection)
 
+
+def test_run_probabilistic_asset_risk_writes_all_required_artifacts(tmp_path):
+    run = run_probabilistic_asset_risk(
+        raw_model_rows(),
+        output_dir=tmp_path / "probabilistic_asset_risk",
+        selection_start="2023-01-21",
+        calibration_start="2023-02-10",
+        test_start="2023-03-02",
+        model_names=("logistic_regression",),
+        bootstrap_samples=50,
+        max_iter=20,
+        random_state=7,
+    )
+
+    required = {
+        "part_probabilities.csv",
+        "asset_risk_predictions.csv",
+        "ranking_metrics.csv",
+        "score_metrics.csv",
+        "high_risk_metrics.csv",
+        "severity_metrics.csv",
+        "confusion_matrices.csv",
+        "calibration_table.csv",
+        "feature_importance.csv",
+        "run_config.json",
+    }
+    assert required.issubset({path.name for path in run.output_dir.iterdir()})
+    assert (run.output_dir / "models").is_dir()
+    predictions = pd.read_csv(run.output_dir / "asset_risk_predictions.csv")
+    assert {"A1", "A2", "B0"}.issubset(set(predictions["model_variant"]))
+    assert set(predictions["localization_status"]) <= {
+        "approved_on_validation",
+        "insufficient_evidence",
+    }
+    assert set(predictions["top3_display_label"]) <= {
+        "우선 점검 후보",
+        "참고용 위험 순위",
+    }

@@ -9,6 +9,19 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.metrics import (
+    accuracy_score,
+    average_precision_score,
+    brier_score_loss,
+    confusion_matrix,
+    f1_score,
+    log_loss,
+    precision_recall_fscore_support,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
+from .probabilistic_risk_aggregation import SEVERITY_LEVELS
 
 from .industrial_data import ASSET_COLUMN, CURRENT_TARGET, DATE_COLUMN, PART_COLUMN
 
@@ -331,3 +344,342 @@ def decide_localization_status(calibration_results: dict[str, Any]) -> dict[str,
         "display_label": "우선 점검 후보" if approved else "참고용 위험 순위",
         "reasons": reasons,
     }
+
+
+def choose_fpr_cutoff(
+    y_true: Sequence[int],
+    probabilities: Sequence[float],
+    *,
+    max_fpr: float,
+) -> dict[str, float | str | None]:
+    """음성 장비일 FPR 제한을 만족하는 가장 낮은 확률 cutoff를 고른다."""
+
+    if not 0 < max_fpr <= 1:
+        raise ValueError("max_fpr는 0보다 크고 1 이하여야 합니다.")
+    y = np.asarray(y_true, dtype=int)
+    scores = np.asarray(probabilities, dtype=float)
+    if len(y) != len(scores) or not len(y):
+        raise ValueError("정답과 확률은 같은 길이의 비어 있지 않은 배열이어야 합니다.")
+    if not np.isfinite(scores).all() or not np.isin(y, [0, 1]).all():
+        raise ValueError("정답은 0·1, 확률은 유한수여야 합니다.")
+    negatives = int((y == 0).sum())
+    positives = int((y == 1).sum())
+    if negatives == 0:
+        return {"cutoff": None, "status": "unavailable", "fpr": None}
+    candidates = np.unique(scores)[::-1]
+    feasible: list[tuple[float, float, float]] = []
+    for cutoff in candidates:
+        prediction = scores >= cutoff
+        false_positive = int(((y == 0) & prediction).sum())
+        true_positive = int(((y == 1) & prediction).sum())
+        fpr = false_positive / negatives
+        recall = true_positive / positives if positives else 0.0
+        if fpr <= max_fpr + 1e-12:
+            feasible.append((float(cutoff), fpr, recall))
+    if not feasible:
+        return {"cutoff": None, "status": "unavailable", "fpr": None}
+    # 같은 Recall이면 낮은 cutoff를 택해 제한 안에서 더 많은 후보를 본다.
+    cutoff, fpr, _ = sorted(feasible, key=lambda row: (-row[2], row[0]))[0]
+    return {"cutoff": cutoff, "status": "ok", "fpr": fpr}
+
+
+def _safe_correlations(actual: pd.Series, expected: pd.Series) -> dict[str, Any]:
+    if actual.nunique(dropna=True) < 2 or expected.nunique(dropna=True) < 2:
+        return {
+            "pearson": np.nan,
+            "spearman": np.nan,
+            "pearson_status": "not_defined_constant_input",
+            "spearman_status": "not_defined_constant_input",
+        }
+    actual_values = actual.to_numpy(dtype=float)
+    expected_values = expected.to_numpy(dtype=float)
+    pearson = float(np.corrcoef(actual_values, expected_values)[0, 1])
+    actual_rank = pd.Series(actual_values).rank(method="average").to_numpy()
+    expected_rank = pd.Series(expected_values).rank(method="average").to_numpy()
+    spearman = float(np.corrcoef(actual_rank, expected_rank)[0, 1])
+    return {
+        "pearson": pearson,
+        "spearman": spearman,
+        "pearson_status": "ok",
+        "spearman_status": "ok",
+    }
+
+
+def _score_row(frame: pd.DataFrame, metadata: dict[str, Any]) -> dict[str, Any]:
+    actual = pd.to_numeric(frame["actual_failure_points"], errors="coerce")
+    expected = pd.to_numeric(frame["expected_failure_points"], errors="coerce")
+    usable = pd.DataFrame({"actual": actual, "expected": expected}).dropna()
+    if usable.empty:
+        return {**metadata, "status": "unavailable", "row_count": 0}
+    errors = usable["actual"] - usable["expected"]
+    result: dict[str, Any] = {
+        **metadata,
+        "status": "ok",
+        "row_count": len(usable),
+        "actual_mean": float(usable["actual"].mean()),
+        "expected_mean": float(usable["expected"].mean()),
+        "score_mae": float(errors.abs().mean()),
+        "score_rmse": float(np.sqrt(np.mean(np.square(errors)))),
+    }
+    result.update(_safe_correlations(usable["actual"], usable["expected"]))
+    return result
+
+
+def build_score_metrics(asset_predictions: pd.DataFrame) -> pd.DataFrame:
+    """장비 예상점수의 전체·장비·기계·점수구간별 오차를 계산한다."""
+
+    required = {
+        DATE_COLUMN,
+        ASSET_COLUMN,
+        "model_variant",
+        "actual_failure_points",
+        "expected_failure_points",
+    }
+    missing = sorted(required - set(asset_predictions.columns))
+    if missing:
+        raise ValueError(f"점수 지표에 필요한 컬럼이 없습니다: {missing}")
+    frame = asset_predictions.copy()
+    if "high_risk_threshold" in frame:
+        frame = frame.drop_duplicates(
+            [column for column in ["split", "model_variant", DATE_COLUMN, ASSET_COLUMN] if column in frame]
+        )
+    group_columns = [column for column in ("split", "model_variant") if column in frame]
+    if "model_variant" not in group_columns:
+        raise ValueError("점수 지표에는 model_variant 컬럼이 필요합니다.")
+    rows: list[dict[str, Any]] = []
+    grouper: str | list[str] = group_columns[0] if len(group_columns) == 1 else group_columns
+    for keys, group in frame.groupby(grouper, sort=False, dropna=False):
+        metadata = _group_metadata(group_columns, keys)
+        rows.append(_score_row(group, {**metadata, "scope_kind": "overall", "scope_value": "all"}))
+        for column, kind in (("machine_type", "machine_type"), (ASSET_COLUMN, "asset_tag")):
+            if column not in group:
+                continue
+            for value, scoped in group.groupby(column, sort=True, dropna=False):
+                rows.append(
+                    _score_row(
+                        scoped,
+                        {**metadata, "scope_kind": kind, "scope_value": value},
+                    )
+                )
+        decile_frame = group.copy()
+        ranks = decile_frame["expected_failure_points"].rank(method="first", pct=True)
+        decile_frame["expected_score_decile"] = np.ceil(ranks * 10).clip(1, 10).astype(int)
+        for decile, scoped in decile_frame.groupby("expected_score_decile", sort=True):
+            row = _score_row(
+                scoped,
+                {**metadata, "scope_kind": "expected_score_decile", "scope_value": int(decile)},
+            )
+            row["actual_mean_in_decile"] = float(scoped["actual_failure_points"].mean())
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _calibration_rows(
+    y_true: np.ndarray,
+    probabilities: np.ndarray,
+    metadata: dict[str, Any],
+) -> list[dict[str, Any]]:
+    order = np.argsort(probabilities, kind="stable")
+    rank_bins = np.ceil((np.arange(len(order)) + 1) * 10 / len(order)).astype(int)
+    assigned = np.empty(len(order), dtype=int)
+    assigned[order] = rank_bins
+    rows = []
+    for bin_number in range(1, 11):
+        mask = assigned == bin_number
+        rows.append(
+            {
+                **metadata,
+                "bin": bin_number,
+                "count": int(mask.sum()),
+                "predicted_probability": float(probabilities[mask].mean()) if mask.any() else np.nan,
+                "actual_rate": float(y_true[mask].mean()) if mask.any() else np.nan,
+            }
+        )
+    return rows
+
+
+def build_high_risk_metrics(
+    asset_predictions: pd.DataFrame,
+    cutoffs: dict[tuple[Any, Any, int, str], dict[str, Any]],
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """12·13점 고위험 확률, 정책별 분류지표와 보정표를 만든다."""
+
+    required = {
+        DATE_COLUMN,
+        ASSET_COLUMN,
+        "model_variant",
+        "high_risk_threshold",
+        "actual_failure_points",
+    }
+    missing = sorted(required - set(asset_predictions.columns))
+    if missing:
+        raise ValueError(f"고위험 지표에 필요한 컬럼이 없습니다: {missing}")
+    frame = asset_predictions.copy()
+    group_columns = [column for column in ("split", "model_variant") if column in frame]
+    policies = sorted({key[3] for key in cutoffs})
+    metric_rows: list[dict[str, Any]] = []
+    confusion_rows: list[dict[str, Any]] = []
+    calibration_rows: list[dict[str, Any]] = []
+    for keys, group in frame.groupby(
+        [*group_columns, "high_risk_threshold"], sort=False, dropna=False
+    ):
+        if not isinstance(keys, tuple):
+            keys = (keys,)
+        metadata = dict(zip([*group_columns, "high_risk_threshold"], keys, strict=True))
+        threshold = int(metadata["high_risk_threshold"])
+        probability_column = f"prob_ge_{threshold}"
+        if probability_column not in group:
+            raise ValueError(f"고위험 확률 컬럼이 없습니다: {probability_column}")
+        y_true = group["actual_failure_points"].ge(threshold).astype(int).to_numpy()
+        probabilities = group[probability_column].astype(float).to_numpy()
+        for policy in policies:
+            setting = cutoffs.get(
+                (metadata.get("model_variant"), metadata.get("split"), threshold, policy),
+                {"cutoff": None, "status": "unavailable"},
+            )
+            cutoff = setting.get("cutoff")
+            status = setting.get("status", "unavailable")
+            metrics: dict[str, Any] = {
+                **metadata,
+                "policy": policy,
+                "cutoff": cutoff,
+                "status": status,
+                "positive_rate": float(y_true.mean()) if len(y_true) else np.nan,
+            }
+            if len(np.unique(y_true)) == 2:
+                metrics.update(
+                    {
+                        "roc_auc": float(roc_auc_score(y_true, probabilities)),
+                        "average_precision": float(average_precision_score(y_true, probabilities)),
+                        "brier_score": float(brier_score_loss(y_true, probabilities)),
+                        "log_loss": float(log_loss(y_true, probabilities, labels=[0, 1])),
+                    }
+                )
+            else:
+                metrics.update(
+                    {
+                        "roc_auc": np.nan,
+                        "average_precision": np.nan,
+                        "brier_score": float(brier_score_loss(y_true, probabilities)),
+                        "log_loss": np.nan,
+                    }
+                )
+            if cutoff is None:
+                metrics.update({
+                    "accuracy": np.nan,
+                    "precision": np.nan,
+                    "recall": np.nan,
+                    "f1": np.nan,
+                    "fpr": np.nan,
+                })
+                predictions = np.zeros(len(y_true), dtype=int)
+            else:
+                predictions = (probabilities >= float(cutoff)).astype(int)
+                tn, fp, fn, tp = confusion_matrix(y_true, predictions, labels=[0, 1]).ravel()
+                metrics.update(
+                    {
+                        "accuracy": float(accuracy_score(y_true, predictions)),
+                        "precision": float(precision_score(y_true, predictions, zero_division=0)),
+                        "recall": float(recall_score(y_true, predictions, zero_division=0)),
+                        "f1": float(f1_score(y_true, predictions, zero_division=0)),
+                        "fpr": float(fp / (fp + tn)) if (fp + tn) else np.nan,
+                    }
+                )
+            tn, fp, fn, tp = confusion_matrix(y_true, predictions, labels=[0, 1]).ravel()
+            confusion_rows.append(
+                {
+                    **metadata,
+                    "policy": policy,
+                    "true_negative": int(tn),
+                    "false_positive": int(fp),
+                    "false_negative": int(fn),
+                    "true_positive": int(tp),
+                }
+            )
+            metric_rows.append(metrics)
+        calibration_rows.extend(
+            _calibration_rows(
+                y_true,
+                probabilities,
+                {**metadata, "probability_column": probability_column},
+            )
+        )
+    return (
+        pd.DataFrame(metric_rows),
+        pd.DataFrame(confusion_rows),
+        pd.DataFrame(calibration_rows),
+    )
+
+
+def build_severity_metrics(
+    asset_predictions: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """4단계 등급의 전체 지표와 4×4 혼동행렬을 계산한다."""
+
+    required = {
+        DATE_COLUMN,
+        ASSET_COLUMN,
+        "model_variant",
+        "high_risk_threshold",
+        "actual_severity",
+        "predicted_severity",
+    }
+    missing = sorted(required - set(asset_predictions.columns))
+    if missing:
+        raise ValueError(f"4단계 지표에 필요한 컬럼이 없습니다: {missing}")
+    group_columns = [column for column in ("split", "model_variant", "high_risk_threshold") if column in asset_predictions]
+    metric_rows: list[dict[str, Any]] = []
+    confusion_rows: list[dict[str, Any]] = []
+    for keys, group in asset_predictions.groupby(group_columns, sort=False, dropna=False):
+        if not isinstance(keys, tuple):
+            keys = (keys,)
+        metadata = dict(zip(group_columns, keys, strict=True))
+        actual = pd.Categorical(group["actual_severity"], categories=SEVERITY_LEVELS, ordered=True)
+        predicted = pd.Categorical(group["predicted_severity"], categories=SEVERITY_LEVELS, ordered=True)
+        y_true = pd.Series(actual).astype(str).to_numpy()
+        y_pred = pd.Series(predicted).astype(str).to_numpy()
+        precision, recall, f1, support = precision_recall_fscore_support(
+            y_true,
+            y_pred,
+            labels=list(SEVERITY_LEVELS),
+            zero_division=0,
+        )
+        metric_rows.append(
+            {
+                **metadata,
+                "status": "ok",
+                "accuracy": float(accuracy_score(y_true, y_pred)),
+                "macro_precision": float(precision.mean()),
+                "macro_recall": float(recall.mean()),
+                "macro_f1": float(f1.mean()),
+                "weighted_f1": float(f1_score(y_true, y_pred, labels=list(SEVERITY_LEVELS), average="weighted", zero_division=0)),
+                **{
+                    f"{level}_precision": float(precision[index])
+                    for index, level in enumerate(SEVERITY_LEVELS)
+                },
+                **{
+                    f"{level}_recall": float(recall[index])
+                    for index, level in enumerate(SEVERITY_LEVELS)
+                },
+                **{
+                    f"{level}_f1": float(f1[index])
+                    for index, level in enumerate(SEVERITY_LEVELS)
+                },
+                **{
+                    f"{level}_support": int(support[index])
+                    for index, level in enumerate(SEVERITY_LEVELS)
+                },
+            }
+        )
+        matrix = confusion_matrix(y_true, y_pred, labels=list(SEVERITY_LEVELS))
+        for actual_index, actual_level in enumerate(SEVERITY_LEVELS):
+            for predicted_index, predicted_level in enumerate(SEVERITY_LEVELS):
+                confusion_rows.append(
+                    {
+                        **metadata,
+                        "actual_severity": actual_level,
+                        "predicted_severity": predicted_level,
+                        "count": int(matrix[actual_index, predicted_index]),
+                    }
+                )
+    return pd.DataFrame(metric_rows), pd.DataFrame(confusion_rows)
