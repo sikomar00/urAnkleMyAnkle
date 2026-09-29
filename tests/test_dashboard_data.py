@@ -140,3 +140,53 @@ def test_asset_family_diagnosis_bearing_values():
 def test_asset_family_diagnosis_rejects_unknown_asset():
     with pytest.raises(ValueError):
         dd.load_asset_family_diagnosis('AST-9999')
+
+
+def test_asset_family_diagnosis_sorted_by_average_precision_desc():
+    rows = dd.load_asset_family_diagnosis('AST-1041')
+    aps = [r['average_precision'] for r in rows]
+    assert aps == sorted(aps, reverse=True)
+    assert rows[0]['part_family'] == 'Bearing'
+
+
+def test_family_feature_importance_top_feature_is_shaft_rpm():
+    rows = dd.load_family_feature_importance('Bearing')
+    assert len(rows) == 10
+    assert rows[0]['feature'] == 'shaft_rpm'
+    importances = [r['importance_mean'] for r in rows]
+    assert importances == sorted(importances, reverse=True)
+
+
+def test_family_feature_importance_rejects_unknown_family():
+    with pytest.raises(ValueError):
+        dd.load_family_feature_importance('NotAFamily')
+
+
+def test_family_pr_curve_and_confusion_matches_displayed_metrics():
+    result = dd.load_family_pr_curve_and_confusion('AST-1041', 'Bearing')
+    c = result['confusion']
+    precision = c['tp'] / (c['tp'] + c['fp'])
+    recall = c['tp'] / (c['tp'] + c['fn'])
+    assert precision == pytest.approx(0.4135, abs=1e-4)
+    assert recall == pytest.approx(1.0, abs=1e-4)
+    assert len(result['precision_curve']) == len(result['recall_curve'])
+
+
+def test_family_pr_curve_and_confusion_rejects_unknown_inputs():
+    with pytest.raises(ValueError):
+        dd.load_family_pr_curve_and_confusion('AST-9999', 'Bearing')
+    with pytest.raises(ValueError):
+        dd.load_family_pr_curve_and_confusion('AST-1041', 'NotAFamily')
+
+
+def test_family_recurrence_intervals_are_positive_day_counts():
+    intervals = dd.load_family_recurrence_intervals('AST-1041', 'Bearing')
+    assert len(intervals) > 0
+    assert all(isinstance(v, int) and v > 0 for v in intervals)
+
+
+def test_family_recurrence_intervals_rejects_unknown_inputs():
+    with pytest.raises(ValueError):
+        dd.load_family_recurrence_intervals('AST-9999', 'Bearing')
+    with pytest.raises(ValueError):
+        dd.load_family_recurrence_intervals('AST-1041', 'NotAFamily')
