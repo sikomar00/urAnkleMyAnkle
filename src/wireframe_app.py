@@ -37,13 +37,14 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from dash import Dash, html, dcc, Input, Output, State, ALL, ctx, no_update
+from dash import Dash, html, dcc, dash_table, Input, Output, State, ALL, MATCH, ctx, no_update
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     __package__ = "src"
 
 from .dashboard_data import (  # noqa: E402
+    export_table_csv,
     load_asset_detail_kpis,
     load_asset_list,
     load_data_dictionary,
@@ -52,6 +53,7 @@ from .dashboard_data import (  # noqa: E402
     load_priority_table,
     load_screen1_kpis,
     load_source_info,
+    load_table_page,
 )
 
 # ============================================================
@@ -541,7 +543,8 @@ def app_header():
          html.Button("PDF", id="export-pdf-btn", n_clicks=0, style=btn_style(w=52)),
          html.Button("Excel", id="export-xlsx-btn", n_clicks=0, style=btn_style(w=60)),
          html.Button("테마 전환", id="theme-btn", n_clicks=0, style=btn_style(w=104)),
-         dcc.Download(id="report-download")],
+         dcc.Download(id="report-download"),
+         dcc.Download(id="table-download")],
         style={"display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "8px",
                # overflow:hidden을 여기 두면 "보고서 대상" 드롭다운 팝업까지
                # 잘라버릴 수 있다(설치된 Dash 버전에 따라 팝업이 position:fixed가
@@ -1015,35 +1018,99 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE):
 # 화면 ④ 데이터 — 툴바 32 / 524 / 340
 # ============================================================
 
+# SEG_GROUPS["dataset"] 인덱스 → dashboard_data의 dataset 키. 2(부품 출고)·
+# 3(모델 입력 피처)은 아직 연결되지 않아 매핑하지 않는다.
+DATASET_KEY_BY_SEG_INDEX = {0: "raw", 1: "daily"}
+
+
+def _dtable_footer_text(total_rows, page, page_size=16):
+    """"전체 행 수 · 표시 범위" 푸터 문구 — screen_4 초기 렌더와 정렬/페이지
+    콜백이 공유한다."""
+    if total_rows == 0:
+        return "0행"
+    start = page * page_size + 1
+    end = min((page + 1) * page_size, total_rows)
+    return f"{total_rows:,}행 중 {start:,}–{end:,}행 표시"
+
+
 def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE):
     seg_state = seg_state or DEFAULT_SEG
+    dataset_index = seg_state.get("dataset", 0)
+    dataset_key = DATASET_KEY_BY_SEG_INDEX.get(dataset_index)
+
+    def csv_export_button(key, disabled):
+        style = btn_style(extra={"opacity": "0.4", "cursor": "not-allowed"} if disabled else None)
+        return html.Button(
+            "CSV 내보내기", id={"type": "csv-export-btn", "index": key or "unavailable"},
+            n_clicks=0, disabled=disabled, style=style,
+        )
+
+    if dataset_key is None:
+        dtable_body = html.Div(
+            "이 데이터셋은 아직 연결되지 않았습니다",
+            style={"height": "456px", "display": "flex", "alignItems": "center",
+                   "justifyContent": "center", **LABEL_12},
+        )
+        csv_btn = csv_export_button(None, disabled=True)
+    else:
+        page0 = load_table_page(dataset_key, None, "asc", 0)
+        columns_prop = [{"name": c["label"], "id": c["id"]} for c in page0["columns"]]
+        right_align_ids = [c["id"] for c in page0["columns"] if c["align"] == "right"]
+        table = dash_table.DataTable(
+            id={"type": "dtable", "index": dataset_key},
+            columns=columns_prop,
+            data=page0["data"],
+            page_action="custom", page_current=0, page_count=page0["page_count"], page_size=16,
+            sort_action="custom", sort_mode="single", sort_by=[],
+            filter_action="none",
+            # fixed_columns(앞 2열 고정)를 시도했으나 헤더 셀이 어긋나(빈 헤더가
+            # 섞여 나옴) 포기하고 가로 스크롤만 남긴다(사용자 승인 — 이 문제에
+            # 시간을 더 쓰지 않음).
+            style_table={"overflowX": "auto", "width": "1840px"},
+            style_header={"backgroundColor": CARD, "fontFamily": SANS, "fontSize": "12px",
+                          "fontWeight": "500", "color": INK2, "borderBottom": f"1px solid {CTRL}",
+                          "height": "32px", "minHeight": "32px", "maxHeight": "32px"},
+            style_cell={"backgroundColor": CARD, "border": "none", "borderBottom": f"1px solid {HAIR}",
+                        "padding": "0 8px", "height": "24px", "minHeight": "24px", "maxHeight": "24px",
+                        "lineHeight": "16px", "fontFamily": SANS, "fontSize": "12px", "textAlign": "left"},
+            style_data={"backgroundColor": CARD},
+            style_cell_conditional=[
+                {"if": {"column_id": cid}, "textAlign": "right", "fontFamily": MONO}
+                for cid in right_align_ids
+            ],
+            # 내장 페이저 padding·여백을 줄여 카드 높이(524px) 예산에 맞춘다
+            # (정정 #2 — 행 높이·page_size는 그대로 두고 페이저만 압축).
+            css=[
+                {"selector": ".previous-next-container", "rule": "padding:2px 0; margin:0;"},
+                {"selector": ".previous-next-container button", "rule": "padding:2px 4px; margin:0 2px;"},
+                {"selector": ".page-number, .current-page-container",
+                 "rule": f"font-family:{MONO}; font-size:11px; color:{INK2}; margin:0 2px;"},
+                # 진단으로 특정한 진짜 원인: dash_table 기본 번들 스타일시트의
+                # ".dash-spreadsheet-inner tr { height:30px; min-height:30px; }"가
+                # style_cell의 24px 지정을 무시하고 행 높이를 30px로 고정한다
+                # (.dash-cell-value/-container 문제가 아님). 같은 선택자로
+                # 이 표에만 재정의한다.
+                {"selector": ".dash-spreadsheet-inner tr",
+                 "rule": "height:24px; min-height:24px;"},
+            ],
+        )
+        footer = html.Div(
+            html.Span(_dtable_footer_text(page0["total_rows"], 0, 16),
+                      id={"type": "dtable-footer", "index": dataset_key}, style=LABEL_12),
+            style={"height": "20px", "display": "flex", "alignItems": "center"},
+        )
+        dtable_body = html.Div([table, footer])
+        csv_btn = csv_export_button(dataset_key, disabled=False)
+
     toolbar = html.Div(
-        [seg("dataset", "데이터셋", SEG_GROUPS["dataset"], sel=seg_state.get("dataset", 0)),
-         html.Div([note("툴바 1880 × 32"), btn("CSV 내보내기", bid="csv-export")],
-                  style={"display": "flex", "alignItems": "center", "gap": "12px"})],
+        [seg("dataset", "데이터셋", SEG_GROUPS["dataset"], sel=dataset_index),
+         html.Div([csv_btn], style={"display": "flex", "alignItems": "center", "gap": "12px"})],
         style={"width": "1880px", "height": "32px", "flexShrink": "0", "display": "flex",
                "alignItems": "center", "justifyContent": "space-between"},
     )
 
-    dcols = [(f"[열 {i+1}]", 184, "left" if i < 2 else "right") for i in range(10)]
-    dt = table_placeholder(dcols, 16, 24, head_h=32, width=1840, cell_h=6)
-    scrollbar = html.Div(style={"width": "8px", "height": "384px", "marginTop": "32px",
-                                 "boxSizing": "border-box", "border": f"1px dashed {CTRL}",
-                                 "background": SUNK})
-    footer = html.Div(
-        [html.Div([slot("전체 행 수 · 표시 범위", 220, 24),
-                   note("헤더 32 (sticky) · 열 머리: 정렬 ▲▼ + 필터 ›"),
-                   note("본문 16행 × 24 = 384 · 이 본문만 세로 스크롤")],
-                  style={"display": "flex", "alignItems": "center", "gap": "16px"}),
-         html.Div([btn("‹"), slot("페이지 번호", 160, 32), btn("›")],
-                  style={"display": "flex", "gap": "4px"})],
-        style={"height": "32px", "display": "flex", "alignItems": "center", "justifyContent": "space-between"},
-    )
-    dtable_body = html.Div([hstack([html.Div(dt, style={"width": "1840px", "height": "416px", "overflow": "hidden"}),
-                                    scrollbar], 0, {"height": "416px"}),
-                            html.Div(style={"height": "8px"}), footer])
-    dtable = card(f"데이터 조회 · {SEG_GROUPS['dataset'][seg_state.get('dataset', 0)]}", 1880, 524, dtable_body,
-                  right=note("헤더 고정 · 열 정렬·필터 · 페이지네이션"))
+    dtable = card(f"데이터 조회 · {SEG_GROUPS['dataset'][dataset_index]}", 1880, 524, dtable_body,
+                  right=note("헤더 고정 · 서버 측 정렬·페이지네이션"))
 
     dict_cols = [("컬럼명", 130, "left"), ("타입", 64, "left"), ("단위", 56, "left"),
                  ("결측률 (%)", 72, "right"), ("설명", 120, "left")]
@@ -1719,6 +1786,54 @@ def export_report(_pdf, _xlsx, audience, filters, seg_state):
         return no_update, f"내보내기 실패 — {type(exc).__name__}: {exc}"
     return (dcc.send_bytes(lambda b: b.write(payload), name, type=mime),
             f"{aud['label']} 보고서 내보냄 — {name} (섹션 {len(aud['sections'])}개 · 값은 {NO_DATA_MARK})")
+
+
+# ------------------------------------------------------------
+# 화면 ④ 데이터 조회 표 — 서버 측 정렬·페이지네이션 + CSV 내보내기
+# ------------------------------------------------------------
+# page_current와 sort_by를 각각 다른 콜백(A/B 체인)으로 나눴더니, 정렬을
+# 바꾼 순간 A가 옛 page_current로 먼저 실행되고 B가 뒤늦게 0으로 되돌리는
+# 경쟁 상태가 Playwright 검증에서 실제로 확인됐다(2페이지에서 정렬해도
+# page_current가 2에 머무름) — 콜백 하나로 합쳐 트리거를 직접 판별한다.
+@app.callback(
+    Output({"type": "dtable", "index": MATCH}, "data"),
+    Output({"type": "dtable", "index": MATCH}, "page_count"),
+    Output({"type": "dtable", "index": MATCH}, "page_current"),
+    Output({"type": "dtable-footer", "index": MATCH}, "children"),
+    Input({"type": "dtable", "index": MATCH}, "page_current"),
+    Input({"type": "dtable", "index": MATCH}, "sort_by"),
+    prevent_initial_call=True,
+)
+def update_dtable_page(page_current, sort_by):
+    dataset_key = ctx.triggered_id["index"]
+    sort_col = sort_by[0]["column_id"] if sort_by else None
+    sort_dir = sort_by[0]["direction"] if sort_by else "asc"
+    triggered_prop = ctx.triggered[0]["prop_id"].rsplit(".", 1)[-1] if ctx.triggered else None
+    page = 0 if triggered_prop == "sort_by" else (page_current or 0)
+    result = load_table_page(dataset_key, sort_col, sort_dir, page)
+    footer_text = _dtable_footer_text(result["total_rows"], result["page"], 16)
+    return result["data"], result["page_count"], result["page"], footer_text
+
+
+@app.callback(
+    Output("table-download", "data"),
+    Input({"type": "csv-export-btn", "index": ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def export_dtable_csv(_clicks):
+    # 화면이 다시 그려지면 버튼이 n_clicks=0으로 재생성되며 이 콜백이 한 번
+    # 더 불린다 — write_seg와 동일하게 값이 0인 호출은 무시한다.
+    trig = ctx.triggered[0] if ctx.triggered else None
+    if not trig or not trig.get("value"):
+        return no_update
+    dataset_key = ctx.triggered_id["index"]
+    if dataset_key not in ("raw", "daily"):
+        return no_update
+    try:
+        csv_bytes, filename = export_table_csv(dataset_key)
+    except Exception:  # noqa: BLE001 — 다운로드만 조용히 건너뛴다
+        return no_update
+    return dcc.send_bytes(lambda buf: buf.write(csv_bytes), filename, type="text/csv")
 
 
 if __name__ == "__main__":
