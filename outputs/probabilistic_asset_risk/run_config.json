@@ -1,0 +1,357 @@
+{
+  "source_path": "data/raw/synthetic_industrial_machine_data.csv",
+  "source_sha256": "39abfa3d559a0c1487198eada9c2642e4ee98dabe9617f0fbddbaf0d8f7b05c1",
+  "selection_start": "2024-01-01",
+  "calibration_start": "2024-04-01",
+  "test_start": "2024-07-01",
+  "high_risk_thresholds": [
+    12,
+    13
+  ],
+  "fpr_policies": [
+    0.05,
+    0.1
+  ],
+  "bootstrap_samples": 2000,
+  "max_iter": 100,
+  "random_state": 42,
+  "feature_sets": {
+    "A1": [
+      "machine_type",
+      "asset_tag",
+      "plant_code",
+      "part_no",
+      "part_family",
+      "criticality",
+      "temp_bearing_degC",
+      "temp_motor_degC",
+      "vibration_h_mms",
+      "vibration_v_mms",
+      "oil_pressure_bar",
+      "load_pct",
+      "shaft_rpm",
+      "power_consumption_kw",
+      "day_of_week",
+      "month_sin",
+      "month_cos"
+    ],
+    "A2": [
+      "machine_type",
+      "asset_tag",
+      "plant_code",
+      "part_no",
+      "part_family",
+      "criticality",
+      "temp_bearing_degC",
+      "temp_motor_degC",
+      "vibration_h_mms",
+      "vibration_v_mms",
+      "oil_pressure_bar",
+      "load_pct",
+      "shaft_rpm",
+      "power_consumption_kw",
+      "day_of_week",
+      "month_sin",
+      "month_cos",
+      "breakdown_lag1",
+      "breakdown_count_7d",
+      "breakdown_count_30d",
+      "historical_breakdown_rate",
+      "days_since_last_breakdown"
+    ]
+  },
+  "selected_models": {
+    "A1": "hist_gradient_boosting",
+    "A2": "hist_gradient_boosting"
+  },
+  "candidate_models": [
+    "logistic_regression",
+    "random_forest",
+    "hist_gradient_boosting"
+  ],
+  "calibration_method": "sigmoid",
+  "b0_prior_strength": 20.0,
+  "cutoffs": {
+    "A1|train|12|fpr_05": {
+      "cutoff": 0.2539156786533282,
+      "status": "ok",
+      "fpr": 0.04926108374384237
+    },
+    "A1|selection|12|fpr_05": {
+      "cutoff": 0.2539156786533282,
+      "status": "ok",
+      "fpr": 0.04926108374384237
+    },
+    "A1|calibration|12|fpr_05": {
+      "cutoff": 0.2539156786533282,
+      "status": "ok",
+      "fpr": 0.04926108374384237
+    },
+    "A1|test|12|fpr_05": {
+      "cutoff": 0.2539156786533282,
+      "status": "ok",
+      "fpr": 0.04926108374384237
+    },
+    "A1|train|12|fpr_10": {
+      "cutoff": 0.23292337142406483,
+      "status": "ok",
+      "fpr": 0.09975369458128079
+    },
+    "A1|selection|12|fpr_10": {
+      "cutoff": 0.23292337142406483,
+      "status": "ok",
+      "fpr": 0.09975369458128079
+    },
+    "A1|calibration|12|fpr_10": {
+      "cutoff": 0.23292337142406483,
+      "status": "ok",
+      "fpr": 0.09975369458128079
+    },
+    "A1|test|12|fpr_10": {
+      "cutoff": 0.23292337142406483,
+      "status": "ok",
+      "fpr": 0.09975369458128079
+    },
+    "A1|train|13|fpr_05": {
+      "cutoff": 0.18677830749559657,
+      "status": "ok",
+      "fpr": 0.04994054696789536
+    },
+    "A1|selection|13|fpr_05": {
+      "cutoff": 0.18677830749559657,
+      "status": "ok",
+      "fpr": 0.04994054696789536
+    },
+    "A1|calibration|13|fpr_05": {
+      "cutoff": 0.18677830749559657,
+      "status": "ok",
+      "fpr": 0.04994054696789536
+    },
+    "A1|test|13|fpr_05": {
+      "cutoff": 0.18677830749559657,
+      "status": "ok",
+      "fpr": 0.04994054696789536
+    },
+    "A1|train|13|fpr_10": {
+      "cutoff": 0.16916936830538748,
+      "status": "ok",
+      "fpr": 0.09988109393579073
+    },
+    "A1|selection|13|fpr_10": {
+      "cutoff": 0.16916936830538748,
+      "status": "ok",
+      "fpr": 0.09988109393579073
+    },
+    "A1|calibration|13|fpr_10": {
+      "cutoff": 0.16916936830538748,
+      "status": "ok",
+      "fpr": 0.09988109393579073
+    },
+    "A1|test|13|fpr_10": {
+      "cutoff": 0.16916936830538748,
+      "status": "ok",
+      "fpr": 0.09988109393579073
+    },
+    "A2|train|12|fpr_05": {
+      "cutoff": 0.2572301098729489,
+      "status": "ok",
+      "fpr": 0.04926108374384237
+    },
+    "A2|selection|12|fpr_05": {
+      "cutoff": 0.2572301098729489,
+      "status": "ok",
+      "fpr": 0.04926108374384237
+    },
+    "A2|calibration|12|fpr_05": {
+      "cutoff": 0.2572301098729489,
+      "status": "ok",
+      "fpr": 0.04926108374384237
+    },
+    "A2|test|12|fpr_05": {
+      "cutoff": 0.2572301098729489,
+      "status": "ok",
+      "fpr": 0.04926108374384237
+    },
+    "A2|train|12|fpr_10": {
+      "cutoff": 0.22982666729393372,
+      "status": "ok",
+      "fpr": 0.09975369458128079
+    },
+    "A2|selection|12|fpr_10": {
+      "cutoff": 0.22982666729393372,
+      "status": "ok",
+      "fpr": 0.09975369458128079
+    },
+    "A2|calibration|12|fpr_10": {
+      "cutoff": 0.22982666729393372,
+      "status": "ok",
+      "fpr": 0.09975369458128079
+    },
+    "A2|test|12|fpr_10": {
+      "cutoff": 0.22982666729393372,
+      "status": "ok",
+      "fpr": 0.09975369458128079
+    },
+    "A2|train|13|fpr_05": {
+      "cutoff": 0.18886743453894755,
+      "status": "ok",
+      "fpr": 0.04994054696789536
+    },
+    "A2|selection|13|fpr_05": {
+      "cutoff": 0.18886743453894755,
+      "status": "ok",
+      "fpr": 0.04994054696789536
+    },
+    "A2|calibration|13|fpr_05": {
+      "cutoff": 0.18886743453894755,
+      "status": "ok",
+      "fpr": 0.04994054696789536
+    },
+    "A2|test|13|fpr_05": {
+      "cutoff": 0.18886743453894755,
+      "status": "ok",
+      "fpr": 0.04994054696789536
+    },
+    "A2|train|13|fpr_10": {
+      "cutoff": 0.16656136460707438,
+      "status": "ok",
+      "fpr": 0.09988109393579073
+    },
+    "A2|selection|13|fpr_10": {
+      "cutoff": 0.16656136460707438,
+      "status": "ok",
+      "fpr": 0.09988109393579073
+    },
+    "A2|calibration|13|fpr_10": {
+      "cutoff": 0.16656136460707438,
+      "status": "ok",
+      "fpr": 0.09988109393579073
+    },
+    "A2|test|13|fpr_10": {
+      "cutoff": 0.16656136460707438,
+      "status": "ok",
+      "fpr": 0.09988109393579073
+    },
+    "B0|train|12|fpr_05": {
+      "cutoff": null,
+      "status": "unavailable",
+      "fpr": null
+    },
+    "B0|selection|12|fpr_05": {
+      "cutoff": null,
+      "status": "unavailable",
+      "fpr": null
+    },
+    "B0|calibration|12|fpr_05": {
+      "cutoff": null,
+      "status": "unavailable",
+      "fpr": null
+    },
+    "B0|test|12|fpr_05": {
+      "cutoff": null,
+      "status": "unavailable",
+      "fpr": null
+    },
+    "B0|train|12|fpr_10": {
+      "cutoff": 0.12089561397967385,
+      "status": "ok",
+      "fpr": 0.08866995073891626
+    },
+    "B0|selection|12|fpr_10": {
+      "cutoff": 0.12089561397967385,
+      "status": "ok",
+      "fpr": 0.08866995073891626
+    },
+    "B0|calibration|12|fpr_10": {
+      "cutoff": 0.12089561397967385,
+      "status": "ok",
+      "fpr": 0.08866995073891626
+    },
+    "B0|test|12|fpr_10": {
+      "cutoff": 0.12089561397967385,
+      "status": "ok",
+      "fpr": 0.08866995073891626
+    },
+    "B0|train|13|fpr_05": {
+      "cutoff": null,
+      "status": "unavailable",
+      "fpr": null
+    },
+    "B0|selection|13|fpr_05": {
+      "cutoff": null,
+      "status": "unavailable",
+      "fpr": null
+    },
+    "B0|calibration|13|fpr_05": {
+      "cutoff": null,
+      "status": "unavailable",
+      "fpr": null
+    },
+    "B0|test|13|fpr_05": {
+      "cutoff": null,
+      "status": "unavailable",
+      "fpr": null
+    },
+    "B0|train|13|fpr_10": {
+      "cutoff": 0.07649503485731678,
+      "status": "ok",
+      "fpr": 0.09036860879904875
+    },
+    "B0|selection|13|fpr_10": {
+      "cutoff": 0.07649503485731678,
+      "status": "ok",
+      "fpr": 0.09036860879904875
+    },
+    "B0|calibration|13|fpr_10": {
+      "cutoff": 0.07649503485731678,
+      "status": "ok",
+      "fpr": 0.09036860879904875
+    },
+    "B0|test|13|fpr_10": {
+      "cutoff": 0.07649503485731678,
+      "status": "ok",
+      "fpr": 0.09036860879904875
+    }
+  },
+  "localization": {
+    "B0": {
+      "localization_status": "insufficient_evidence",
+      "display_label": "참고용 위험 순위",
+      "reasons": [
+        "B0는 비교 기준모델입니다."
+      ]
+    },
+    "A1": {
+      "localization_status": "insufficient_evidence",
+      "display_label": "참고용 위험 순위",
+      "reasons": [
+        "B0 대비 Hit Rate@3 차이의 95% 신뢰구간 하한이 0보다 크지 않습니다.",
+        "Recall@3가 B0보다 낮습니다."
+      ],
+      "test_hit_rate_at_3": 0.4828685258964143,
+      "test_baseline_hit_rate_at_3": 0.47649402390438245,
+      "test_recall_at_3": 0.19956616052060738,
+      "test_baseline_recall_at_3": 0.19793926247288504,
+      "test_bootstrap_ci_lower": -0.023107569721115537,
+      "test_bootstrap_ci_upper": 0.035876494023904276,
+      "test_reproduced": false
+    },
+    "A2": {
+      "localization_status": "approved_on_validation",
+      "display_label": "우선 점검 후보",
+      "reasons": [],
+      "test_hit_rate_at_3": 0.4749003984063745,
+      "test_baseline_hit_rate_at_3": 0.47649402390438245,
+      "test_recall_at_3": 0.19685466377440347,
+      "test_baseline_recall_at_3": 0.19793926247288504,
+      "test_bootstrap_ci_lower": -0.03266932270916335,
+      "test_bootstrap_ci_upper": 0.030278884462151396,
+      "test_reproduced": false
+    }
+  },
+  "python": "3.11.16 (main, Aug 12 2026, 23:03:19) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "pandas": "2.2.3",
+  "sklearn": "1.6.1",
+  "git_commit": "a35a9f32e1fe003f769494caf316bd668887f0a9",
+  "git_dirty": true
+}
