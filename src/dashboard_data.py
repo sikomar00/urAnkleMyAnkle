@@ -276,6 +276,67 @@ def load_priority_table(sort_by: str = "grade") -> list[dict]:
     return rows
 
 
+def load_screen1_machine_status() -> list[dict]:
+    """화면 ① "기계 상태" 타일 10개 — 자산별 최신 등급·등급가중 고장점수와
+    최근 30일 고장점수 스파크라인. asset_tag 오름차순(기계 드롭다운과 동일 순서).
+    """
+    daily = _daily()
+    latest_date = daily[DATE_COLUMN].max()
+
+    rows = []
+    for asset_tag in load_asset_list():
+        asset_daily = daily[daily[ASSET_COLUMN].eq(asset_tag)].sort_values(DATE_COLUMN)
+        info = _load_raw()[_load_raw()[ASSET_COLUMN].eq(asset_tag)].iloc[0]
+        latest_row = asset_daily[asset_daily[DATE_COLUMN].eq(latest_date)].iloc[0]
+        rows.append({
+            "asset_tag": asset_tag,
+            "machine_type": info[MACHINE_COLUMN],
+            "current_grade": SEVERITY_LABELS_KO.get(
+                str(latest_row["severity_level"]), str(latest_row["severity_level"])
+            ),
+            "risk_score": float(latest_row["failure_points"]),
+            "sparkline": asset_daily.tail(30)["failure_points"].astype(float).tolist(),
+        })
+    return rows
+
+
+def load_screen1_power_by_machine() -> list[dict]:
+    """화면 ① "기계별 평균 소비 전력" — 전체 기간 자산별 평균 소비전력(kW),
+    내림차순 10행.
+    """
+    daily = _daily()
+    avg_power = daily.groupby(ASSET_COLUMN)["power_consumption_kw"].mean()
+    avg_power = avg_power.sort_values(ascending=False)
+    return [
+        {"asset_tag": asset_tag, "avg_power_kw": float(value)}
+        for asset_tag, value in avg_power.items()
+    ]
+
+
+def load_asset_failure_heatmap() -> pd.DataFrame:
+    """화면 ① "고장 표시 히트맵" — 자산 × 월(YYYY-MM) 그레인, 셀 값은 그 달에
+    고장 표시된 부품-일 행 수 합계(CURRENT_TARGET == 1인 원자료 행 수).
+
+    Returns:
+        asset_tag, period("YYYY-MM"), failed_part_count 3열. 데이터가 없는
+        자산×월 조합도 0으로 채워 히트맵 격자에 빈 칸이 생기지 않게 한다.
+    """
+    raw = _load_raw()
+    periods = sorted(raw[DATE_COLUMN].dt.to_period("M").astype(str).unique())
+    assets = load_asset_list()
+
+    failed = raw.loc[raw[CURRENT_TARGET].eq(1)].copy()
+    failed["period"] = failed[DATE_COLUMN].dt.to_period("M").astype(str)
+    counts = failed.groupby([ASSET_COLUMN, "period"])[PART_COLUMN].count()
+
+    full_index = pd.MultiIndex.from_product([assets, periods], names=[ASSET_COLUMN, "period"])
+    counts = counts.reindex(full_index, fill_value=0)
+
+    heat = counts.reset_index().rename(columns={ASSET_COLUMN: "asset_tag", PART_COLUMN: "failed_part_count"})
+    heat["failed_part_count"] = heat["failed_part_count"].astype(int)
+    return heat[["asset_tag", "period", "failed_part_count"]]
+
+
 def load_asset_list() -> list[str]:
     """전체 자산 태그를 알파벳 오름차순으로 반환한다."""
     raw = _load_raw()

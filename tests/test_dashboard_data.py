@@ -190,3 +190,40 @@ def test_family_recurrence_intervals_rejects_unknown_inputs():
         dd.load_family_recurrence_intervals('AST-9999', 'Bearing')
     with pytest.raises(ValueError):
         dd.load_family_recurrence_intervals('AST-1041', 'NotAFamily')
+
+
+def test_screen1_machine_status_covers_all_assets_sorted():
+    rows = dd.load_screen1_machine_status()
+    assert [r['asset_tag'] for r in rows] == sorted(r['asset_tag'] for r in rows)
+    assert len(rows) == 10
+    for r in rows:
+        assert set(r) == {
+            'asset_tag', 'machine_type', 'current_grade', 'risk_score', 'sparkline',
+        }
+        assert len(r['sparkline']) == 30
+
+
+def test_screen1_machine_status_ast1041_latest_values():
+    row = next(r for r in dd.load_screen1_machine_status() if r['asset_tag'] == 'AST-1041')
+    assert row['current_grade'] == '경계'
+    assert row['risk_score'] == pytest.approx(6.0)
+    assert row['sparkline'][-1] == pytest.approx(6.0)
+
+
+def test_screen1_power_by_machine_sorted_desc_and_covers_all_assets():
+    rows = dd.load_screen1_power_by_machine()
+    assert len(rows) == 10
+    assert {r['asset_tag'] for r in rows} == set(dd.load_asset_list())
+    values = [r['avg_power_kw'] for r in rows]
+    assert values == sorted(values, reverse=True)
+    assert rows[0]['asset_tag'] == 'AST-2031'
+    assert rows[0]['avg_power_kw'] == pytest.approx(71.203, abs=1e-3)
+
+
+def test_asset_failure_heatmap_shape_and_ast1041_total():
+    heat = dd.load_asset_failure_heatmap()
+    assert list(heat.columns) == ['asset_tag', 'period', 'failed_part_count']
+    assert len(heat) == 370  # 10개 자산 × 37개월
+    assert heat['period'].nunique() == 37
+    assert heat.groupby('asset_tag')['failed_part_count'].sum()['AST-1041'] == 2071
+    assert (heat['failed_part_count'] >= 0).all()
