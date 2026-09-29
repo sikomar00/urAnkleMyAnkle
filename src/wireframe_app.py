@@ -1718,6 +1718,12 @@ def cycle_selected_asset(_clicks, current_asset):
     triggered = ctx.triggered_id
     if not triggered:
         return no_update
+    # 화면②가 새로 마운트될 때마다 Dash가 이 패턴매칭 Input을 n_clicks=0(또는
+    # None)인 채로 한 번 발화시킨다(prevent_initial_call은 앱 최초 실행만 막는다).
+    # 그 발화를 클릭으로 세면 사용자의 진짜 첫 클릭이 무시된 것처럼 보이므로,
+    # n_clicks가 실제로 올라간 경우에만 이동한다.
+    if not ctx.triggered[0]["value"]:
+        return no_update
     assets = load_asset_list()
     idx = assets.index(current_asset) if current_asset in assets else 0
     if triggered["index"] == "next":
