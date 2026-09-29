@@ -113,3 +113,30 @@ def test_current_classification_metrics_hist_gradient_boosting_values():
     hgb = dd.load_current_classification_metrics()['hist_gradient_boosting']
     assert hgb['roc_auc'] == pytest.approx(0.6815, abs=1e-4)
     assert hgb['average_precision'] == pytest.approx(0.1534, abs=1e-4)
+
+
+def test_asset_family_diagnosis_has_nine_part_families():
+    rows = dd.load_asset_family_diagnosis('AST-1041')
+    assert len(rows) == 9
+    families = {r['part_family'] for r in rows}
+    assert families == {
+        'Bearing', 'Coupling', 'Drive Belt', 'Electrical', 'Fastener',
+        'Filter', 'Lubrication', 'Seal & Gasket', 'Sensor',
+    }
+    for r in rows:
+        assert set(r) == {
+            'part_family', 'model', 'support', 'positive_rate',
+            'precision', 'recall', 'average_precision', 'roc_auc',
+        }
+
+
+def test_asset_family_diagnosis_bearing_values():
+    rows = dd.load_asset_family_diagnosis('AST-1041')
+    bearing = next(r for r in rows if r['part_family'] == 'Bearing')
+    assert bearing['average_precision'] == pytest.approx(0.3919, abs=1e-4)
+    assert bearing['roc_auc'] == pytest.approx(0.6555, abs=1e-4)
+
+
+def test_asset_family_diagnosis_rejects_unknown_asset():
+    with pytest.raises(ValueError):
+        dd.load_asset_family_diagnosis('AST-9999')
