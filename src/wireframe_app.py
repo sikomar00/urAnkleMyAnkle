@@ -34,7 +34,7 @@
 
 import io
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import plotly.graph_objects as go
@@ -49,6 +49,7 @@ from .dashboard_data import (  # noqa: E402
     export_table_csv,
     load_asset_detail_kpis,
     load_asset_list,
+    load_asset_sensor_series,
     load_data_dictionary,
     load_data_quality_summary,
     load_data_reference_date,
@@ -679,6 +680,80 @@ def _trend_figure(df, theme):
     return fig
 
 
+# 화면 ② 스몰 멀티플 — (라벨, _daily() 컬럼) 쌍. 순서는 SENSOR_COLUMNS와 같다.
+SMULT_SENSORS = [("베어링 온도 (°C)", "temp_bearing_degC"),
+                 ("모터 온도 (°C)", "temp_motor_degC"),
+                 ("수평 진동 (mm/s)", "vibration_h_mms"),
+                 ("수직 진동 (mm/s)", "vibration_v_mms"),
+                 ("오일 압력 (bar)", "oil_pressure_bar"),
+                 ("부하율 (%)", "load_pct"),
+                 ("회전 속도 (rpm)", "shaft_rpm"),
+                 ("소비 전력 (kW)", "power_consumption_kw")]
+# 카드 본문 452 = 패널 48×8 + 간격 4×7 + 공유 x축 40. 왼쪽 라벨 열과 차트 내부
+# 패널이 같은 치수를 써야 1:1로 정렬되므로 상수로 묶어 둔다.
+SMULT_PANEL_H, SMULT_GAP, SMULT_AXIS_H = 48, 4, 40
+SMULT_PLOT_H = SMULT_PANEL_H * len(SMULT_SENSORS) + SMULT_GAP * (len(SMULT_SENSORS) - 1)
+SMULT_BODY_H = SMULT_PLOT_H + SMULT_AXIS_H
+
+
+def _true_runs(flags):
+    """불리언 시리즈의 연속 True 구간을 (시작 인덱스, 끝 인덱스) 목록으로
+    묶는다 — 하루당 shape 하나씩 만들지 않기 위해."""
+    flags = flags.to_numpy()
+    runs, start = [], None
+    for i, on in enumerate(flags):
+        if on and start is None:
+            start = i
+        elif not on and start is not None:
+            runs.append((start, i - 1))
+            start = None
+    if start is not None:
+        runs.append((start, len(flags) - 1))
+    return runs
+
+
+def _band_shapes(dates, flags, color):
+    """위험 구간을 8개 패널 전체를 관통하는 세로 밴드(shape)로 만든다.
+
+    날짜를 numpy datetime64 그대로 넘기면 Plotly가 나노초 정수로 직렬화해
+    ISO 문자열인 trace x축과 어긋나므로(축이 NaN이 된다) isoformat 문자열로
+    넘긴다. 또 하루짜리 구간은 x0 == x1이면 폭 0이라 보이지 않으므로
+    앞뒤로 반나절씩 넓혀 날짜 눈금 가운데에 오게 한다."""
+    half = timedelta(hours=12)
+    return [dict(type="rect", xref="x", yref="paper", y0=0, y1=1,
+                 x0=(dates.iloc[a] - half).isoformat(),
+                 x1=(dates.iloc[b] + half).isoformat(),
+                 fillcolor=color, opacity=0.18, line_width=0, layer="below")
+            for a, b in _true_runs(flags)]
+
+
+def _smult_figure(df, theme):
+    """화면 ② "센서 8종 스몰 멀티플" — 센서 8종 스파크라인(축·격자·범례 없음,
+    맨 아래 공유 x축만) + 위험 기준선 초과일 세로 밴드. 밴드는 yref="paper"라
+    8개 패널과 그 사이 간격까지 하나로 관통한다."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    fig = make_subplots(rows=len(SMULT_SENSORS), cols=1, shared_xaxes=True,
+                        vertical_spacing=SMULT_GAP / SMULT_PLOT_H)
+    for r, (_, column) in enumerate(SMULT_SENSORS, start=1):
+        fig.add_trace(go.Scatter(x=df["transaction_date"], y=df[column], mode="lines",
+                                  line=dict(color=colors["ink"], width=0.8),
+                                  showlegend=False, hoverinfo="skip"),
+                      row=r, col=1)
+    # 밴드는 shapes로 한 번에 넘긴다 — 구간마다 add_vrect()를 호출하면 호출마다
+    # figure 전체를 다시 검증해 2분이 넘게 걸린다(일괄 할당은 30ms 수준).
+    fig.update_layout(
+        height=SMULT_BODY_H, margin=dict(l=0, r=0, t=0, b=SMULT_AXIS_H),
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+        font=dict(color=colors["muted"], size=11),
+        shapes=_band_shapes(df["transaction_date"], df["is_high_risk_day"], colors["muted"]),
+    )
+    fig.update_xaxes(visible=False)
+    fig.update_yaxes(visible=False)
+    fig.update_xaxes(visible=True, showgrid=False, color=colors["muted"],
+                      row=len(SMULT_SENSORS), col=1)
+    return fig
+
+
 def priority_table(cols, records, row_h, head_h=32, sort_col=None):
     """table_placeholder()와 같은 헤더/셀 스타일을 쓰되, 자리표시 막대 대신
     load_priority_table()이 만든 실제 자산별 값을 채운다. table_placeholder()
@@ -874,31 +949,28 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
                "padding": "16px", "display": "flex", "alignItems": "center", "gap": "16px"},
     )
 
-    sensors = ["베어링 온도 (°C)", "모터 온도 (°C)", "수평 진동 [단위]", "수직 진동 [단위]",
-               "오일 압력 [단위]", "부하율 (%)", "회전 속도 [단위]", "소비 전력 (kW)"]
-    panels = [html.Div([html.Div(s, style={"width": "160px", "flexShrink": "0", "display": "flex",
-                                            "alignItems": "center", **LABEL_12}),
-                        slot(f"패널 {i+1}", "가변", 48)],
-                       style={"height": "48px", "display": "flex", "gap": "8px", "flexShrink": "0"})
-              for i, s in enumerate(sensors)]
-    band_note = html.Div("고장 표시일 세로 밴드 (자리 표시)",
-                          style={**MICRO_11, "position": "absolute", "left": "804px", "top": "2px",
-                                 "background": CARD, "padding": "0 4px"})
-    band = html.Div(style={"position": "absolute", "left": "760px", "top": "0", "width": "36px",
-                            "height": "412px", "boxSizing": "border-box",
-                            "borderLeft": f"1px dashed {INK2}", "borderRight": f"1px dashed {INK2}"})
-    sm_body = html.Div(
-        [html.Div([*panels, band, band_note],
-                  style={"display": "flex", "flexDirection": "column", "gap": "4px", "height": "412px",
-                         "position": "relative"}),
-         html.Div([html.Div([note("8 × 48 + 7 × 4 + 40 = 452")],
-                            style={"width": "160px", "flexShrink": "0", "display": "flex",
-                                   "alignItems": "center"}),
-                   slot("공유 x축 밴드 · 날짜", "가변", 40)],
-                  style={"display": "flex", "gap": "8px", "height": "40px"})],
+    # 라벨 열은 HTML로 두고 오른쪽 차트만 Plotly로 그린다. 패널 높이·간격이
+    # _smult_figure()의 subplot 치수(SMULT_*)와 같아야 1:1로 정렬된다.
+    sensor_labels = html.Div(
+        [html.Div(label, style={"height": f"{SMULT_PANEL_H}px", "flexShrink": "0",
+                                 "display": "flex", "alignItems": "center", **LABEL_12})
+         for label, _ in SMULT_SENSORS]
+        + [html.Div(note("8 × 48 + 7 × 4 + 40 = 452"),
+                    style={"height": f"{SMULT_AXIS_H}px", "flexShrink": "0", "display": "flex",
+                           "alignItems": "center"})],
+        style={"width": "160px", "flexShrink": "0", "display": "flex", "flexDirection": "column",
+               "gap": f"{SMULT_GAP}px"},
+    )
+    sm_body = hstack(
+        [sensor_labels,
+         dcc.Graph(id={"type": "smult-chart", "index": "screen2"},
+                   figure=_smult_figure(load_asset_sensor_series(asset_tag), "light"),
+                   config={"displayModeBar": False, "responsive": True},
+                   style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"})],
+        8, style={"height": f"{SMULT_BODY_H}px"},
     )
     smult = card("센서 8종 스몰 멀티플", 1248, 520, sm_body,
-                 right=note("x축 공유 · 패널 48 + 간격 4"))
+                 right=note("x축 공유 · 밴드 = 위험 기준선 초과일"))
 
     anom = card("이상 점수 추이", 616, 144, slot("라인 + 임계선", 584, 76), right=note("임계선 포함"))
     clus = card("군집 위치", 616, 144, slot("산점도 · 군집 1 / 2 / 3", 584, 76), right=note("선택 기계 표시"))
@@ -1694,6 +1766,21 @@ def apply_theme(theme):
 )
 def recolor_trend_chart(theme, _active_tab):
     return [_trend_figure(load_failure_trend(), theme or "light")]
+
+
+# 화면② 스몰 멀티플도 같은 방식으로 재색칠한다. trend-chart와 id 타입을 나눠
+# 둬야 두 콜백의 Output 매칭 개수가 서로 섞이지 않는다. 기계 전환은 이미
+# render_screen이 화면②를 다시 그리므로 selected-asset-store는 State로만 읽는다.
+@app.callback(
+    Output({"type": "smult-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+    State("selected-asset-store", "data"),
+)
+def recolor_smult_chart(theme, _active_tab, asset_tag):
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
+    return [_smult_figure(load_asset_sensor_series(asset_tag), theme or "light")]
 
 
 # <html>에도 같은 클래스를 얹는다. #root는 1920 고정폭이라 넓은 화면에서

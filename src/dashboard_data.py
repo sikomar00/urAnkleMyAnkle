@@ -267,6 +267,30 @@ def load_asset_detail_kpis(asset_tag: str) -> dict:
     }
 
 
+def load_asset_sensor_series(asset_tag: str) -> pd.DataFrame:
+    """화면 ② "센서 8종 스몰 멀티플" — 선택 자산의 전체 기간 센서 시계열.
+
+    Returns:
+        transaction_date, 센서 8종(SENSOR_COLUMNS 순서), is_failure_day
+        (failure_points > 0), is_high_risk_day(위험 기준선 초과 = severity_level
+        "high_risk") 열을 가진 DataFrame. 날짜 오름차순.
+
+    Raises:
+        ValueError: asset_tag가 데이터에 없을 때.
+    """
+    assets = load_asset_list()
+    if asset_tag not in assets:
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+
+    daily = _daily()
+    asset_daily = daily[daily[ASSET_COLUMN].eq(asset_tag)].sort_values(DATE_COLUMN)
+
+    series = asset_daily[[DATE_COLUMN, *SENSOR_COLUMNS]].reset_index(drop=True)
+    series["is_failure_day"] = (asset_daily["failure_points"] > 0).to_numpy()
+    series["is_high_risk_day"] = (asset_daily["severity_level"] == "high_risk").to_numpy()
+    return series
+
+
 def load_data_dictionary() -> list[dict]:
     """화면 ④ "데이터 사전" 22행을 CSV 컬럼 순서 그대로 반환한다."""
     raw = _load_raw()
