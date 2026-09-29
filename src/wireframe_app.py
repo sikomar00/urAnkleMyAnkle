@@ -122,6 +122,12 @@ THEME_CSS = """
 .theme-dark .dash-options-list-option.selected { background:var(--pf-sunken) !important; }
 .theme-dark .dash-dropdown-trigger-icon { color:var(--pf-ink-2) !important; }
 
+/* 테마 버튼은 텍스트 없이 아이콘만 표시한다 — "누르면 될 상태"를 보여주는
+   관례(라이트에서는 다크로 바꾸는 아이콘, 다크에서는 라이트로 바꾸는
+   아이콘). 아이콘 라이브러리 의존성 없이 유니코드 글리프만 쓴다. */
+.theme-light #theme-btn::before { content: "☾"; }
+.theme-dark  #theme-btn::before { content: "☀"; }
+
 /* dcc.Tabs는 컨테이너를 100% 폭으로 잡고 탭 5개를 균등 분배(flex:1)한다.
    그대로 두면 "⑤ 보고서 요약"처럼 긴 라벨이 잘린다. 바깥 컨테이너는
    내용 폭으로, 각 탭은 자기 글자 폭으로 되돌린다. */
@@ -207,8 +213,8 @@ DEFAULT_FILTERS = {
 # 보고서 대상(독자)별 산출물 구성
 #
 # 인증·역할 관리 시스템이 없으므로 "로그인 사용자의 직책"을 알 방법이 없다.
-# 그래서 역할을 추론하지 않고 헤더에서 직접 고르게 한다. 인증이 붙으면
-# report-audience-dd의 기본값을 세션 역할로 채우고 드롭다운을 숨기면 된다.
+# 그래서 역할을 추론하지 않고 내보내기 시점에 헤더에서 직접 고르게 한다.
+# 인증이 붙으면 export-dd의 기본값을 세션 역할로 채우면 된다.
 #
 # sections = 해당 독자의 보고서에 들어가는 섹션. 화면 ①~⑤ 중 어디서 오는지
 # 명시해 둔다 — 운영(①②)과 최종보고(⑤)의 분리가 이 표에서 실제로 갈린다.
@@ -524,7 +530,7 @@ def empty_state(title, reason, w, h):
 # ============================================================
 
 def app_header():
-    """좌: 시스템명·기준일 / 중앙: 화면 탭 4개(dcc.Tabs) / 우: 경보·배지·토글·내보내기."""
+    """좌: 시스템명·기준일 / 중앙: 화면 탭 4개(dcc.Tabs) / 우: 내보내기·테마 토글."""
     tab_style = {"height": "56px", "boxSizing": "border-box", "padding": "0 11px", "display": "flex",
                  "alignItems": "center", "whiteSpace": "nowrap", "flexShrink": "0",
                  "fontSize": "14px", "lineHeight": "20px", "fontWeight": "500",
@@ -532,7 +538,8 @@ def app_header():
     tab_selected_style = {**tab_style, "fontWeight": "600", "color": INK, "borderBottom": f"2px solid {INK}"}
 
     left = html.Div(
-        [slot("시스템명 · title-16", 180, 28),
+        [html.Span("산업 기계 센서 기반 고장 위험 예측",
+                    style={"fontSize": "16px", "fontWeight": "600", "color": INK, "whiteSpace": "nowrap"}),
          html.Div([html.Span("데이터 기준일", style=LABEL_12),
                    html.Span(load_data_reference_date(), style=NUM_12)],
                   style={"display": "flex", "alignItems": "center", "gap": "6px"}),
@@ -545,32 +552,24 @@ def app_header():
                   for tid, label in SCREENS],
         style={"height": "56px"},
     )
+    export_options = [
+        {"label": f"{fmt_label} · {aud['label']}", "value": f"{fmt_value}:{aud_key}"}
+        for fmt_label, fmt_value in [("PDF", "pdf"), ("Excel", "xlsx")]
+        for aud_key, aud in REPORT_AUDIENCES.items()
+    ]
     right = html.Div(
-        [html.Div([html.Span("경보", style=LABEL_12), slot("카운터", 40, 24)],
-                   style={"display": "flex", "alignItems": "center", "gap": "4px", "flexShrink": "0"}),
-         html.Span("합성 데이터 · 교육용",
-                    style={"height": "24px", "boxSizing": "border-box", "padding": "0 8px",
-                           "border": f"1px solid {CTRL}", "borderRadius": "2px", "display": "inline-flex",
-                           "alignItems": "center", "fontSize": "11px", "lineHeight": "14px",
-                           "fontWeight": "500", "color": INK, "whiteSpace": "nowrap"}),
-         # 인증·역할 관리 시스템이 없으므로 보고서 대상을 여기서 직접 고른다.
-         html.Div(
-             [html.Span("대상", style={**LABEL_12, "whiteSpace": "nowrap"}),
-              dcc.Dropdown(
-                  id="report-audience-dd",
-                  options=[{"label": v["label"], "value": k} for k, v in REPORT_AUDIENCES.items()],
-                  value=DEFAULT_AUDIENCE, clearable=False,
-                  style={"width": "152px", "fontFamily": "inherit", "fontSize": "13px"},
-              )],
-             style={"display": "flex", "alignItems": "center", "gap": "4px", "flexShrink": "0"},
+        [dcc.Dropdown(
+             id="export-dd",
+             options=export_options,
+             value=f"pdf:{DEFAULT_AUDIENCE}", clearable=False,
+             style={"width": "220px", "fontFamily": "inherit", "fontSize": "13px"},
          ),
-         html.Button("PDF", id="export-pdf-btn", n_clicks=0, style=btn_style(w=52)),
-         html.Button("Excel", id="export-xlsx-btn", n_clicks=0, style=btn_style(w=60)),
-         html.Button("테마 전환", id="theme-btn", n_clicks=0, style=btn_style(w=104)),
+         html.Button("", id="theme-btn", n_clicks=0, title="테마 전환",
+                     style=btn_style(w=32, extra={"padding": "0", "textAlign": "center", "fontSize": "16px"})),
          dcc.Download(id="report-download"),
          dcc.Download(id="table-download")],
         style={"display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "8px",
-               # overflow:hidden을 여기 두면 "보고서 대상" 드롭다운 팝업까지
+               # overflow:hidden을 여기 두면 "내보내기" 드롭다운 팝업까지
                # 잘라버릴 수 있다(설치된 Dash 버전에 따라 팝업이 position:fixed가
                # 아니라 absolute일 수 있음) — 가로 폭은 이미 자식 실측으로
                # 맞춰뒀으니 clip 없이도 넘치지 않는다.
@@ -1971,13 +1970,12 @@ app.layout = html.Div(
     Output("screen-content", "children"),
     Input("screen-tabs", "value"),
     Input("seg-store", "data"),
-    Input("report-audience-dd", "value"),
     Input("prio-sort-store", "data"),
     Input("selected-asset-store", "data"),
     Input("selected-family-store", "data"),
 )
-def render_screen(active, seg_state, audience, prio_sort, selected_asset, selected_family):
-    kwargs = {"seg_state": seg_state, "audience": audience or DEFAULT_AUDIENCE}
+def render_screen(active, seg_state, prio_sort, selected_asset, selected_family):
+    kwargs = {"seg_state": seg_state, "audience": DEFAULT_AUDIENCE}
     if active == "1":
         kwargs["prio_sort"] = prio_sort or DEFAULT_PRIO_SORT
     if active == "2":
@@ -2050,12 +2048,11 @@ def toggle_theme(_n, current):
 
 @app.callback(
     Output("root", "className"),
-    Output("theme-btn", "children"),
     Input("theme-store", "data"),
 )
 def apply_theme(theme):
     theme = theme if theme in ("light", "dark") else "light"
-    return f"theme-{theme}", f"테마 · {'다크' if theme == 'dark' else '라이트'}"
+    return f"theme-{theme}"
 
 
 # 화면⑤ "고장·위험 추세" 차트 전용 재색칠 — render_screen과 무관한 별도
@@ -2305,20 +2302,18 @@ def drill_failrate_to_priority(n_clicks_list, current):
 @app.callback(
     Output("report-download", "data"),
     Output("action-echo", "children", allow_duplicate=True),
-    Input("export-pdf-btn", "n_clicks"),
-    Input("export-xlsx-btn", "n_clicks"),
-    State("report-audience-dd", "value"),
+    Input("export-dd", "value"),
     State("filter-store", "data"),
     State("seg-store", "data"),
     prevent_initial_call=True,
 )
-def export_report(_pdf, _xlsx, audience, filters, seg_state):
-    audience = audience or DEFAULT_AUDIENCE
+def export_report(export_value, filters, seg_state):
+    fmt, audience = (export_value or f"pdf:{DEFAULT_AUDIENCE}").split(":")
     aud = REPORT_AUDIENCES[audience]
     stamp = datetime.now().strftime("%Y%m%d-%H%M")
     base = f"설비모니터링_보고서_{audience}_{stamp}"
     try:
-        if ctx.triggered_id == "export-pdf-btn":
+        if fmt == "pdf":
             payload, name, mime = build_report_pdf(filters, seg_state, audience), f"{base}.pdf", "application/pdf"
         else:
             payload, name, mime = (
