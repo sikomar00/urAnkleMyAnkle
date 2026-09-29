@@ -68,7 +68,9 @@ from .audit_service import (  # noqa: E402
     change_admin_password, create_audit_tables, ensure_dashboard_admin, log_failure, record_action,
     record_error, sync_if_csv_changed, verify_admin,
 )
-from .dashboard_auth import install_auth  # noqa: E402
+from .dashboard_auth import (  # noqa: E402
+    current_session_state, extend_admin_session, install_auth,
+)
 
 # ============================================================
 # 디자인 토큰 (Plantfloor, 그레이스케일만 — 계열/상태/강조 색은 쓰지 않는다)
@@ -568,7 +570,7 @@ def app_header():
          html.Button("Excel", id="export-xlsx-btn", n_clicks=0, style=btn_style(w=60)),
          html.Button("테마 전환", id="theme-btn", n_clicks=0, style=btn_style(w=104)),
          html.Details([
-             html.Summary(html.Span("관", id="profile-display"),
+             html.Summary(html.Span("관", id="profile-display"), id="profile-menu-toggle",
                           title="마이 프로필",
                           style={"listStyle": "none", "width": "34px", "height": "34px",
                                  "borderRadius": "50%", "background": INK, "color": CARD,
@@ -576,11 +578,23 @@ def app_header():
                                  "fontSize": "13px", "fontWeight": "700"}),
              html.Div([
                  html.Div("마이 프로필", style={"fontWeight": "700", "marginBottom": "8px"}),
+                 html.Div(["아이디 · ", html.Span(id="profile-login-id")],
+                          style={"fontSize": "12px", "marginBottom": "6px"}),
+                 html.Div([
+                     html.Span(["남은 시간 · ", html.Span("10:00", id="session-remaining")]),
+                     html.Button(html.Img(src=SESSION_REFRESH_ICON, alt="", style={"width": "19px", "height": "19px", "display": "block"}),
+                             id="session-extend-btn", n_clicks=0,
+                             style={"border": "0", "background": "transparent", "color": "#111",
+                                    "cursor": "pointer", "padding": "0", "marginLeft": "20px"},
+                             title="로그인 시간 10분으로 초기화",
+                             **{"aria-label": "로그인 시간 10분으로 초기화"}),
+                 ], style={"fontSize": "12px", "marginBottom": "8px", "display": "flex",
+                           "alignItems": "center"}),
                  html.Button("비밀번호 변경", id="password-open-btn", n_clicks=0,
                              style={"display": "block", "width": "100%", "padding": "8px", "marginBottom": "5px"}),
                  html.Button("로그아웃", id="logout-btn", n_clicks=0,
                              style={"display": "block", "width": "100%", "padding": "8px"}),
-             ], style={"position": "absolute", "right": "0", "top": "40px", "width": "160px",
+             ], style={"position": "absolute", "right": "0", "top": "40px", "width": "210px",
                        "background": CARD, "color": INK, "border": f"1px solid {HAIR}",
                        "boxShadow": "0 8px 24px #0003", "padding": "10px", "zIndex": 100}),
          ], style={"position": "relative", "flexShrink": "0"}),
@@ -1781,6 +1795,20 @@ install_auth(app.server)
 ADMIN_INPUT_STYLE = {"display": "block", "width": "100%", "boxSizing": "border-box",
                      "marginBottom": "8px", "padding": "7px", "fontSize": "13px"}
 
+# 별도 /assets 요청을 하지 않는 내장 SVG입니다. 로그인 보호 과정에서 아이콘 파일이
+# 401로 막혀 깨진 이미지로 보이는 문제를 피하기 위해 화면 코드에 직접 포함합니다.
+SESSION_REFRESH_ICON = (
+    "data:image/svg+xml;base64,"
+    "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgd2lkdGg9"
+    "IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxMTExMTEiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tl"
+    "LWxpbmVjYXA9ImJ1dHQiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiPjxkZWZzPjxtYXJrZXIgaWQ9ImFycm93LWhlYWQi"
+    "IG1hcmtlcldpZHRoPSIxNiIgbWFya2VySGVpZ2h0PSIxNiIgcmVmWD0iMTMiIHJlZlk9IjgiIG9yaWVudD0iYXV0byIg"
+    "bWFya2VyVW5pdHM9InVzZXJTcGFjZU9uVXNlIj48cGF0aCBkPSJNMCAwIDE2IDggMCAxNloiIGZpbGw9IiMxMTExMTEi"
+    "IHN0cm9rZT0ibm9uZSIvPjwvbWFya2VyPjwvZGVmcz48cGF0aCBkPSJNNTIgMjVDNDcgMTMgMzQgOSAyNCAxNCAxNiAx"
+    "OCAxMSAyNSAxMSAzNCIgbWFya2VyLWVuZD0idXJsKCNhcnJvdy1oZWFkKSIvPjxwYXRoIGQ9Ik0xMiA0MEMxNyA1MiAz"
+    "MCA1NiA0MCA1MSA0OCA0NyA1MyA0MCA1MyAzMSIgbWFya2VyLWVuZD0idXJsKCNhcnJvdy1oZWFkKSIvPjwvc3ZnPg=="
+)
+
 app.layout = html.Div(
     [
         # storage_type="local" → 새로고침·재접속 후에도 마지막 선택이 남는다.
@@ -1794,23 +1822,90 @@ app.layout = html.Div(
         dcc.Store(id="theme-store", data="light", storage_type="local"),
         dcc.Store(id="audit-sync-status"),
         dcc.Store(id="audit-audience-event"),
+        # 서버가 발급한 만료 시각만 담는다. 비밀번호·키는 브라우저에 두지 않는다.
+        dcc.Store(id="session-state"),
+        dcc.Store(id="session-prompt-state", data={"shown": False}),
         dcc.Interval(id="audit-csv-interval", interval=60_000, n_intervals=0),
+        dcc.Interval(id="session-timer", interval=1_000, n_intervals=0),
         dcc.Location(id="auth-redirect", refresh=True),
         # 이전 콜백의 State 식별자는 유지하되 사용자 입력은 제거한다.
         # 실제 actor_id는 audit_service가 검증된 Flask 세션에서 읽는다.
         dcc.Input(id="actor-id-input", type="hidden", value=""),
+        # 로그아웃 확인 창과 같은 형식의 중앙 비밀번호 변경 팝업입니다.
         html.Div(id="password-panel", children=[
-            html.H3("비밀번호 변경", style={"marginTop": 0}),
-            html.P("현재 비밀번호를 확인한 뒤 새 비밀번호로 바꿉니다."),
-            dcc.Input(id="password-current", type="password", placeholder="현재 비밀번호", style=ADMIN_INPUT_STYLE),
-            dcc.Input(id="password-new", type="password", placeholder="새 비밀번호 (4자 이상)", style=ADMIN_INPUT_STYLE),
-            dcc.Input(id="password-confirm", type="password", placeholder="새 비밀번호 다시 입력", style=ADMIN_INPUT_STYLE),
-            html.Button("변경", id="password-save-btn", n_clicks=0, style={"marginRight": "8px"}),
-            html.Button("닫기", id="password-close-btn", n_clicks=0),
-            html.Div(id="password-result", role="status", style={"marginTop": "10px"}),
-        ], style={"display": "none", "position": "fixed", "right": "24px", "top": "70px",
-                  "zIndex": 100, "width": "330px", "padding": "16px", "background": "#fff",
-                  "color": "#222", "border": "1px solid #999", "boxShadow": "0 8px 30px #0003"}),
+            html.Div([
+                html.H3("비밀번호 변경", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
+                html.P("현재 비밀번호를 확인한 뒤 새 비밀번호로 바꿉니다.",
+                       style={"marginBottom": "18px", "textAlign": "center"}),
+                dcc.Input(id="password-current", type="password", placeholder="현재 비밀번호", style=ADMIN_INPUT_STYLE),
+                dcc.Input(id="password-new", type="password", placeholder="새 비밀번호 (4자 이상)", style=ADMIN_INPUT_STYLE),
+                dcc.Input(id="password-confirm", type="password", placeholder="새 비밀번호 다시 입력", style=ADMIN_INPUT_STYLE),
+                html.Div([
+                    html.Button("변경", id="password-save-btn", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
+                                       "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                    html.Button("닫기", id="password-close-btn", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
+                                       "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                ], style={"display": "flex", "justifyContent": "center", "gap": "10px", "marginTop": "18px"}),
+                html.Div(id="password-result", role="status",
+                         style={"marginTop": "12px", "minHeight": "18px", "textAlign": "center", "color": "#b42318"}),
+            ], style={"width": "360px", "background": "#fff", "color": "#222", "padding": "22px",
+                      "borderRadius": "10px", "boxShadow": "0 12px 40px #0005"}),
+        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 300,
+                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
+        html.Div(id="session-expiry-modal", children=[
+            html.Div([
+                html.H3("로그인 시간 연장", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
+                html.P("로그인 시간이 곧 만료됩니다. 계속 사용하시겠습니까?",
+                       style={"marginBottom": "26px", "textAlign": "center"}),
+                html.Div([
+                    html.Button("예 (10초)", id="session-modal-extend-btn", n_clicks=0,
+                                style={"minWidth": "128px", "padding": "11px 18px", "border": "1px solid #2563eb",
+                                       "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                    html.Button("아니오", id="session-modal-logout-btn", n_clicks=0,
+                                style={"minWidth": "110px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
+                                       "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                ], style={"display": "flex", "justifyContent": "center", "gap": "10px"}),
+            ], style={"width": "360px", "background": "#fff", "color": "#222", "padding": "22px",
+                      "borderRadius": "10px", "boxShadow": "0 12px 40px #0005", "textAlign": "center"}),
+        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 300,
+                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
+        html.Div(id="logout-confirm-modal", children=[
+            html.Div([
+                html.H3("로그아웃", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
+                html.P("로그아웃하시겠습니까?", style={"marginBottom": "26px", "textAlign": "center"}),
+                html.Div([
+                    html.Button("예", id="logout-confirm-yes-btn", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
+                                       "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                    html.Button("아니오", id="logout-confirm-no-btn", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
+                                       "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                ], style={"display": "flex", "justifyContent": "center", "gap": "10px"}),
+            ], style={"width": "330px", "background": "#fff", "color": "#222", "padding": "22px",
+                      "borderRadius": "10px", "boxShadow": "0 12px 40px #0005", "textAlign": "center"}),
+        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 310,
+                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
+        html.Div(id="password-success-modal", children=[
+            html.Div([
+                html.H3("비밀번호 변경 완료", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
+                html.P("비밀번호가 변경되었습니다. 다시 로그인해 주세요.",
+                       style={"marginBottom": "26px", "textAlign": "center"}),
+                html.Button("확인", id="password-success-confirm-btn", n_clicks=0,
+                            style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
+                                   "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
+                                   "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+            ], style={"width": "360px", "background": "#fff", "color": "#222", "padding": "22px",
+                      "borderRadius": "10px", "boxShadow": "0 12px 40px #0005", "textAlign": "center"}),
+        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 320,
+                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
         app_header(),
         filter_bar(),
         html.Main(
@@ -2240,14 +2335,86 @@ def export_dtable_csv(_clicks, actor_id):
               prevent_initial_call=True)
 def toggle_password_panel(_open, _close, style):
     updated = dict(style or {})
-    updated["display"] = "none" if ctx.triggered_id == "password-close-btn" else "block"
+    updated["display"] = "none" if ctx.triggered_id == "password-close-btn" else "flex"
     return updated
 
 
-@app.callback(Output("profile-display", "children"), Input("screen-tabs", "value"))
+@app.callback(Output("profile-display", "children"), Output("profile-login-id", "children"),
+              Output("session-state", "data"), Input("screen-tabs", "value"))
 def display_profile(_active_tab):
     login_id = str(session.get("admin_id", "관리자"))
-    return login_id[:2].upper()
+    return login_id[:2].upper(), login_id, current_session_state()
+
+
+# 브라우저는 초 단위 카운트다운만 표시한다. 실제 로그인 허용·차단은
+# dashboard_auth.py의 Flask before_request가 서버 시각으로 다시 판단한다.
+app.clientside_callback(
+    """function(_tick, sessionState, promptState) {
+        const hidden = {display: 'none'};
+        if (!sessionState || !sessionState.expires_at_ms) {
+            return [window.dash_clientside.no_update, hidden,
+                    window.dash_clientside.no_update, window.dash_clientside.no_update,
+                    window.dash_clientside.no_update];
+        }
+        const remaining = Math.max(0, Math.ceil((sessionState.expires_at_ms - Date.now()) / 1000));
+        const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
+        const seconds = String(remaining % 60).padStart(2, '0');
+        const label = minutes + ':' + seconds;
+        if (remaining === 0) {
+            window.location.assign('/login');
+            return [label, hidden, {shown: true}, '/login', '예 (0초)'];
+        }
+        const shown = Boolean(promptState && promptState.shown);
+        if (remaining <= 10) {
+            const modalStyle = shown ? window.dash_clientside.no_update :
+                {display: 'flex', position: 'fixed', inset: 0, zIndex: 300,
+                 background: '#0006', alignItems: 'center', justifyContent: 'center'};
+            return [label, modalStyle, {shown: true}, window.dash_clientside.no_update,
+                    '예 (' + remaining + '초)'];
+        }
+        return [label, window.dash_clientside.no_update,
+                window.dash_clientside.no_update, window.dash_clientside.no_update,
+                window.dash_clientside.no_update];
+    }""",
+    Output("session-remaining", "children"),
+    Output("session-expiry-modal", "style"),
+    Output("session-prompt-state", "data"),
+    Output("auth-redirect", "href", allow_duplicate=True),
+    Output("session-modal-extend-btn", "children"),
+    Input("session-timer", "n_intervals"),
+    State("session-state", "data"),
+    State("session-prompt-state", "data"),
+    prevent_initial_call=True,
+)
+
+
+@app.callback(Output("session-state", "data", allow_duplicate=True),
+              Output("session-prompt-state", "data", allow_duplicate=True),
+              Output("session-expiry-modal", "style", allow_duplicate=True),
+              Input("session-extend-btn", "n_clicks"),
+              Input("session-modal-extend-btn", "n_clicks"),
+              prevent_initial_call=True)
+def extend_login_session(profile_clicks, modal_clicks):
+    """프로필·확인 창 어느 쪽에서 눌러도 같은 서버 세션을 10분 연장한다."""
+    if not (profile_clicks or modal_clicks):
+        return no_update, no_update, no_update
+    state = extend_admin_session()
+    if state is None:
+        return no_update, no_update, no_update
+    return state, {"shown": False}, {"display": "none"}
+
+
+@app.callback(Output("logout-confirm-modal", "style"),
+              Input("logout-btn", "n_clicks"), Input("logout-confirm-no-btn", "n_clicks"),
+              prevent_initial_call=True)
+def toggle_logout_confirmation(logout_clicks, cancel_clicks):
+    """로그아웃을 누른 즉시 세션을 지우지 않고 먼저 확인을 받는다."""
+    if not (logout_clicks or cancel_clicks):
+        return no_update
+    if ctx.triggered_id == "logout-confirm-no-btn":
+        return {"display": "none"}
+    return {"display": "flex", "position": "fixed", "inset": 0, "zIndex": 310,
+            "background": "#0006", "alignItems": "center", "justifyContent": "center"}
 
 
 @app.callback(Output("audit-audience-event", "data"),
@@ -2278,7 +2445,7 @@ got_request_exception.connect(_log_unhandled_exception, app.server, weak=False)
 
 @app.callback(Output("password-result", "children"), Output("password-current", "value"),
               Output("password-new", "value"), Output("password-confirm", "value"),
-              Output("auth-redirect", "href", allow_duplicate=True),
+              Output("password-success-modal", "style"),
               Input("password-save-btn", "n_clicks"),
               State("password-current", "value"), State("password-new", "value"),
               State("password-confirm", "value"), prevent_initial_call=True)
@@ -2296,9 +2463,8 @@ def update_admin_password(n_clicks, current, new, confirm):
             record_action("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", status="BLOCKED",
                           block_reason="현재 비밀번호 불일치")
             return "현재 비밀번호가 올바르지 않습니다.", "", "", "", no_update
-        record_action("ACT_LOGOUT", "로그아웃", detail={"reason": "password_changed"})
-        session.clear()
-        return "비밀번호가 변경되었습니다. 다시 로그인해 주세요.", "", "", "", "/login"
+        return "", "", "", "", {"display": "flex", "position": "fixed", "inset": 0, "zIndex": 320,
+                                      "background": "#0006", "alignItems": "center", "justifyContent": "center"}
     except ValueError as exc:
         record_action("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", status="BLOCKED",
                       block_reason=type(exc).__name__)
@@ -2310,11 +2476,19 @@ def update_admin_password(n_clicks, current, new, confirm):
 
 
 @app.callback(Output("auth-redirect", "href", allow_duplicate=True),
-              Input("logout-btn", "n_clicks"), prevent_initial_call=True)
-def logout_admin(n_clicks):
-    if not n_clicks:
+              Input("logout-confirm-yes-btn", "n_clicks"),
+              Input("session-modal-logout-btn", "n_clicks"),
+              Input("password-success-confirm-btn", "n_clicks"), prevent_initial_call=True)
+def logout_admin(confirm_clicks, session_decline_clicks, password_confirm_clicks):
+    if not (confirm_clicks or session_decline_clicks or password_confirm_clicks):
         return no_update
-    record_action("ACT_LOGOUT", "로그아웃")
+    reason_by_button = {
+        "logout-confirm-yes-btn": "manual",
+        "session-modal-logout-btn": "session_extend_declined",
+        "password-success-confirm-btn": "password_changed",
+    }
+    reason = reason_by_button[ctx.triggered_id]
+    record_action("ACT_LOGOUT", "로그아웃", detail={"reason": reason})
     session.clear()
     return "/login"
 

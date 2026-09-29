@@ -2,6 +2,7 @@
 
 import base64
 import re
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -37,14 +38,19 @@ def test_login_blocks_dash_and_uses_registered_admin(monkeypatch):
     wrong = client.post("/login", data={"csrf_token": csrf, "login_id": "admin01",
                                          "password": "wrong"})
     assert wrong.status_code == 401
+    assert b"login-error-modal" in wrong.data
+    assert "아이디 또는 비밀번호가 올바르지 않습니다.".encode() in wrong.data
     success = client.post("/login", data={"csrf_token": csrf, "login_id": "admin01",
                                            "password": "long-password-123"})
     assert success.status_code == 302
     assert client.get("/").status_code == 200
     assert client.get("/_dash-layout").status_code == 200
+    profile_output = next(key for key in app.callback_map if key.startswith("..profile-display.children"))
     profile = client.post("/_dash-update-component", json={
-        "output": "profile-display.children",
-        "outputs": {"id": "profile-display", "property": "children"},
+        "output": profile_output,
+        "outputs": [{"id": component, "property": property_name} for component, property_name in (
+            ("profile-display", "children"), ("profile-login-id", "children"),
+            ("session-state", "data"))],
         "inputs": [{"id": "screen-tabs", "property": "value", "value": "1"}],
         "state": [], "changedPropIds": ["screen-tabs.value"],
     })
@@ -59,15 +65,30 @@ def test_login_blocks_dash_and_uses_registered_admin(monkeypatch):
         assert [(row.actor_id, row.result_status) for row in rows] == [
             ("ANONYMOUS", "BLOCKED"), ("admin01", "SUCCESS")]
         assert db.scalar(select(ActionLog.actor_id).where(ActionLog.event_code == "ACT_TAB_OPEN")) == "admin01"
+    logout_open_output = next(
+        key for key, spec in app.callback_map.items()
+        if key.startswith("logout-confirm-modal.style")
+    )
+    logout_open = client.post("/_dash-update-component", json={
+        "output": logout_open_output,
+        "outputs": {"id": "logout-confirm-modal", "property": "style"},
+        "inputs": [{"id": "logout-btn", "property": "n_clicks", "value": 1},
+                   {"id": "logout-confirm-no-btn", "property": "n_clicks", "value": 0}],
+        "state": [], "changedPropIds": ["logout-btn.n_clicks"],
+    })
+    assert logout_open.status_code == 200
+    assert client.get("/_dash-layout").status_code == 200
     logout_output = next(
         key for key, spec in app.callback_map.items()
-        if key.startswith("auth-redirect.href@") and spec["inputs"][0]["id"] == "logout-btn"
+        if key.startswith("auth-redirect.href@") and spec["inputs"][0]["id"] == "logout-confirm-yes-btn"
     )
     logout = client.post("/_dash-update-component", json={
         "output": logout_output,
         "outputs": {"id": "auth-redirect", "property": "href"},
-        "inputs": [{"id": "logout-btn", "property": "n_clicks", "value": 1}],
-        "state": [], "changedPropIds": ["logout-btn.n_clicks"],
+        "inputs": [{"id": "logout-confirm-yes-btn", "property": "n_clicks", "value": 1},
+                   {"id": "session-modal-logout-btn", "property": "n_clicks", "value": 0},
+                   {"id": "password-success-confirm-btn", "property": "n_clicks", "value": 0}],
+        "state": [], "changedPropIds": ["logout-confirm-yes-btn.n_clicks"],
     })
     assert logout.status_code == 200
     assert client.get("/_dash-layout").status_code == 401
@@ -91,7 +112,49 @@ def test_password_change_rehashes_and_does_not_log_secrets(monkeypatch):
         assert "new-password-123" not in row.action_detail
 
 
-def test_profile_password_change_callback_logs_out(monkeypatch):
+def test_session_extend_and_expiry_are_logged_once(monkeypatch):
+    engine = create_engine("sqlite://", poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    monkeypatch.setattr(audit_service, "get_engine", lambda: engine)
+    monkeypatch.setenv("DASHBOARD_AES_KEY", base64.b64encode(bytes(range(32))).decode())
+    monkeypatch.setenv("DASHBOARD_SETUP_TOKEN", "test-only-setup")
+    audit_service.register_first_admin("test-only-setup", "admin01", "long-password-123",
+                                       "테스트", "010", "test@example.com")
+    client = app.server.test_client()
+    csrf = _csrf(client.get("/login").data)
+    assert client.post("/login", data={"csrf_token": csrf, "login_id": "admin01",
+                                        "password": "long-password-123"}).status_code == 302
+    with client.session_transaction() as browser_session:
+        browser_session["expires_at"] = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
+        before_extend = datetime.fromisoformat(browser_session["expires_at"])
+
+    extend_output = next(
+        key for key, spec in app.callback_map.items()
+        if any(item["id"] == "session-extend-btn" for item in spec["inputs"])
+    )
+    response = client.post("/_dash-update-component", json={
+        "output": extend_output,
+        "outputs": [{"id": component, "property": property_name} for component, property_name in (
+            ("session-state", "data"), ("session-prompt-state", "data"),
+            ("session-expiry-modal", "style"))],
+        "inputs": [{"id": "session-extend-btn", "property": "n_clicks", "value": 1},
+                   {"id": "session-modal-extend-btn", "property": "n_clicks", "value": 0}],
+        "state": [], "changedPropIds": ["session-extend-btn.n_clicks"],
+    })
+    assert response.status_code == 200
+    with client.session_transaction() as browser_session:
+        assert datetime.fromisoformat(browser_session["expires_at"]) > before_extend
+        browser_session["expires_at"] = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+
+    assert client.get("/").status_code == 302
+    assert client.get("/_dash-layout").status_code == 401
+    with Session(engine) as db:
+        codes = db.scalars(select(ActionLog.event_code).order_by(ActionLog.log_id)).all()
+        assert codes.count("ACT_SESSION_EXTEND") == 1
+        assert codes.count("ACT_SESSION_EXPIRED") == 1
+
+
+def test_profile_password_change_shows_completion_then_logs_out(monkeypatch):
     engine = create_engine("sqlite://", poolclass=StaticPool)
     Base.metadata.create_all(engine)
     monkeypatch.setattr(audit_service, "get_engine", lambda: engine)
@@ -109,7 +172,7 @@ def test_profile_password_change_callback_logs_out(monkeypatch):
         "outputs": [{"id": component, "property": property_name} for component, property_name in (
             ("password-result", "children"), ("password-current", "value"),
             ("password-new", "value"), ("password-confirm", "value"),
-            ("auth-redirect", "href"))],
+            ("password-success-modal", "style"))],
         "inputs": [{"id": "password-save-btn", "property": "n_clicks", "value": 1}],
         "state": [{"id": component, "property": "value", "value": value} for component, value in (
             ("password-current", "long-password-123"),
@@ -118,7 +181,21 @@ def test_profile_password_change_callback_logs_out(monkeypatch):
         "changedPropIds": ["password-save-btn.n_clicks"],
     })
     assert response.status_code == 200
-    assert response.json["response"]["auth-redirect"]["href"] == "/login"
-    assert client.get("/_dash-layout").status_code == 401
+    assert response.json["response"]["password-success-modal"]["style"]["display"] == "flex"
+    assert client.get("/_dash-layout").status_code == 200
     assert not audit_service.verify_admin("admin01", "long-password-123")
     assert audit_service.verify_admin("admin01", "new-password-123")
+    logout_output = next(
+        key for key, spec in app.callback_map.items()
+        if key.startswith("auth-redirect.href@") and spec["inputs"][0]["id"] == "logout-confirm-yes-btn"
+    )
+    confirmed = client.post("/_dash-update-component", json={
+        "output": logout_output,
+        "outputs": {"id": "auth-redirect", "property": "href"},
+        "inputs": [{"id": "logout-confirm-yes-btn", "property": "n_clicks", "value": 0},
+                   {"id": "session-modal-logout-btn", "property": "n_clicks", "value": 0},
+                   {"id": "password-success-confirm-btn", "property": "n_clicks", "value": 1}],
+        "state": [], "changedPropIds": ["password-success-confirm-btn.n_clicks"],
+    })
+    assert confirmed.status_code == 200
+    assert client.get("/_dash-layout").status_code == 401
