@@ -86,3 +86,17 @@ def test_asset_peer_comparison_pairs_and_shape():
 def test_asset_peer_comparison_rejects_unknown_asset():
     with pytest.raises(ValueError):
         dd.load_asset_peer_comparison('AST-9999')
+
+
+def test_asset_failure_onset_trend_uses_most_recent_episode():
+    trend = dd.load_asset_failure_onset_trend('AST-1041')
+    assert trend['episode_start_date'] == '2024-12-24'
+    assert trend['episode_start_date'] != '2022-01-10'
+    assert trend['relative_days'] == [-7, -6, -5, -4, -3, -2, -1, 0]
+    assert trend['temp_bearing_degC'] == [66.4, 68.3, 68.4, 69.4, 66.7, 63.3, 66.9, 69.1]
+    assert len(trend['dates']) == 8
+
+
+def test_asset_failure_onset_trend_rejects_unknown_asset():
+    with pytest.raises(ValueError):
+        dd.load_asset_failure_onset_trend('AST-9999')
