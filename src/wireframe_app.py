@@ -54,6 +54,7 @@ from .dashboard_data import (  # noqa: E402
     load_asset_list,
     load_asset_parts_history,
     load_asset_sensor_series,
+    load_current_classification_actual_rate,
     load_current_classification_metrics,
     load_current_classification_pr_curve_and_confusion,
     load_data_dictionary,
@@ -63,6 +64,7 @@ from .dashboard_data import (  # noqa: E402
     load_family_feature_importance,
     load_family_pr_curve_and_confusion,
     load_family_recurrence_intervals,
+    load_part_failure_actual_rate,
     load_part_failure_metrics,
     load_part_failure_pr_curve_and_confusion,
     load_part_failure_selected_model,
@@ -1147,6 +1149,82 @@ def _model_comparison_table(rows, selected_key, width=742):
                        style={"width": f"{width}px", "tableLayout": "fixed", "borderCollapse": "collapse"})
 
 
+# 화면 ③ "주요 영향 변수" 막대 색 구분 — 새 색상 토큰이 아니라 이 카드
+# 전용으로 도입한 예외다(사용자 명시 지시). 파생 변수(_lag1/_median3/...)는
+# 전부 "<기본 센서명>_<변환>" 형태라 접두사만 봐도 분류된다 — 파생이 늘어나도
+# 매핑을 새로 추가할 필요가 없다.
+FEATURE_COLOR_HEALTH = "#0f766e"    # 건강 센서 — 청록
+FEATURE_COLOR_OPERATING = "#c2660d"  # 운전 조건 — 주황
+_HEALTH_SENSOR_PREFIXES = (
+    "temp_bearing_degC", "temp_motor_degC", "vibration_h_mms", "vibration_v_mms", "oil_pressure_bar",
+)
+_OPERATING_PREFIXES = ("load_pct", "shaft_rpm", "power_consumption_kw")
+_OPERATING_EXACT = {"day_of_week", "is_weekend"}
+
+
+def _feature_color_category(feature: str) -> str:
+    """건강 센서(청록) / 운전 조건(주황) / 장비·부품·날짜(회색, 그 외 전부)."""
+    if feature.startswith(_HEALTH_SENSOR_PREFIXES):
+        return "health"
+    if feature.startswith(_OPERATING_PREFIXES) or feature in _OPERATING_EXACT:
+        return "operating"
+    return "other"
+
+
+_FEATURE_CATEGORY_COLOR = {"health": FEATURE_COLOR_HEALTH, "operating": FEATURE_COLOR_OPERATING, "other": MUTED}
+
+
+def _interpretation_summary(actual_rate, ap, precision, recall):
+    """화면 ③ 성능 카드 바로 아래 "모델 해석 요약" 두 줄 — 현재 선택된
+    과제·모델의 metrics에서 그때그때 계산한다(하드코딩 없음)."""
+    multiplier = ap / actual_rate if actual_rate > 0 else float("inf")
+    found = round(recall * 100)
+    hit = round(precision * 100)
+    line1 = (f"실제 고장률 {actual_rate * 100:.1f}% · AP {ap * 100:.1f}% · "
+             f"무작위 기준 대비 {multiplier:.1f}배")
+    line2 = f"고장 100건 중 약 {found}건을 찾지만, 경고 100건 중 실제 고장은 약 {hit}건"
+    return html.Div(
+        [html.Div(line1, style={"fontSize": "13px", "lineHeight": "20px", "fontWeight": "600", "color": INK}),
+         html.Div(line2, style={"fontSize": "12px", "lineHeight": "18px", "color": INK2})],
+        style={"width": "1880px", "flexShrink": "0"},
+    )
+
+
+def _judgment_verdict(multiplier):
+    if multiplier < 1.2:
+        return "사용 불가 — 무작위 대비 개선 없음"
+    if multiplier < 2.0:
+        return "탐색적 사용 가능 — 점검 후보를 좁히는 보조 수단"
+    return "제한적 운영 검토 가능"
+
+
+def _operational_judgment_body(actual_rate, ap, precision, recall, confusion):
+    """화면 ③ "운영 판단" 카드 — 재발 간격(회고적 통계) 대신 현재 모델의
+    실사용 가능성을 요약한다. 과제 0·2에서만 쓴다(과제 1은 실제 재발 간격
+    히스토그램이 이미 있어 대체하지 않는다)."""
+    multiplier = ap / actual_rate if actual_rate > 0 else float("inf")
+    total = sum(confusion.values())
+    predicted_alert_rate = (confusion["tp"] + confusion["fp"]) / total if total else 0.0
+    rows = [
+        ("실제 고장률", f"{actual_rate * 100:.1f}%"),
+        ("예측 경고율", f"{predicted_alert_rate * 100:.1f}%"),
+        ("AP ÷ 실제 고장률", f"{multiplier:.1f}배"),
+        ("경고 100건당 실제 고장", f"{round(precision * 100)}건"),
+        ("실제 고장 100건당 탐지", f"{round(recall * 100)}건"),
+        ("현재 모델 판정", _judgment_verdict(multiplier)),
+    ]
+    return html.Div(
+        [html.Div([html.Span(k, style={**LABEL_12, "width": "152px", "flexShrink": "0"}),
+                   html.Span(v, style={"fontSize": "12px", "lineHeight": "15px", "color": INK,
+                                        "fontWeight": "600" if k == "현재 모델 판정" else "500"})],
+                  style={"display": "flex", "alignItems": "center", "gap": "8px", "minHeight": "18px"})
+         for k, v in rows]
+        + [html.Div("자동 부품 교체 판단에는 사용할 수 없습니다.",
+                    style={**MICRO_11, "marginTop": "4px"})],
+        style={"display": "flex", "flexDirection": "column", "gap": "3px"},
+    )
+
+
 # ============================================================
 # 화면 ③ 모델·예측 — 툴바 32 / 행 96 / 460 / 272 (마지막 행이 남는 높이 흡수)
 # ============================================================
@@ -1235,10 +1313,17 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
         valid_families = [fr["part_family"] for fr in family_rows]
         family = family if family in valid_families else valid_families[0]
         pr_cm = load_family_pr_curve_and_confusion(asset_tag, family)
+        interp_row = None
     elif task_sel == 0:
         pr_cm = load_current_classification_pr_curve_and_confusion("hist_gradient_boosting")
+        actual_rate = load_current_classification_actual_rate("hist_gradient_boosting")
+        interp_row = _interpretation_summary(actual_rate, current_metrics["average_precision"],
+                                              current_metrics["precision"], current_metrics["recall"])
     else:
         pr_cm = load_part_failure_pr_curve_and_confusion()
+        actual_rate = load_part_failure_actual_rate(selected_model)
+        interp_row = _interpretation_summary(actual_rate, selected_metrics["average_precision"],
+                                              selected_metrics["precision"], selected_metrics["recall"])
 
     if task_sel == 1:
         # 부품군 진단 — mcomp 카드 자리에 선택 자산의 부품군 9종별 표를 넣는다
@@ -1343,27 +1428,40 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
     if task_sel == 1:
         fi_rows = load_family_feature_importance(family)
         max_importance = max(r["importance_mean"] for r in fi_rows)
-        feat_body = html.Div(
+        fi_list = html.Div(
             [html.Div([
                 html.Div(r["feature"], style={"width": "220px", "flexShrink": "0", "fontSize": "12px",
                                                "color": INK, "whiteSpace": "nowrap", "overflow": "hidden",
                                                "textOverflow": "ellipsis"}),
-                html.Div(bar(r["importance_mean"] / max_importance * 100, 8), style={"flexGrow": "1"}),
+                html.Div(style={"flexGrow": "1", "height": "7px", "borderRadius": "2px",
+                                "width": f"{r['importance_mean'] / max_importance * 100}%",
+                                "background": _FEATURE_CATEGORY_COLOR[_feature_color_category(r["feature"])]}),
                 html.Div(f"{r['importance_mean']:.3f}",
                          style={**NUM_12, "width": "56px", "textAlign": "right", "flexShrink": "0"}),
-             ], style={"height": "14px", "display": "flex", "alignItems": "center", "gap": "8px", "flexShrink": "0"})
+             ], style={"height": "12px", "display": "flex", "alignItems": "center", "gap": "8px", "flexShrink": "0"})
              for r in fi_rows],
-            style={"display": "flex", "flexDirection": "column", "gap": "4px"},
+            style={"display": "flex", "flexDirection": "column", "gap": "3px"},
         )
+        legend_dot = lambda color: html.Span(style={"width": "7px", "height": "7px", "borderRadius": "2px",
+                                                      "background": color, "display": "inline-block"})
+        fi_footer = html.Div(
+            [html.Div([legend_dot(FEATURE_COLOR_HEALTH), html.Span("건강 센서", style=MICRO_11),
+                       legend_dot(FEATURE_COLOR_OPERATING), html.Span("운전 조건", style=MICRO_11),
+                       legend_dot(MUTED), html.Span("장비·부품·날짜", style=MICRO_11)],
+                      style={"display": "flex", "alignItems": "center", "gap": "4px", "flexShrink": "0"}),
+             note("중요도는 고장 원인이 아니라 고장과 함께 변화한 운전 상태를 뜻한다.",
+                  {"whiteSpace": "normal", "textAlign": "right"})],
+            style={"display": "flex", "alignItems": "center", "justifyContent": "space-between",
+                   "gap": "12px", "marginTop": "8px", "paddingTop": "6px", "borderTop": f"1px solid {HAIR}"},
+        )
+        feat_body = html.Div([fi_list, fi_footer], style={"display": "flex", "flexDirection": "column"})
+        feat = card("주요 영향 변수 상위 10", 774, 252, feat_body, right=note("10행 · 부품군 자체 속성(자산 무관)"))
     else:
         # prior·로지스틱회귀/랜덤포레스트 모두 변수중요도를 사전 계산해 두지
         # 않았다 — 그럴듯한 값을 새로 만들지 않고 데이터 없음을 그대로 밝힌다.
         feat_body = empty_state(
             "데이터 없음", "이 과제의 모델은 변수중요도를 사전 계산해 두지 않음", 742, 184,
         )
-    if task_sel == 1:
-        feat = card("주요 영향 변수 상위 10", 774, 252, feat_body, right=note("10행 · 부품군 자체 속성(자산 무관)"))
-    else:
         feat = card("주요 영향 변수", 774, 252, feat_body, right=note("데이터 없음"))
 
     slider = html.Div(
@@ -1379,9 +1477,9 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
                              hstack([html.Div(style={"width": "40px"}), slot("x축 · 위험도", "가변", 22)], 0)])
     thr = card("판정 임계값 조정", 616, 252, thr_body, right=slider)
 
-    # 옛 "선행 경보 일수 분포"는 대상 과제("7일 사전 예측")가 "부품군
-    # 진단"으로 바뀌면서 없어졌다 — 이 카드를 "재발 간격"으로 다시
-    # 정의한다(부품군 진단 과제에서만 실제 값, 나머지는 해당 없음).
+    # 과제 1(부품군 진단)은 실제 재발 간격 히스토그램이 이미 있어 그대로 둔다.
+    # 과제 0·2는 원래 "해당 없음"이던 자리를 "운영 판단" 카드로 바꾼다 —
+    # AP 향상배수 기준 규칙으로 지금 이 모델을 실사용에 써도 되는지 요약한다.
     if task_sel == 1:
         intervals = load_family_recurrence_intervals(asset_tag, family)
         if intervals:
@@ -1394,14 +1492,19 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
         else:
             lead_body = empty_state("이 과제에는 해당 없음",
                                      "재발 이력이 2회 미만이라 간격을 계산할 수 없음", 426, 184)
+        lead = card("재발 간격", 458, 252, lead_body,
+                    right=note("과거 재발 간격 — 예측이 아닌 회고적 통계"))
     else:
-        lead_body = empty_state("이 과제에는 해당 없음",
-                                 "재발 간격 지표가 이 과제에는 연결되지 않음", 426, 184)
-    lead = card("재발 간격", 458, 252, lead_body,
-                right=note("과거 재발 간격 — 예측이 아닌 회고적 통계"))
+        lead_body = _operational_judgment_body(actual_rate,
+                                                (current_metrics if task_sel == 0 else selected_metrics)["average_precision"],
+                                                (current_metrics if task_sel == 0 else selected_metrics)["precision"],
+                                                (current_metrics if task_sel == 0 else selected_metrics)["recall"],
+                                                pr_cm["confusion"])
+        lead = card("운영 판단", 458, 252, lead_body, right=note("AP 향상배수 기준 자동 판정"))
     row_c = row(252, [feat, thr, lead])
 
-    return html.Div([toolbar, row_a, row_b, row_c],
+    interp_children = [interp_row] if interp_row is not None else []
+    return html.Div([toolbar, row_a, *interp_children, row_b, row_c],
                      style={"display": "flex", "flexDirection": "column", "gap": f"{GUTTER}px"})
 
 
