@@ -55,6 +55,7 @@ from .dashboard_data import (  # noqa: E402
     load_asset_parts_history,
     load_asset_sensor_series,
     load_current_classification_actual_rate,
+    load_current_classification_at_threshold,
     load_current_classification_metrics,
     load_current_classification_pr_curve_and_confusion,
     load_data_dictionary,
@@ -65,6 +66,7 @@ from .dashboard_data import (  # noqa: E402
     load_family_pr_curve_and_confusion,
     load_family_recurrence_intervals,
     load_part_failure_actual_rate,
+    load_part_failure_at_threshold,
     load_part_failure_metrics,
     load_part_failure_pr_curve_and_confusion,
     load_part_failure_selected_model,
@@ -1198,6 +1200,29 @@ def _judgment_verdict(multiplier):
     return "제한적 운영 검토 가능"
 
 
+def _threshold_metrics_body(metrics, threshold):
+    """화면 ③ "판정 임계값 조정" — 슬라이더가 움직일 때마다 다시 그리는 본문.
+    ``metrics``는 load_*_at_threshold()가 돌려준 dict다."""
+    tp = metrics["predicted_alerts"] - metrics["false_alarms"]
+    actual_positive = tp + metrics["missed_failures"]
+    sentence = (f"임계값 {threshold:.2f} 적용 시 {metrics['total_rows']:,}건 중 "
+                f"{metrics['predicted_alerts']:,}건을 점검 대상으로 선정하며, "
+                f"실제 고장 {actual_positive:,}건 중 {tp:,}건을 탐지합니다.")
+    rows = [
+        ("정밀도", f"{metrics['precision']:.3f}"), ("재현율", f"{metrics['recall']:.3f}"),
+        ("F1", f"{metrics['f1']:.3f}"), ("예상 경고 건수", f"{metrics['predicted_alerts']:,}건"),
+        ("오경보 건수", f"{metrics['false_alarms']:,}건"), ("놓친 고장 건수", f"{metrics['missed_failures']:,}건"),
+    ]
+    return html.Div(
+        [html.Div([html.Span(k, style={**LABEL_12, "width": "110px", "flexShrink": "0"}),
+                   html.Span(v, style={"fontSize": "13px", "fontWeight": "600", "color": INK})],
+                  style={"display": "flex", "alignItems": "center", "gap": "8px", "minHeight": "18px"})
+         for k, v in rows]
+        + [html.Div(sentence, style={"fontSize": "12px", "lineHeight": "17px", "color": INK2, "marginTop": "6px"})],
+        style={"display": "flex", "flexDirection": "column", "gap": "2px"},
+    )
+
+
 def _operational_judgment_body(actual_rate, ap, precision, recall, confusion):
     """화면 ③ "운영 판단" 카드 — 재발 간격(회고적 통계) 대신 현재 모델의
     실사용 가능성을 요약한다. 과제 0·2에서만 쓴다(과제 1은 실제 재발 간격
@@ -1464,17 +1489,35 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
         )
         feat = card("주요 영향 변수", 774, 252, feat_body, right=note("데이터 없음"))
 
+    if task_sel == 0:
+        default_threshold = pr_cm["cutoff"]
+        threshold_basis = "검증 구간 기준"
+        thr_metrics = load_current_classification_at_threshold("hist_gradient_boosting", default_threshold)
+    elif task_sel == 2:
+        default_threshold = pr_cm["cutoff"]
+        # pf_within_7d는 임계값을 검증 구간에서 최적화하지 않고 0.5로 고정해
+        # 둔 채로 학습됐다 — "검증 구간 기준"이라고 표시하면 사실이 아니므로
+        # 있는 그대로 밝힌다.
+        threshold_basis = "고정값 — 검증 구간 최적화 아님"
+        thr_metrics = load_part_failure_at_threshold(selected_model, default_threshold)
+    else:
+        default_threshold = None
+        threshold_basis = None
+
     slider = html.Div(
-        [html.Label("판정 임계값 (즉시 재계산)", htmlFor="thr-slider", style={**LABEL_12, "whiteSpace": "nowrap"}),
-         dcc.Slider(id="thr-slider", min=0, max=100, value=50, marks=None,
-                    tooltip={"placement": "bottom"})],
-        style={"display": "flex", "alignItems": "center", "gap": "8px", "width": "260px"},
+        [html.Label("판정 임계값", htmlFor="thr-slider", style={**LABEL_12, "whiteSpace": "nowrap"}),
+         dcc.Slider(id={"type": "thr-slider", "index": "screen3"}, min=0, max=100, marks=None,
+                    value=round(default_threshold * 100) if default_threshold is not None else 50,
+                    tooltip={"placement": "bottom"}),
+         note("설명용 가상 실험" + (f" · 기본값 {threshold_basis}" if threshold_basis else ""),
+              {"whiteSpace": "nowrap"})],
+        style={"display": "flex", "alignItems": "center", "gap": "8px", "width": "420px"},
     )
     if task_sel == 1:
         thr_body = empty_state("이 과제에는 해당 없음", "부품군 진단 과제에서는 표시하지 않음", 584, 184)
     else:
-        thr_body = html.Div([hstack([slot("y축", 40, 162), slot("위험도 분포 히스토그램 + 임계값 세로선", "가변", 162)], 0),
-                             hstack([html.Div(style={"width": "40px"}), slot("x축 · 위험도", "가변", 22)], 0)])
+        thr_body = html.Div(_threshold_metrics_body(thr_metrics, default_threshold),
+                             id={"type": "thr-metrics", "index": "screen3"})
     thr = card("판정 임계값 조정", 616, 252, thr_body, right=slider)
 
     # 과제 1(부품군 진단)은 실제 재발 간격 히스토그램이 이미 있어 그대로 둔다.
@@ -2141,6 +2184,30 @@ def select_family_row(n_clicks_list):
     if not triggered:
         return no_update
     return triggered["index"]
+
+
+# ③ "판정 임계값 조정" 슬라이더 — 과제 0·2에서만 thr-metrics가 DOM에 있으므로
+# (과제 1은 "해당 없음" 정적 문구) 이 패턴매칭 Output이 0개일 때 Dash가
+# 콜백 자체를 호출하지 않는다. 모델을 다시 학습·평가하지 않고, 이미 저장된
+# 예측 확률을 슬라이더 값으로 다시 이진화만 한다.
+@app.callback(
+    Output({"type": "thr-metrics", "index": ALL}, "children"),
+    Input({"type": "thr-slider", "index": ALL}, "value"),
+    State("seg-store", "data"),
+    prevent_initial_call=True,
+)
+def recompute_threshold_metrics(slider_values, seg_state):
+    if not slider_values or slider_values[0] is None:
+        return no_update
+    task_sel = (seg_state or DEFAULT_SEG).get("task", 0)
+    threshold = slider_values[0] / 100
+    if task_sel == 0:
+        metrics = load_current_classification_at_threshold("hist_gradient_boosting", threshold)
+    elif task_sel == 2:
+        metrics = load_part_failure_at_threshold(load_part_failure_selected_model(), threshold)
+    else:
+        return no_update
+    return [_threshold_metrics_body(metrics, threshold)]
 
 
 # ------------------------------------------------------------
