@@ -37,7 +37,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import plotly.graph_objects as go
 from dash import Dash, html, dcc, dash_table, Input, Output, State, ALL, MATCH, ctx, no_update
+from plotly.subplots import make_subplots
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -50,8 +52,10 @@ from .dashboard_data import (  # noqa: E402
     load_data_dictionary,
     load_data_quality_summary,
     load_data_reference_date,
+    load_failure_trend,
     load_priority_table,
     load_screen1_kpis,
+    load_screen5_kpis,
     load_source_info,
     load_table_page,
 )
@@ -129,6 +133,16 @@ html, body { margin:0; background:var(--pf-page); }
 .dash-dropdown-content, .Select-menu-outer { z-index: 1000 !important; }
 .Select-menu-outer { position: absolute !important; }
 """
+
+# go.Figure는 var(--pf-*) CSS 변수를 안정적으로 못 읽으므로, Plotly 차트
+# 전용으로만 THEME_CSS의 라이트/다크 hex 값을 그대로 복사해 둔다 — 새 색상
+# 토큰이 아니라 기존 값의 사본이다.
+FIGURE_COLORS = {
+    "light": {"ink": "#0b0b0b", "ink2": "#52514e", "muted": "#68665f",
+              "hair": "#e1e0d9", "card": "#fcfcfb"},
+    "dark": {"ink": "#f4f4f1", "ink2": "#bdbcb6", "muted": "#9d9b95",
+             "hair": "#34342f", "card": "#1b1b19"},
+}
 
 INDEX_STRING = """<!DOCTYPE html>
 <html>
@@ -635,6 +649,34 @@ def kpi_value_tile(label, value_text, w=300, h=96, tid=None):
                   style={"height": "32px", "display": "flex", "alignItems": "center"})],
         style=style, **kwargs,
     )
+
+
+def _trend_figure(df, theme):
+    """화면 ⑤ "고장·위험 추세" 카드용 이중 y축 라인 차트. 새 색상 토큰 없이
+    FIGURE_COLORS(THEME_CSS 값의 사본)만 써서 그레이스케일로 그린다."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_trace(go.Scatter(x=df["transaction_date"], y=df["failure_days"],
+                              name="고장 표시 건수", mode="lines",
+                              line=dict(color=colors["ink"], width=1.6)),
+                  secondary_y=False)
+    fig.add_trace(go.Scatter(x=df["transaction_date"], y=df["high_risk_pct"],
+                              name="위험 기준선 초과 비율 (%)", mode="lines",
+                              line=dict(color=colors["ink2"], width=1.6, dash="dash")),
+                  secondary_y=True)
+    fig.update_layout(
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+        font=dict(color=colors["muted"], size=11),
+        margin=dict(l=48, r=48, t=8, b=32),
+        legend=dict(orientation="h", y=1.14, x=0),
+        hovermode="x unified",
+    )
+    fig.update_xaxes(showgrid=False, color=colors["muted"])
+    fig.update_yaxes(title_text="건수", gridcolor=colors["hair"], color=colors["muted"],
+                      secondary_y=False)
+    fig.update_yaxes(title_text="%", showgrid=False, color=colors["muted"],
+                      secondary_y=True)
+    return fig
 
 
 def priority_table(cols, records, row_h, head_h=32, sort_col=None):
@@ -1202,13 +1244,24 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE):
 # ============================================================
 
 def screen_5(seg_state=None, audience=DEFAULT_AUDIENCE):
-    kpi_labels = ["관측 기간 고장 표시 총 건수", "위험 기준선 초과 기계 비율 (%)", "총 부품 출고 금액 (INR)",
-                  "평균 소비 전력 (kW)", "전기간 대비 증감 (건)", "모델 최종 평가 지표"]
-    row_a = row(ROW_KPI, [tile(k, sub="값 또는 빈 상태") for k in kpi_labels])
+    kpis5 = load_screen5_kpis()
+    kpi_specs = [
+        ("관측 기간 고장 표시 총 건수", f"{kpis5['failure_machine_days']:,}"),
+        ("위험 기준선 초과 기계 비율 (%)", f"{kpis5['failure_rate_pct']:.1f}%"),
+        ("총 부품 출고 금액 (INR)", f"{kpis5['parts_issue_value_inr']:,.0f}"),
+        ("평균 소비 전력 (kW)", f"{kpis5['avg_power_kw']:,.2f}"),
+    ]
+    placeholder_labels = ["전기간 대비 증감 (건)", "모델 최종 평가 지표"]
+    row_a = row(ROW_KPI,
+        [kpi_value_tile(label, value_text) for label, value_text in kpi_specs] +
+        [tile(label, sub="값 또는 빈 상태") for label in placeholder_labels])
 
-    trend_body = html.Div([slot("범례 · 고장 표시 건수 / 위험 기준선 초과 비율", 584, 20),
-                           hstack([slot("y축", 40, 342), slot("기간별 추세 라인 (일/주 단위 집계)", "가변", 342)], 0),
-                           hstack([html.Div(style={"width": "40px"}), slot("x축 · 기간", "가변", 22)], 0)])
+    trend_body = dcc.Graph(
+        id={"type": "trend-chart", "index": "screen5"},
+        figure=_trend_figure(load_failure_trend(), "light"),
+        config={"displayModeBar": False, "responsive": True},
+        style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"},
+    )
     trend = card("고장·위험 추세", 1248, ROW_MAIN, trend_body,
                  right=note("개별 기계 아님 — 조직 전체 집계"))
     dist_body = html.Div([hstack([slot("y축", 40, 342),
@@ -1625,6 +1678,22 @@ def toggle_theme(_n, current):
 def apply_theme(theme):
     theme = theme if theme in ("light", "dark") else "light"
     return f"theme-{theme}", f"테마 · {'다크' if theme == 'dark' else '라이트'}"
+
+
+# 화면⑤ "고장·위험 추세" 차트 전용 재색칠 — render_screen과 무관한 별도
+# 콜백이라 테마 전환이 화면①~④의 render_screen 재실행(및 그로 인한 화면④
+# 표의 page_current/sort_by 리셋)을 유발하지 않는다. 패턴매칭 id라 화면⑤가
+# DOM에 없으면(다른 화면을 보는 중) Dash가 이 콜백을 호출하지 않는다 —
+# KPI_FAILRATE_ID와 동일 원리. screen-tabs도 Input으로 받아, 이미 다크
+# 테마인 상태에서 화면⑤에 처음 탭 이동할 때도(테마 자체는 안 바뀌었으므로
+# theme-store만으로는 못 잡는 경우) 곧바로 올바른 색으로 그린다.
+@app.callback(
+    Output({"type": "trend-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+)
+def recolor_trend_chart(theme, _active_tab):
+    return [_trend_figure(load_failure_trend(), theme or "light")]
 
 
 # <html>에도 같은 클래스를 얹는다. #root는 1920 고정폭이라 넓은 화면에서

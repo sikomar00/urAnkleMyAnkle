@@ -116,6 +116,41 @@ def load_screen1_kpis() -> dict:
     }
 
 
+def load_screen5_kpis() -> dict:
+    """화면 ⑤ KPI 1~4 — load_screen1_kpis()가 이미 계산한 값을 그대로 재사용한다."""
+    kpis = load_screen1_kpis()
+    return {
+        "failure_machine_days": kpis["failure_machine_days"],
+        "failure_rate_pct": kpis["failure_rate_pct"],
+        "parts_issue_value_inr": kpis["parts_issue_value_inr"],
+        "avg_power_kw": kpis["avg_power_kw"],
+    }
+
+
+@lru_cache(maxsize=1)
+def load_failure_trend() -> pd.DataFrame:
+    """화면 ⑤ "고장·위험 추세" — 일자별 고장 표시 건수 · 위험 기준선 초과 비율.
+
+    ``_load_raw()``/``_daily()``와 같은 방식으로 캐싱한다 — 테마 전환 시마다
+    차트를 다시 그릴 때 이 데이터를 재계산하지 않기 위함(색만 다시 계산).
+    """
+    daily = _daily()
+    total_assets = int(_load_raw()[ASSET_COLUMN].nunique())
+
+    failure_days = (daily["failure_points"] > 0).groupby(daily[DATE_COLUMN]).sum()
+    high_risk_count = (daily["severity_level"] == "high_risk").groupby(daily[DATE_COLUMN]).sum()
+
+    trend = pd.DataFrame({
+        DATE_COLUMN: failure_days.index,
+        "failure_days": failure_days.to_numpy().astype(int),
+        "high_risk_pct": (
+            high_risk_count.to_numpy().astype(float) / total_assets * 100
+            if total_assets else 0.0
+        ),
+    })
+    return trend.sort_values(DATE_COLUMN).reset_index(drop=True)
+
+
 def load_priority_table(sort_by: str = "grade") -> list[dict]:
     """"점검 우선순위" 표의 행 데이터를 만든다.
 
