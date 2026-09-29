@@ -11,6 +11,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from .asset_features import add_asset_severity, build_asset_daily
@@ -363,6 +364,42 @@ def load_asset_peer_comparison(asset_tag: str) -> dict:
         "peer_asset_tag": peer_asset_tag,
         "asset_values": asset_values,
         "peer_values": peer_values,
+    }
+
+
+def load_asset_failure_onset_trend(asset_tag: str) -> dict:
+    """화면 ② "고장 직전 센서 변화" — 선택 자산의 가장 최근 위험 기준선
+    시작 에피소드, t-7~t 구간의 베어링 온도.
+
+    Returns:
+        episode_start_date("YYYY-MM-DD"), relative_days([-7..0]),
+        dates(8개 실제 날짜 문자열), temp_bearing_degC(8개 값)를 담은 dict.
+
+    Raises:
+        ValueError: asset_tag가 데이터에 없거나, 위험 기준선 시작 에피소드가
+            하나도 없을 때.
+    """
+    assets = load_asset_list()
+    if asset_tag not in assets:
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+
+    daily = _daily()
+    asset_daily = daily[daily[ASSET_COLUMN].eq(asset_tag)].sort_values(DATE_COLUMN).reset_index(drop=True)
+
+    is_high_risk = (asset_daily["severity_level"] == "high_risk").to_numpy()
+    is_start = is_high_risk & ~np.r_[False, is_high_risk[:-1]]
+    start_indices = np.flatnonzero(is_start)
+    if len(start_indices) == 0:
+        raise ValueError(f"'{asset_tag}'에 위험 기준선 시작 에피소드가 없습니다.")
+
+    onset_idx = int(start_indices[-1])
+    window = asset_daily.iloc[max(0, onset_idx - 7):onset_idx + 1]
+
+    return {
+        "episode_start_date": asset_daily.iloc[onset_idx][DATE_COLUMN].strftime("%Y-%m-%d"),
+        "relative_days": list(range(-(len(window) - 1), 1)),
+        "dates": [d.strftime("%Y-%m-%d") for d in window[DATE_COLUMN]],
+        "temp_bearing_degC": window["temp_bearing_degC"].tolist(),
     }
 
 

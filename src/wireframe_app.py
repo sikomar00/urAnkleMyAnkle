@@ -48,6 +48,7 @@ if __package__ in {None, ""}:
 from .dashboard_data import (  # noqa: E402
     export_table_csv,
     load_asset_detail_kpis,
+    load_asset_failure_onset_trend,
     load_asset_list,
     load_asset_parts_history,
     load_asset_peer_comparison,
@@ -814,6 +815,29 @@ def _peer_figure(comparison, theme):
     return fig
 
 
+def _pre_figure(trend, theme):
+    """화면 ② "고장 직전 센서 변화" — 가장 최근 위험 기준선 에피소드의
+    t-7~t 베어링 온도 추이. x축은 실제 날짜 대신 상대 위치(t-7..t)로
+    표시하고, 실제 날짜는 호버 툴팁에서만 보여준다."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    labels = [f"t{d}" if d != 0 else "t" for d in trend["relative_days"]]
+    fig = go.Figure(go.Scatter(
+        x=labels, y=trend["temp_bearing_degC"], mode="lines+markers",
+        line=dict(color=colors["ink"], width=1.6), marker=dict(size=5, color=colors["ink"]),
+        customdata=trend["dates"],
+        hovertemplate="%{x} · %{customdata}<br>%{y}°C<extra></extra>",
+    ))
+    fig.add_vline(x="t", line=dict(color=colors["muted"], width=1, dash="dash"))
+    fig.update_yaxes(gridcolor=colors["hair"], tickfont=dict(size=11), color=colors["muted"])
+    fig.update_xaxes(showgrid=False, tickfont=dict(size=11), color=colors["muted"])
+    fig.update_layout(
+        height=220, margin=dict(l=32, r=8, t=4, b=22),
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+        font=dict(size=11, color=colors["muted"]), showlegend=False,
+    )
+    return fig
+
+
 def priority_table(cols, records, row_h, head_h=32, sort_col=None):
     """table_placeholder()와 같은 헤더/셀 스타일을 쓰되, 자리표시 막대 대신
     load_priority_table()이 만든 실제 자산별 값을 채운다. table_placeholder()
@@ -1043,7 +1067,10 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
     row_b = row(520, [smult, rightcol])
 
     pre = card("고장 직전 센서 변화", 932, 288,
-               html.Div([slot("센서 추이 · t=0 정렬", 900, 198), slot("x축 · t−7 … t", 900, 22)]),
+               dcc.Graph(id={"type": "pre-chart", "index": "screen2"},
+                         figure=_pre_figure(load_asset_failure_onset_trend(asset_tag), "light"),
+                         config={"displayModeBar": False, "responsive": True},
+                         style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
                right=note("고장 표시 시점 t=0 · t−7 ~ t"))
     peer = card("동종 기계 대비", 932, 288,
                 dcc.Graph(id={"type": "peer-chart", "index": "screen2"},
@@ -1882,6 +1909,21 @@ def recolor_peer_chart(theme, _active_tab, asset_tag):
     assets = load_asset_list()
     asset_tag = asset_tag if asset_tag in assets else assets[0]
     return [_peer_figure(load_asset_peer_comparison(asset_tag), theme or "light")]
+
+
+# 화면② "고장 직전 센서 변화" 차트도 같은 방식으로 재색칠한다. smult-chart/
+# parts-chart/peer-chart와 id 타입을 나눠야 네 콜백의 Output 매칭 개수가
+# 서로 섞이지 않는다.
+@app.callback(
+    Output({"type": "pre-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+    State("selected-asset-store", "data"),
+)
+def recolor_pre_chart(theme, _active_tab, asset_tag):
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
+    return [_pre_figure(load_asset_failure_onset_trend(asset_tag), theme or "light")]
 
 
 # <html>에도 같은 클래스를 얹는다. #root는 1920 고정폭이라 넓은 화면에서
