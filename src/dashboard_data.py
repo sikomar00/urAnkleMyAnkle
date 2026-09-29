@@ -311,3 +311,153 @@ def load_data_reference_date() -> str:
     """앱 헤더 "데이터 기준일" — 원본 데이터의 최신 transaction_date."""
     raw = _load_raw()
     return raw[DATE_COLUMN].max().strftime("%Y-%m-%d")
+
+
+# 화면 ④ "데이터 조회" 표 전용 — (컬럼id, 라벨, 정렬방향, 표시 포맷 종류).
+# 포맷 종류: date/text/int/int_comma/float1/float2/wo_type/severity.
+RAW_TABLE_COLUMNS = [
+    ("transaction_date", "transaction_date", "left", "date"),
+    ("asset_tag", "asset_tag", "left", "text"),
+    ("machine_type", "machine_type", "left", "text"),
+    ("plant_code", "plant_code", "left", "text"),
+    ("part_no", "part_no", "left", "text"),
+    ("part_description", "part_description", "left", "text"),
+    ("part_family", "part_family", "left", "text"),
+    ("criticality", "criticality", "left", "text"),
+    ("uom", "uom", "left", "text"),
+    ("unit_cost_inr", "unit_cost_inr", "right", "int_comma"),
+    ("qty_issued", "qty_issued", "right", "int_comma"),
+    ("issue_value_inr", "issue_value_inr", "right", "int_comma"),
+    ("temp_bearing_degC", "temp_bearing_degC", "right", "float1"),
+    ("temp_motor_degC", "temp_motor_degC", "right", "float1"),
+    ("vibration_h_mms", "vibration_h_mms", "right", "float2"),
+    ("vibration_v_mms", "vibration_v_mms", "right", "float2"),
+    ("oil_pressure_bar", "oil_pressure_bar", "right", "float2"),
+    ("load_pct", "load_pct", "right", "float1"),
+    ("shaft_rpm", "shaft_rpm", "right", "int_comma"),
+    ("power_consumption_kw", "power_consumption_kw", "right", "float2"),
+    ("breakdown_flag", "breakdown_flag", "right", "int"),
+    ("wo_type", "wo_type", "left", "wo_type"),
+]
+
+DAILY_TABLE_COLUMNS = [
+    ("transaction_date", "transaction_date", "left", "date"),
+    ("machine_type", "machine_type", "left", "text"),
+    ("asset_tag", "asset_tag", "left", "text"),
+    ("failure_points", "failure_points", "right", "int_comma"),
+    ("severity_level", "severity_level", "left", "severity"),
+    ("temp_bearing_degC", "temp_bearing_degC", "right", "float1"),
+    ("temp_motor_degC", "temp_motor_degC", "right", "float1"),
+    ("vibration_h_mms", "vibration_h_mms", "right", "float2"),
+    ("vibration_v_mms", "vibration_v_mms", "right", "float2"),
+    ("oil_pressure_bar", "oil_pressure_bar", "right", "float2"),
+    ("load_pct", "load_pct", "right", "float1"),
+    ("shaft_rpm", "shaft_rpm", "right", "int_comma"),
+    ("power_consumption_kw", "power_consumption_kw", "right", "float2"),
+]
+
+# "등급" 열은 표시는 한글 라벨(severity_level)이지만 정렬은 severity_code
+# (0~3) 기준이어야 심각도 순서가 유지된다 — 문자열 정렬이면 순서가 깨진다.
+_SORT_FIELD_OVERRIDE = {"severity_level": "severity_code"}
+
+_TABLE_SOURCES = {"raw": (_load_raw, RAW_TABLE_COLUMNS), "daily": (_daily, DAILY_TABLE_COLUMNS)}
+
+
+def _format_table_value(kind: str, value) -> str:
+    if kind == "date":
+        return value.strftime("%Y-%m-%d")
+    if kind == "int":
+        return f"{int(value):,}"
+    if kind == "int_comma":
+        return f"{value:,.0f}"
+    if kind == "float1":
+        return f"{value:.1f}"
+    if kind == "float2":
+        return f"{value:.2f}"
+    if kind == "wo_type":
+        return "작업 없음" if pd.isna(value) else str(value)
+    if kind == "severity":
+        return SEVERITY_LABELS_KO.get(str(value), str(value))
+    return str(value)
+
+
+def load_table_page(
+    dataset: str, sort_col: str | None, sort_dir: str, page: int, page_size: int = 16
+) -> dict:
+    """화면 ④ "데이터 조회" 표의 한 페이지를 계산한다.
+
+    Args:
+        dataset: ``"raw"``(원자료) 또는 ``"daily"``(기계·일 집계).
+        sort_col: 정렬 기준 컬럼id, ``None``이면 정렬하지 않는다.
+        sort_dir: ``"asc"`` 또는 ``"desc"``.
+        page: 0부터 시작하는 페이지 번호(범위를 벗어나면 클램프한다).
+
+    Returns:
+        ``columns``(id/label/align), ``data``(포맷된 문자열 딕셔너리 리스트),
+        ``total_rows``, ``page_count``, ``page``를 담은 dict.
+
+    Raises:
+        ValueError: 알 수 없는 dataset일 때.
+    """
+    if dataset not in _TABLE_SOURCES:
+        raise ValueError(f"알 수 없는 dataset입니다: {dataset}")
+    loader, columns = _TABLE_SOURCES[dataset]
+    frame = loader()
+
+    if sort_col:
+        sort_field = _SORT_FIELD_OVERRIDE.get(sort_col, sort_col)
+        frame = frame.sort_values(sort_field, ascending=(sort_dir != "desc"), kind="stable")
+
+    total_rows = len(frame)
+    page_size = max(page_size, 1)
+    page_count = max(-(-total_rows // page_size), 1)
+    page = min(max(page, 0), page_count - 1)
+
+    start = page * page_size
+    page_frame = frame.iloc[start : start + page_size]
+
+    kinds = {col_id: kind for col_id, _, _, kind in columns}
+    data = [
+        {col_id: _format_table_value(kinds[col_id], record[col_id]) for col_id, _, _, _ in columns}
+        for record in page_frame.to_dict("records")
+    ]
+
+    return {
+        "columns": [{"id": c, "label": l, "align": a} for c, l, a, _ in columns],
+        "data": data,
+        "total_rows": total_rows,
+        "page_count": page_count,
+        "page": page,
+    }
+
+
+def export_table_csv(dataset: str) -> tuple[bytes, str]:
+    """화면 ④ CSV 내보내기 — 선택한 데이터셋 전체(정렬·페이지 무관)를 만든다.
+
+    숫자는 반올림하지 않은 원래 값, 날짜는 YYYY-MM-DD, wo_type 빈 값은
+    "작업 없음", 등급은 한글 라벨로 내보낸다. UTF-8 BOM(utf-8-sig)을 쓴다.
+
+    Raises:
+        ValueError: 알 수 없는 dataset일 때.
+    """
+    if dataset not in _TABLE_SOURCES:
+        raise ValueError(f"알 수 없는 dataset입니다: {dataset}")
+    loader, columns = _TABLE_SOURCES[dataset]
+    frame = loader()
+
+    export_cols = [col_id for col_id, _, _, _ in columns]
+    export_frame = frame[export_cols].copy()
+    for col_id, _, _, kind in columns:
+        if kind == "date":
+            export_frame[col_id] = export_frame[col_id].dt.strftime("%Y-%m-%d")
+        elif kind == "wo_type":
+            export_frame[col_id] = export_frame[col_id].fillna("작업 없음")
+        elif kind == "severity":
+            export_frame[col_id] = export_frame[col_id].astype(str).map(
+                lambda v: SEVERITY_LABELS_KO.get(v, v)
+            )
+        # 그 외 숫자 컬럼은 반올림하지 않은 원래 값 그대로 내보낸다.
+
+    csv_bytes = export_frame.to_csv(index=False).encode("utf-8-sig")
+    filename = "machine_raw.csv" if dataset == "raw" else "machine_day_aggregate.csv"
+    return csv_bytes, filename
