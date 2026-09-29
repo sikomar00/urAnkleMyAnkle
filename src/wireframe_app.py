@@ -29,15 +29,18 @@
 실행:
     pip install dash reportlab openpyxl
     python wireframe_app.py
-    → http://127.0.0.1:8050
+    → http://127.0.0.1:8052
 """
 
 import io
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
+import plotly.graph_objects as go
 from dash import Dash, html, dcc, dash_table, Input, Output, State, ALL, MATCH, ctx, no_update
+from plotly.subplots import make_subplots
+from flask import got_request_exception, session
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -46,15 +49,26 @@ if __package__ in {None, ""}:
 from .dashboard_data import (  # noqa: E402
     export_table_csv,
     load_asset_detail_kpis,
+    load_asset_failure_onset_trend,
     load_asset_list,
+    load_asset_parts_history,
+    load_asset_peer_comparison,
+    load_asset_sensor_series,
     load_data_dictionary,
     load_data_quality_summary,
     load_data_reference_date,
+    load_failure_trend,
     load_priority_table,
     load_screen1_kpis,
+    load_screen5_kpis,
     load_source_info,
     load_table_page,
 )
+from .audit_service import (  # noqa: E402
+    change_admin_password, create_audit_tables, ensure_dashboard_admin, log_failure, record_action,
+    record_error, sync_if_csv_changed, verify_admin,
+)
+from .dashboard_auth import install_auth  # noqa: E402
 
 # ============================================================
 # 디자인 토큰 (Plantfloor, 그레이스케일만 — 계열/상태/강조 색은 쓰지 않는다)
@@ -129,6 +143,16 @@ html, body { margin:0; background:var(--pf-page); }
 .dash-dropdown-content, .Select-menu-outer { z-index: 1000 !important; }
 .Select-menu-outer { position: absolute !important; }
 """
+
+# go.Figure는 var(--pf-*) CSS 변수를 안정적으로 못 읽으므로, Plotly 차트
+# 전용으로만 THEME_CSS의 라이트/다크 hex 값을 그대로 복사해 둔다 — 새 색상
+# 토큰이 아니라 기존 값의 사본이다.
+FIGURE_COLORS = {
+    "light": {"ink": "#0b0b0b", "ink2": "#52514e", "muted": "#68665f",
+              "hair": "#e1e0d9", "card": "#fcfcfb"},
+    "dark": {"ink": "#f4f4f1", "ink2": "#bdbcb6", "muted": "#9d9b95",
+             "hair": "#34342f", "card": "#1b1b19"},
+}
 
 INDEX_STRING = """<!DOCTYPE html>
 <html>
@@ -543,6 +567,23 @@ def app_header():
          html.Button("PDF", id="export-pdf-btn", n_clicks=0, style=btn_style(w=52)),
          html.Button("Excel", id="export-xlsx-btn", n_clicks=0, style=btn_style(w=60)),
          html.Button("테마 전환", id="theme-btn", n_clicks=0, style=btn_style(w=104)),
+         html.Details([
+             html.Summary(html.Span("관", id="profile-display"),
+                          title="마이 프로필",
+                          style={"listStyle": "none", "width": "34px", "height": "34px",
+                                 "borderRadius": "50%", "background": INK, "color": CARD,
+                                 "display": "grid", "placeItems": "center", "cursor": "pointer",
+                                 "fontSize": "13px", "fontWeight": "700"}),
+             html.Div([
+                 html.Div("마이 프로필", style={"fontWeight": "700", "marginBottom": "8px"}),
+                 html.Button("비밀번호 변경", id="password-open-btn", n_clicks=0,
+                             style={"display": "block", "width": "100%", "padding": "8px", "marginBottom": "5px"}),
+                 html.Button("로그아웃", id="logout-btn", n_clicks=0,
+                             style={"display": "block", "width": "100%", "padding": "8px"}),
+             ], style={"position": "absolute", "right": "0", "top": "40px", "width": "160px",
+                       "background": CARD, "color": INK, "border": f"1px solid {HAIR}",
+                       "boxShadow": "0 8px 24px #0003", "padding": "10px", "zIndex": 100}),
+         ], style={"position": "relative", "flexShrink": "0"}),
          dcc.Download(id="report-download"),
          dcc.Download(id="table-download")],
         style={"display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "8px",
@@ -635,6 +676,189 @@ def kpi_value_tile(label, value_text, w=300, h=96, tid=None):
                   style={"height": "32px", "display": "flex", "alignItems": "center"})],
         style=style, **kwargs,
     )
+
+
+def _trend_figure(df, theme):
+    """화면 ⑤ "고장·위험 추세" 카드용 이중 y축 라인 차트. 새 색상 토큰 없이
+    FIGURE_COLORS(THEME_CSS 값의 사본)만 써서 그레이스케일로 그린다."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_trace(go.Scatter(x=df["transaction_date"], y=df["failure_days"],
+                              name="고장 표시 건수", mode="lines",
+                              line=dict(color=colors["ink"], width=1.6)),
+                  secondary_y=False)
+    fig.add_trace(go.Scatter(x=df["transaction_date"], y=df["high_risk_pct"],
+                              name="위험 기준선 초과 비율 (%)", mode="lines",
+                              line=dict(color=colors["ink2"], width=1.6, dash="dash")),
+                  secondary_y=True)
+    fig.update_layout(
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+        font=dict(color=colors["muted"], size=11),
+        margin=dict(l=48, r=48, t=8, b=32),
+        legend=dict(orientation="h", y=1.14, x=0),
+        hovermode="x unified",
+    )
+    fig.update_xaxes(showgrid=False, color=colors["muted"])
+    fig.update_yaxes(title_text="건수", gridcolor=colors["hair"], color=colors["muted"],
+                      secondary_y=False)
+    fig.update_yaxes(title_text="%", showgrid=False, color=colors["muted"],
+                      secondary_y=True)
+    return fig
+
+
+# 화면 ② 스몰 멀티플 — (라벨, _daily() 컬럼) 쌍. 순서는 SENSOR_COLUMNS와 같다.
+SMULT_SENSORS = [("베어링 온도 (°C)", "temp_bearing_degC"),
+                 ("모터 온도 (°C)", "temp_motor_degC"),
+                 ("수평 진동 (mm/s)", "vibration_h_mms"),
+                 ("수직 진동 (mm/s)", "vibration_v_mms"),
+                 ("오일 압력 (bar)", "oil_pressure_bar"),
+                 ("부하율 (%)", "load_pct"),
+                 ("회전 속도 (rpm)", "shaft_rpm"),
+                 ("소비 전력 (kW)", "power_consumption_kw")]
+# 카드 본문 452 = 패널 48×8 + 간격 4×7 + 공유 x축 40. 왼쪽 라벨 열과 차트 내부
+# 패널이 같은 치수를 써야 1:1로 정렬되므로 상수로 묶어 둔다.
+SMULT_PANEL_H, SMULT_GAP, SMULT_AXIS_H = 48, 4, 40
+SMULT_PLOT_H = SMULT_PANEL_H * len(SMULT_SENSORS) + SMULT_GAP * (len(SMULT_SENSORS) - 1)
+SMULT_BODY_H = SMULT_PLOT_H + SMULT_AXIS_H
+
+
+def _true_runs(flags):
+    """불리언 시리즈의 연속 True 구간을 (시작 인덱스, 끝 인덱스) 목록으로
+    묶는다 — 하루당 shape 하나씩 만들지 않기 위해."""
+    flags = flags.to_numpy()
+    runs, start = [], None
+    for i, on in enumerate(flags):
+        if on and start is None:
+            start = i
+        elif not on and start is not None:
+            runs.append((start, i - 1))
+            start = None
+    if start is not None:
+        runs.append((start, len(flags) - 1))
+    return runs
+
+
+def _band_shapes(dates, flags, color):
+    """위험 구간을 8개 패널 전체를 관통하는 세로 밴드(shape)로 만든다.
+
+    날짜를 numpy datetime64 그대로 넘기면 Plotly가 나노초 정수로 직렬화해
+    ISO 문자열인 trace x축과 어긋나므로(축이 NaN이 된다) isoformat 문자열로
+    넘긴다. 또 하루짜리 구간은 x0 == x1이면 폭 0이라 보이지 않으므로
+    앞뒤로 반나절씩 넓혀 날짜 눈금 가운데에 오게 한다."""
+    half = timedelta(hours=12)
+    return [dict(type="rect", xref="x", yref="paper", y0=0, y1=1,
+                 x0=(dates.iloc[a] - half).isoformat(),
+                 x1=(dates.iloc[b] + half).isoformat(),
+                 fillcolor=color, opacity=0.18, line_width=0, layer="below")
+            for a, b in _true_runs(flags)]
+
+
+def _smult_figure(df, theme):
+    """화면 ② "센서 8종 스몰 멀티플" — 센서 8종 스파크라인(축·격자·범례 없음,
+    맨 아래 공유 x축만) + 위험 기준선 초과일 세로 밴드. 밴드는 yref="paper"라
+    8개 패널과 그 사이 간격까지 하나로 관통한다."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    fig = make_subplots(rows=len(SMULT_SENSORS), cols=1, shared_xaxes=True,
+                        vertical_spacing=SMULT_GAP / SMULT_PLOT_H)
+    for r, (_, column) in enumerate(SMULT_SENSORS, start=1):
+        fig.add_trace(go.Scatter(x=df["transaction_date"], y=df[column], mode="lines",
+                                  line=dict(color=colors["ink"], width=0.8),
+                                  showlegend=False, hoverinfo="skip"),
+                      row=r, col=1)
+    # 밴드는 shapes로 한 번에 넘긴다 — 구간마다 add_vrect()를 호출하면 호출마다
+    # figure 전체를 다시 검증해 2분이 넘게 걸린다(일괄 할당은 30ms 수준).
+    fig.update_layout(
+        height=SMULT_BODY_H, margin=dict(l=0, r=0, t=0, b=SMULT_AXIS_H),
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+        font=dict(color=colors["muted"], size=11),
+        shapes=_band_shapes(df["transaction_date"], df["is_high_risk_day"], colors["muted"]),
+    )
+    fig.update_xaxes(visible=False)
+    fig.update_yaxes(visible=False)
+    fig.update_xaxes(visible=True, showgrid=False, color=colors["muted"],
+                      row=len(SMULT_SENSORS), col=1)
+    return fig
+
+
+def _parts_figure(df, theme):
+    """화면 ② "부품 출고 이력" — 부품별 출고 금액 상위 10개 가로 막대.
+    금액 내림차순이 위로 오도록 autorange="reversed"."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    fig = go.Figure(go.Bar(
+        x=df["total_issue_value_inr"], y=df["part_no"], orientation="h",
+        marker_color=colors["ink"],
+        text=[f"{v:,.0f}" for v in df["total_issue_value_inr"]],
+        textposition="outside", textfont=dict(color=colors["muted"], size=11),
+        cliponaxis=False,
+        customdata=df["part_description"],
+        hovertemplate="%{y} · %{customdata}<br>%{text} INR<extra></extra>",
+    ))
+    fig.update_yaxes(autorange="reversed", showgrid=False, tickfont=dict(size=11))
+    fig.update_xaxes(visible=False, range=[0, df["total_issue_value_inr"].max() * 1.35])
+    fig.update_layout(
+        height=132, margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+        font=dict(size=11, color=colors["muted"]), bargap=0.28, showlegend=False,
+    )
+    return fig
+
+
+def _hex_to_rgba(hex_color, alpha):
+    """FIGURE_COLORS의 hex 값을 박스플롯 fillcolor용 rgba 문자열로 바꾼다 —
+    새 색상 값을 만드는 게 아니라 기존 hex를 그대로 반투명하게 쓰는 것뿐이다."""
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+def _peer_figure(comparison, theme):
+    """화면 ② "동종 기계 대비" — 선택 자산 vs 동종 나머지 1대의 베어링 온도
+    분포 박스플롯 2개. 선택 기계는 진한 테두리·채움, 동종 기계는 옅게 그려
+    어느 쪽이 선택 기계인지 시각적으로 드러낸다."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    fig = go.Figure()
+    fig.add_trace(go.Box(
+        y=comparison["asset_values"], name=f"{comparison['asset_tag']} (선택)",
+        line=dict(color=colors["ink"], width=2),
+        fillcolor=_hex_to_rgba(colors["ink"], 0.55),
+        marker_color=colors["ink"], boxpoints=False,
+    ))
+    fig.add_trace(go.Box(
+        y=comparison["peer_values"], name=f"{comparison['peer_asset_tag']} (동종)",
+        line=dict(color=colors["muted"], width=1),
+        fillcolor=_hex_to_rgba(colors["muted"], 0.12),
+        marker_color=colors["muted"], boxpoints=False,
+    ))
+    fig.update_yaxes(gridcolor=colors["hair"], tickfont=dict(size=11), color=colors["muted"])
+    fig.update_xaxes(tickfont=dict(size=11), color=colors["muted"])
+    fig.update_layout(
+        height=220, margin=dict(l=32, r=8, t=4, b=22),
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+        font=dict(size=11, color=colors["muted"]), showlegend=False,
+    )
+    return fig
+
+
+def _pre_figure(trend, theme):
+    """화면 ② "고장 직전 센서 변화" — 가장 최근 위험 기준선 에피소드의
+    t-7~t 베어링 온도 추이. x축은 실제 날짜 대신 상대 위치(t-7..t)로
+    표시하고, 실제 날짜는 호버 툴팁에서만 보여준다."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    labels = [f"t{d}" if d != 0 else "t" for d in trend["relative_days"]]
+    fig = go.Figure(go.Scatter(
+        x=labels, y=trend["temp_bearing_degC"], mode="lines+markers",
+        line=dict(color=colors["ink"], width=1.6), marker=dict(size=5, color=colors["ink"]),
+        customdata=trend["dates"],
+        hovertemplate="%{x} · %{customdata}<br>%{y}°C<extra></extra>",
+    ))
+    fig.add_vline(x="t", line=dict(color=colors["muted"], width=1, dash="dash"))
+    fig.update_yaxes(gridcolor=colors["hair"], tickfont=dict(size=11), color=colors["muted"])
+    fig.update_xaxes(showgrid=False, tickfont=dict(size=11), color=colors["muted"])
+    fig.update_layout(
+        height=220, margin=dict(l=32, r=8, t=4, b=22),
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+        font=dict(size=11, color=colors["muted"]), showlegend=False,
+    )
+    return fig
 
 
 def priority_table(cols, records, row_h, head_h=32, sort_col=None):
@@ -832,44 +1056,51 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
                "padding": "16px", "display": "flex", "alignItems": "center", "gap": "16px"},
     )
 
-    sensors = ["베어링 온도 (°C)", "모터 온도 (°C)", "수평 진동 [단위]", "수직 진동 [단위]",
-               "오일 압력 [단위]", "부하율 (%)", "회전 속도 [단위]", "소비 전력 (kW)"]
-    panels = [html.Div([html.Div(s, style={"width": "160px", "flexShrink": "0", "display": "flex",
-                                            "alignItems": "center", **LABEL_12}),
-                        slot(f"패널 {i+1}", "가변", 48)],
-                       style={"height": "48px", "display": "flex", "gap": "8px", "flexShrink": "0"})
-              for i, s in enumerate(sensors)]
-    band_note = html.Div("고장 표시일 세로 밴드 (자리 표시)",
-                          style={**MICRO_11, "position": "absolute", "left": "804px", "top": "2px",
-                                 "background": CARD, "padding": "0 4px"})
-    band = html.Div(style={"position": "absolute", "left": "760px", "top": "0", "width": "36px",
-                            "height": "412px", "boxSizing": "border-box",
-                            "borderLeft": f"1px dashed {INK2}", "borderRight": f"1px dashed {INK2}"})
-    sm_body = html.Div(
-        [html.Div([*panels, band, band_note],
-                  style={"display": "flex", "flexDirection": "column", "gap": "4px", "height": "412px",
-                         "position": "relative"}),
-         html.Div([html.Div([note("8 × 48 + 7 × 4 + 40 = 452")],
-                            style={"width": "160px", "flexShrink": "0", "display": "flex",
-                                   "alignItems": "center"}),
-                   slot("공유 x축 밴드 · 날짜", "가변", 40)],
-                  style={"display": "flex", "gap": "8px", "height": "40px"})],
+    # 라벨 열은 HTML로 두고 오른쪽 차트만 Plotly로 그린다. 패널 높이·간격이
+    # _smult_figure()의 subplot 치수(SMULT_*)와 같아야 1:1로 정렬된다.
+    sensor_labels = html.Div(
+        [html.Div(label, style={"height": f"{SMULT_PANEL_H}px", "flexShrink": "0",
+                                 "display": "flex", "alignItems": "center", **LABEL_12})
+         for label, _ in SMULT_SENSORS]
+        + [html.Div(note("8 × 48 + 7 × 4 + 40 = 452"),
+                    style={"height": f"{SMULT_AXIS_H}px", "flexShrink": "0", "display": "flex",
+                           "alignItems": "center"})],
+        style={"width": "160px", "flexShrink": "0", "display": "flex", "flexDirection": "column",
+               "gap": f"{SMULT_GAP}px"},
+    )
+    sm_body = hstack(
+        [sensor_labels,
+         dcc.Graph(id={"type": "smult-chart", "index": "screen2"},
+                   figure=_smult_figure(load_asset_sensor_series(asset_tag), "light"),
+                   config={"displayModeBar": False, "responsive": True},
+                   style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"})],
+        8, style={"height": f"{SMULT_BODY_H}px"},
     )
     smult = card("센서 8종 스몰 멀티플", 1248, 520, sm_body,
-                 right=note("x축 공유 · 패널 48 + 간격 4"))
+                 right=note("x축 공유 · 밴드 = 위험 기준선 초과일"))
 
     anom = card("이상 점수 추이", 616, 144, slot("라인 + 임계선", 584, 76), right=note("임계선 포함"))
     clus = card("군집 위치", 616, 144, slot("산점도 · 군집 1 / 2 / 3", 584, 76), right=note("선택 기계 표시"))
-    parts = card("부품 출고 이력", 616, 200, slot("가로 막대", 584, 132))
+    parts = card("부품 출고 이력", 616, 200,
+                 dcc.Graph(id={"type": "parts-chart", "index": "screen2"},
+                           figure=_parts_figure(load_asset_parts_history(asset_tag), "light"),
+                           config={"displayModeBar": False, "responsive": True},
+                           style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}))
     rightcol = col(616, 520, [anom, clus, parts])
     row_b = row(520, [smult, rightcol])
 
     pre = card("고장 직전 센서 변화", 932, 288,
-               html.Div([slot("센서 추이 · t=0 정렬", 900, 198), slot("x축 · t−7 … t", 900, 22)]),
+               dcc.Graph(id={"type": "pre-chart", "index": "screen2"},
+                         figure=_pre_figure(load_asset_failure_onset_trend(asset_tag), "light"),
+                         config={"displayModeBar": False, "responsive": True},
+                         style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
                right=note("고장 표시 시점 t=0 · t−7 ~ t"))
     peer = card("동종 기계 대비", 932, 288,
-                html.Div([slot("같은 종류 기계 센서 분포 + 선택 기계 위치", 900, 198), slot("축 · 센서", 900, 22)]),
-                right=note("같은 종류 기계만"))
+                dcc.Graph(id={"type": "peer-chart", "index": "screen2"},
+                          figure=_peer_figure(load_asset_peer_comparison(asset_tag), "light"),
+                          config={"displayModeBar": False, "responsive": True},
+                          style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
+                right=note("동일 종류 나머지 1대 대비"))
     row_c = row(288, [pre, peer])
 
     return html.Div([strip, row_b, row_c],
@@ -1202,13 +1433,24 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE):
 # ============================================================
 
 def screen_5(seg_state=None, audience=DEFAULT_AUDIENCE):
-    kpi_labels = ["관측 기간 고장 표시 총 건수", "위험 기준선 초과 기계 비율 (%)", "총 부품 출고 금액 (INR)",
-                  "평균 소비 전력 (kW)", "전기간 대비 증감 (건)", "모델 최종 평가 지표"]
-    row_a = row(ROW_KPI, [tile(k, sub="값 또는 빈 상태") for k in kpi_labels])
+    kpis5 = load_screen5_kpis()
+    kpi_specs = [
+        ("관측 기간 고장 표시 총 건수", f"{kpis5['failure_machine_days']:,}"),
+        ("위험 기준선 초과 기계 비율 (%)", f"{kpis5['failure_rate_pct']:.1f}%"),
+        ("총 부품 출고 금액 (INR)", f"{kpis5['parts_issue_value_inr']:,.0f}"),
+        ("평균 소비 전력 (kW)", f"{kpis5['avg_power_kw']:,.2f}"),
+    ]
+    placeholder_labels = ["전기간 대비 증감 (건)", "모델 최종 평가 지표"]
+    row_a = row(ROW_KPI,
+        [kpi_value_tile(label, value_text) for label, value_text in kpi_specs] +
+        [tile(label, sub="값 또는 빈 상태") for label in placeholder_labels])
 
-    trend_body = html.Div([slot("범례 · 고장 표시 건수 / 위험 기준선 초과 비율", 584, 20),
-                           hstack([slot("y축", 40, 342), slot("기간별 추세 라인 (일/주 단위 집계)", "가변", 342)], 0),
-                           hstack([html.Div(style={"width": "40px"}), slot("x축 · 기간", "가변", 22)], 0)])
+    trend_body = dcc.Graph(
+        id={"type": "trend-chart", "index": "screen5"},
+        figure=_trend_figure(load_failure_trend(), "light"),
+        config={"displayModeBar": False, "responsive": True},
+        style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"},
+    )
     trend = card("고장·위험 추세", 1248, ROW_MAIN, trend_body,
                  right=note("개별 기계 아님 — 조직 전체 집계"))
     dist_body = html.Div([hstack([slot("y축", 40, 342),
@@ -1535,6 +1777,9 @@ def build_report_xlsx(filters, seg_state, audience):
 app = Dash(__name__)
 app.title = "설비 모니터링 대시보드 — 와이어프레임"
 app.index_string = INDEX_STRING
+install_auth(app.server)
+ADMIN_INPUT_STYLE = {"display": "block", "width": "100%", "boxSizing": "border-box",
+                     "marginBottom": "8px", "padding": "7px", "fontSize": "13px"}
 
 app.layout = html.Div(
     [
@@ -1547,6 +1792,25 @@ app.layout = html.Div(
         # prio-sort-store와 동일하게 세션 메모리(storage_type 미지정)로 둔다.
         dcc.Store(id="selected-asset-store", data=load_asset_list()[0]),
         dcc.Store(id="theme-store", data="light", storage_type="local"),
+        dcc.Store(id="audit-sync-status"),
+        dcc.Store(id="audit-audience-event"),
+        dcc.Interval(id="audit-csv-interval", interval=60_000, n_intervals=0),
+        dcc.Location(id="auth-redirect", refresh=True),
+        # 이전 콜백의 State 식별자는 유지하되 사용자 입력은 제거한다.
+        # 실제 actor_id는 audit_service가 검증된 Flask 세션에서 읽는다.
+        dcc.Input(id="actor-id-input", type="hidden", value=""),
+        html.Div(id="password-panel", children=[
+            html.H3("비밀번호 변경", style={"marginTop": 0}),
+            html.P("현재 비밀번호를 확인한 뒤 새 비밀번호로 바꿉니다."),
+            dcc.Input(id="password-current", type="password", placeholder="현재 비밀번호", style=ADMIN_INPUT_STYLE),
+            dcc.Input(id="password-new", type="password", placeholder="새 비밀번호 (4자 이상)", style=ADMIN_INPUT_STYLE),
+            dcc.Input(id="password-confirm", type="password", placeholder="새 비밀번호 다시 입력", style=ADMIN_INPUT_STYLE),
+            html.Button("변경", id="password-save-btn", n_clicks=0, style={"marginRight": "8px"}),
+            html.Button("닫기", id="password-close-btn", n_clicks=0),
+            html.Div(id="password-result", role="status", style={"marginTop": "10px"}),
+        ], style={"display": "none", "position": "fixed", "right": "24px", "top": "70px",
+                  "zIndex": 100, "width": "330px", "padding": "16px", "background": "#fff",
+                  "color": "#222", "border": "1px solid #999", "boxShadow": "0 8px 30px #0003"}),
         app_header(),
         filter_bar(),
         html.Main(
@@ -1571,14 +1835,23 @@ app.layout = html.Div(
     Input("report-audience-dd", "value"),
     Input("prio-sort-store", "data"),
     Input("selected-asset-store", "data"),
+    State("actor-id-input", "value"),
 )
-def render_screen(active, seg_state, audience, prio_sort, selected_asset):
+def render_screen(active, seg_state, audience, prio_sort, selected_asset, actor_id):
+    if ctx.triggered_id == "screen-tabs":
+        record_action("ACT_TAB_OPEN", "화면 이동", actor_id=actor_id,
+                      target_type="tab", target_id=active)
     kwargs = {"seg_state": seg_state, "audience": audience or DEFAULT_AUDIENCE}
     if active == "1":
         kwargs["prio_sort"] = prio_sort or DEFAULT_PRIO_SORT
     if active == "2":
         kwargs["asset_tag"] = selected_asset
-    return SCREEN_BUILDERS[active](**kwargs)
+    try:
+        return SCREEN_BUILDERS[active](**kwargs)
+    except Exception as exc:
+        log_failure("ACT_SCREEN_RENDER", "화면 조회", exc, actor_id=actor_id,
+                    source="wireframe_app.render_screen", target_id=active)
+        return html.Div("화면을 불러오지 못했습니다. 오류 로그를 확인해 주세요.")
 
 
 # ②의 "‹ 이전 기계"/"다음 기계 ›" — 알파벳순으로 순환 이동한다. nav_btn()이
@@ -1587,11 +1860,18 @@ def render_screen(active, seg_state, audience, prio_sort, selected_asset):
     Output("selected-asset-store", "data"),
     Input({"type": "machine-nav-btn", "index": ALL}, "n_clicks"),
     State("selected-asset-store", "data"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def cycle_selected_asset(_clicks, current_asset):
+def cycle_selected_asset(_clicks, current_asset, actor_id):
     triggered = ctx.triggered_id
     if not triggered:
+        return no_update
+    # 화면②가 새로 마운트될 때마다 Dash가 이 패턴매칭 Input을 n_clicks=0(또는
+    # None)인 채로 한 번 발화시킨다(prevent_initial_call은 앱 최초 실행만 막는다).
+    # 그 발화를 클릭으로 세면 사용자의 진짜 첫 클릭이 무시된 것처럼 보이므로,
+    # n_clicks가 실제로 올라간 경우에만 이동한다.
+    if not ctx.triggered[0]["value"]:
         return no_update
     assets = load_asset_list()
     idx = assets.index(current_asset) if current_asset in assets else 0
@@ -1601,7 +1881,10 @@ def cycle_selected_asset(_clicks, current_asset):
         idx = (idx - 1) % len(assets)
     else:
         return no_update
-    return assets[idx]
+    chosen = assets[idx]
+    record_action("ACT_ASSET_NAVIGATE", "설비 상세 이동", actor_id=actor_id,
+                  target_type="asset", target_id=chosen)
+    return chosen
 
 
 # ------------------------------------------------------------
@@ -1611,10 +1894,14 @@ def cycle_selected_asset(_clicks, current_asset):
     Output("theme-store", "data"),
     Input("theme-btn", "n_clicks"),
     State("theme-store", "data"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def toggle_theme(_n, current):
-    return "light" if (current or "light") == "dark" else "dark"
+def toggle_theme(_n, current, actor_id):
+    new_theme = "light" if (current or "light") == "dark" else "dark"
+    record_action("ACT_THEME_CHANGE", "테마 전환", actor_id=actor_id,
+                  target_type="theme", target_id=new_theme)
+    return new_theme
 
 
 @app.callback(
@@ -1625,6 +1912,80 @@ def toggle_theme(_n, current):
 def apply_theme(theme):
     theme = theme if theme in ("light", "dark") else "light"
     return f"theme-{theme}", f"테마 · {'다크' if theme == 'dark' else '라이트'}"
+
+
+# 화면⑤ "고장·위험 추세" 차트 전용 재색칠 — render_screen과 무관한 별도
+# 콜백이라 테마 전환이 화면①~④의 render_screen 재실행(및 그로 인한 화면④
+# 표의 page_current/sort_by 리셋)을 유발하지 않는다. 패턴매칭 id라 화면⑤가
+# DOM에 없으면(다른 화면을 보는 중) Dash가 이 콜백을 호출하지 않는다 —
+# KPI_FAILRATE_ID와 동일 원리. screen-tabs도 Input으로 받아, 이미 다크
+# 테마인 상태에서 화면⑤에 처음 탭 이동할 때도(테마 자체는 안 바뀌었으므로
+# theme-store만으로는 못 잡는 경우) 곧바로 올바른 색으로 그린다.
+@app.callback(
+    Output({"type": "trend-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+)
+def recolor_trend_chart(theme, _active_tab):
+    return [_trend_figure(load_failure_trend(), theme or "light")]
+
+
+# 화면② 스몰 멀티플도 같은 방식으로 재색칠한다. trend-chart와 id 타입을 나눠
+# 둬야 두 콜백의 Output 매칭 개수가 서로 섞이지 않는다. 기계 전환은 이미
+# render_screen이 화면②를 다시 그리므로 selected-asset-store는 State로만 읽는다.
+@app.callback(
+    Output({"type": "smult-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+    State("selected-asset-store", "data"),
+)
+def recolor_smult_chart(theme, _active_tab, asset_tag):
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
+    return [_smult_figure(load_asset_sensor_series(asset_tag), theme or "light")]
+
+
+# 화면② "부품 출고 이력" 막대차트도 같은 방식으로 재색칠한다. smult-chart와
+# id 타입을 나눠야 두 콜백의 Output 매칭 개수가 서로 섞이지 않는다.
+@app.callback(
+    Output({"type": "parts-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+    State("selected-asset-store", "data"),
+)
+def recolor_parts_chart(theme, _active_tab, asset_tag):
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
+    return [_parts_figure(load_asset_parts_history(asset_tag), theme or "light")]
+
+
+# 화면② "동종 기계 대비" 박스플롯도 같은 방식으로 재색칠한다. smult-chart/
+# parts-chart와 id 타입을 나눠야 세 콜백의 Output 매칭 개수가 서로 섞이지 않는다.
+@app.callback(
+    Output({"type": "peer-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+    State("selected-asset-store", "data"),
+)
+def recolor_peer_chart(theme, _active_tab, asset_tag):
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
+    return [_peer_figure(load_asset_peer_comparison(asset_tag), theme or "light")]
+
+
+# 화면② "고장 직전 센서 변화" 차트도 같은 방식으로 재색칠한다. smult-chart/
+# parts-chart/peer-chart와 id 타입을 나눠야 네 콜백의 Output 매칭 개수가
+# 서로 섞이지 않는다.
+@app.callback(
+    Output({"type": "pre-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+    State("selected-asset-store", "data"),
+)
+def recolor_pre_chart(theme, _active_tab, asset_tag):
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
+    return [_pre_figure(load_asset_failure_onset_trend(asset_tag), theme or "light")]
 
 
 # <html>에도 같은 클래스를 얹는다. #root는 1920 고정폭이라 넓은 화면에서
@@ -1652,9 +2013,10 @@ app.clientside_callback(
     Input({"type": "period-btn", "index": ALL}, "n_clicks"),
     Input("reset-btn", "n_clicks"),
     State("filter-store", "data"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def write_filters(plant, machine_type, machine, _period_clicks, _reset_clicks, current):
+def write_filters(plant, machine_type, machine, _period_clicks, _reset_clicks, current, actor_id):
     trigger = ctx.triggered_id
     new = dict(current or DEFAULT_FILTERS)
     dd_reset = (no_update, no_update, no_update)
@@ -1669,6 +2031,9 @@ def write_filters(plant, machine_type, machine, _period_clicks, _reset_clicks, c
         new["machine_type"] = machine_type
         new["machine"] = machine
 
+    if trigger == "reset-btn" or (isinstance(trigger, dict) and trigger.get("type") == "period-btn") or trigger in ("plant-dd", "machine-type-dd", "machine-dd"):
+        record_action("ACT_FILTER_CHANGE", "조회 조건 변경", actor_id=actor_id,
+                      target_type="filter", target_id=str(trigger)[:100], detail=new)
     return new, *dd_reset
 
 
@@ -1700,9 +2065,10 @@ def render_filters(data):
     Output("seg-store", "data"),
     Input({"type": "seg-btn", "group": ALL, "index": ALL}, "n_clicks"),
     State("seg-store", "data"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def write_seg(_clicks, current):
+def write_seg(_clicks, current, actor_id):
     # 화면이 다시 그려지면 버튼이 n_clicks=0으로 재생성되며 이 콜백이 한 번
     # 더 불린다 — 값이 0인 호출은 무시한다(무한 루프 방지).
     trig = ctx.triggered[0] if ctx.triggered else None
@@ -1713,6 +2079,8 @@ def write_seg(_clicks, current):
         return no_update
     new = dict(current or DEFAULT_SEG)
     new[tid["group"]] = tid["index"]
+    record_action("ACT_SEGMENT_CHANGE", "분석 선택", actor_id=actor_id,
+                  target_type=str(tid["group"]), target_id=str(tid["index"]))
     return new
 
 
@@ -1722,14 +2090,18 @@ def write_seg(_clicks, current):
 @app.callback(
     Output("action-echo", "children"),
     Input({"type": "ghost-btn", "index": ALL}, "n_clicks"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def echo_action(_clicks):
+def echo_action(_clicks, actor_id):
     trig = ctx.triggered[0] if ctx.triggered else None
     if not trig or not trig.get("value"):
         return no_update
     tid = ctx.triggered_id
     label = tid["index"] if isinstance(tid, dict) else str(tid)
+    record_action("ACT_UNAVAILABLE", "미구현 기능 클릭", actor_id=actor_id,
+                  target_type="button", target_id=str(label), status="BLOCKED",
+                  block_reason="아직 구현되지 않은 기능")
     return f"'{label}' 클릭됨 — 동작 미구현 ({NO_DATA_MARK})"
 
 
@@ -1743,9 +2115,10 @@ def echo_action(_clicks):
     Output("action-echo", "children", allow_duplicate=True),
     Input({"type": "kpi-drill", "index": ALL}, "n_clicks"),
     State("prio-sort-store", "data"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def drill_failrate_to_priority(n_clicks_list, current):
+def drill_failrate_to_priority(n_clicks_list, current, actor_id):
     # ALL 패턴이라 리스트로 온다 — ①이 화면에 없을 땐 빈 리스트, 있을 땐 [n].
     # 화면 재렌더로 타일이 다시 만들어질 때의 n_clicks=0도 함께 무시한다.
     if not n_clicks_list or not any(n_clicks_list):
@@ -1754,6 +2127,8 @@ def drill_failrate_to_priority(n_clicks_list, current):
     msg = ("'종합 고장율' 클릭 → 점검 우선순위를 기준선 초과 기준으로 정렬"
            if new == "threshold" else
            "'종합 고장율' 다시 클릭 → 점검 우선순위를 등급가중 고장점수 기준으로 복귀")
+    record_action("ACT_PRIORITY_SORT", "점검 우선순위 정렬", actor_id=actor_id,
+                  target_type="priority", target_id=new)
     return new, msg
 
 
@@ -1768,9 +2143,10 @@ def drill_failrate_to_priority(n_clicks_list, current):
     State("report-audience-dd", "value"),
     State("filter-store", "data"),
     State("seg-store", "data"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def export_report(_pdf, _xlsx, audience, filters, seg_state):
+def export_report(_pdf, _xlsx, audience, filters, seg_state, actor_id):
     audience = audience or DEFAULT_AUDIENCE
     aud = REPORT_AUDIENCES[audience]
     stamp = datetime.now().strftime("%Y%m%d-%H%M")
@@ -1783,7 +2159,12 @@ def export_report(_pdf, _xlsx, audience, filters, seg_state):
                 build_report_xlsx(filters, seg_state, audience), f"{base}.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except Exception as exc:  # noqa: BLE001 — 실패 이유를 화면에 그대로 보여준다
-        return no_update, f"내보내기 실패 — {type(exc).__name__}: {exc}"
+        log_failure("ACT_REPORT_EXPORT", "보고서 내보내기", exc, actor_id=actor_id,
+                    source="wireframe_app.export_report", target_id=ctx.triggered_id)
+        return no_update, f"내보내기 실패 — {type(exc).__name__}"
+    record_action("ACT_REPORT_EXPORT", "보고서 내보내기", actor_id=actor_id,
+                  target_type="report", target_id=name,
+                  detail={"audience": audience, "format": "pdf" if ctx.triggered_id == "export-pdf-btn" else "xlsx"})
     return (dcc.send_bytes(lambda b: b.write(payload), name, type=mime),
             f"{aud['label']} 보고서 내보냄 — {name} (섹션 {len(aud['sections'])}개 · 값은 {NO_DATA_MARK})")
 
@@ -1802,15 +2183,25 @@ def export_report(_pdf, _xlsx, audience, filters, seg_state):
     Output({"type": "dtable-footer", "index": MATCH}, "children"),
     Input({"type": "dtable", "index": MATCH}, "page_current"),
     Input({"type": "dtable", "index": MATCH}, "sort_by"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def update_dtable_page(page_current, sort_by):
+def update_dtable_page(page_current, sort_by, actor_id):
     dataset_key = ctx.triggered_id["index"]
     sort_col = sort_by[0]["column_id"] if sort_by else None
     sort_dir = sort_by[0]["direction"] if sort_by else "asc"
     triggered_prop = ctx.triggered[0]["prop_id"].rsplit(".", 1)[-1] if ctx.triggered else None
     page = 0 if triggered_prop == "sort_by" else (page_current or 0)
-    result = load_table_page(dataset_key, sort_col, sort_dir, page)
+    try:
+        result = load_table_page(dataset_key, sort_col, sort_dir, page)
+    except Exception as exc:
+        log_failure("ACT_DATA_QUERY", "데이터 표 조회", exc, actor_id=actor_id,
+                    source="wireframe_app.update_dtable_page", target_id=dataset_key)
+        raise
+    if triggered_prop in ("sort_by", "page_current") and ctx.triggered[0].get("value") is not None:
+        record_action("ACT_DATA_QUERY", "데이터 표 조회", actor_id=actor_id,
+                      target_type="dataset", target_id=dataset_key,
+                      detail={"page": page, "sort_column": sort_col, "sort_direction": sort_dir})
     footer_text = _dtable_footer_text(result["total_rows"], result["page"], 16)
     return result["data"], result["page_count"], result["page"], footer_text
 
@@ -1818,9 +2209,10 @@ def update_dtable_page(page_current, sort_by):
 @app.callback(
     Output("table-download", "data"),
     Input({"type": "csv-export-btn", "index": ALL}, "n_clicks"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def export_dtable_csv(_clicks):
+def export_dtable_csv(_clicks, actor_id):
     # 화면이 다시 그려지면 버튼이 n_clicks=0으로 재생성되며 이 콜백이 한 번
     # 더 불린다 — write_seg와 동일하게 값이 0인 호출은 무시한다.
     trig = ctx.triggered[0] if ctx.triggered else None
@@ -1828,14 +2220,115 @@ def export_dtable_csv(_clicks):
         return no_update
     dataset_key = ctx.triggered_id["index"]
     if dataset_key not in ("raw", "daily"):
+        record_action("ACT_CSV_EXPORT", "CSV 다운로드", actor_id=actor_id,
+                      target_type="dataset", target_id=dataset_key, status="BLOCKED",
+                      block_reason="지원하지 않는 데이터셋")
         return no_update
     try:
         csv_bytes, filename = export_table_csv(dataset_key)
-    except Exception:  # noqa: BLE001 — 다운로드만 조용히 건너뛴다
+    except Exception as exc:
+        log_failure("ACT_CSV_EXPORT", "CSV 다운로드", exc, actor_id=actor_id,
+                    source="wireframe_app.export_dtable_csv", target_id=dataset_key)
         return no_update
+    record_action("ACT_CSV_EXPORT", "CSV 다운로드", actor_id=actor_id,
+                  target_type="dataset", target_id=dataset_key, detail={"filename": filename})
     return dcc.send_bytes(lambda buf: buf.write(csv_bytes), filename, type="text/csv")
 
 
+@app.callback(Output("password-panel", "style"), Input("password-open-btn", "n_clicks"),
+              Input("password-close-btn", "n_clicks"), State("password-panel", "style"),
+              prevent_initial_call=True)
+def toggle_password_panel(_open, _close, style):
+    updated = dict(style or {})
+    updated["display"] = "none" if ctx.triggered_id == "password-close-btn" else "block"
+    return updated
+
+
+@app.callback(Output("profile-display", "children"), Input("screen-tabs", "value"))
+def display_profile(_active_tab):
+    login_id = str(session.get("admin_id", "관리자"))
+    return login_id[:2].upper()
+
+
+@app.callback(Output("audit-audience-event", "data"),
+              Input("report-audience-dd", "value"), State("actor-id-input", "value"),
+              prevent_initial_call=True)
+def log_audience_change(audience, actor_id):
+    record_action("ACT_AUDIENCE_CHANGE", "보고서 대상 선택", actor_id=actor_id,
+                  target_type="audience", target_id=audience)
+    return audience
+
+
+@app.callback(Output("audit-sync-status", "data"), Input("audit-csv-interval", "n_intervals"))
+def sync_failure_log(_ticks):
+    try:
+        return sync_if_csv_changed()
+    except Exception as exc:
+        record_error("ERR_FAILURE_SYNC", "관측 고장 저장", exc, source="wireframe_app.sync_failure_log")
+        return {"error": type(exc).__name__}
+
+
+def _log_unhandled_exception(sender, exception, **_kwargs):
+    record_error("ERR_DASH_CALLBACK", "대시보드 요청", exception,
+                 source="wireframe_app.flask_request")
+
+
+got_request_exception.connect(_log_unhandled_exception, app.server, weak=False)
+
+
+@app.callback(Output("password-result", "children"), Output("password-current", "value"),
+              Output("password-new", "value"), Output("password-confirm", "value"),
+              Output("auth-redirect", "href", allow_duplicate=True),
+              Input("password-save-btn", "n_clicks"),
+              State("password-current", "value"), State("password-new", "value"),
+              State("password-confirm", "value"), prevent_initial_call=True)
+def update_admin_password(n_clicks, current, new, confirm):
+    if not n_clicks:
+        return no_update, no_update, no_update, no_update, no_update
+    admin_id = session.get("admin_id")
+    if new != confirm:
+        record_action("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", status="BLOCKED",
+                      block_reason="새 비밀번호 확인 불일치")
+        return "새 비밀번호가 일치하지 않습니다.", "", "", "", no_update
+    try:
+        changed = change_admin_password(admin_id, current or "", new or "")
+        if not changed:
+            record_action("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", status="BLOCKED",
+                          block_reason="현재 비밀번호 불일치")
+            return "현재 비밀번호가 올바르지 않습니다.", "", "", "", no_update
+        record_action("ACT_LOGOUT", "로그아웃", detail={"reason": "password_changed"})
+        session.clear()
+        return "비밀번호가 변경되었습니다. 다시 로그인해 주세요.", "", "", "", "/login"
+    except ValueError as exc:
+        record_action("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", status="BLOCKED",
+                      block_reason=type(exc).__name__)
+        return str(exc), "", "", "", no_update
+    except Exception as exc:
+        log_failure("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", exc, actor_id=admin_id,
+                    source="wireframe_app.update_admin_password")
+        return f"비밀번호 변경 실패: {type(exc).__name__}", "", "", "", no_update
+
+
+@app.callback(Output("auth-redirect", "href", allow_duplicate=True),
+              Input("logout-btn", "n_clicks"), prevent_initial_call=True)
+def logout_admin(n_clicks):
+    if not n_clicks:
+        return no_update
+    record_action("ACT_LOGOUT", "로그아웃")
+    session.clear()
+    return "/login"
+
+
 if __name__ == "__main__":
+    try:
+        create_audit_tables()
+        created = ensure_dashboard_admin()
+        print(f"[DB] 기본 관리자 계정: {'새로 준비됨' if created else '기존 계정 사용'}")
+        result = sync_if_csv_changed()
+        print(f"[DB] 관측 고장 로그: {result['date']} / 새로 저장 {result['created']}건")
+    except Exception as exc:
+        record_error("ERR_DB_STARTUP", "로그 DB 준비", exc, source="wireframe_app.startup")
+        print(f"[DB] 연결 또는 초기 적재 실패: {type(exc).__name__} — instance/audit_fallback.log 확인")
     # 최신 Dash(2.17+)는 app.run, 이전 버전은 app.run_server를 쓴다.
-    app.run(debug=True)
+    # 이전 실행본이 8050 포트에 남아 오래된 시간 기록을 만들 수 있어 새 포트를 사용한다.
+    app.run(port=8052, debug=False)

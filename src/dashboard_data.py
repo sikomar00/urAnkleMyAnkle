@@ -11,6 +11,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from .asset_features import add_asset_severity, build_asset_daily
@@ -114,6 +115,41 @@ def load_screen1_kpis() -> dict:
         "max_bearing_temp": float(latest["temp_bearing_degC"].max()),
         "parts_issue_value_inr": float(raw["issue_value_inr"].sum()),
     }
+
+
+def load_screen5_kpis() -> dict:
+    """화면 ⑤ KPI 1~4 — load_screen1_kpis()가 이미 계산한 값을 그대로 재사용한다."""
+    kpis = load_screen1_kpis()
+    return {
+        "failure_machine_days": kpis["failure_machine_days"],
+        "failure_rate_pct": kpis["failure_rate_pct"],
+        "parts_issue_value_inr": kpis["parts_issue_value_inr"],
+        "avg_power_kw": kpis["avg_power_kw"],
+    }
+
+
+@lru_cache(maxsize=1)
+def load_failure_trend() -> pd.DataFrame:
+    """화면 ⑤ "고장·위험 추세" — 일자별 고장 표시 건수 · 위험 기준선 초과 비율.
+
+    ``_load_raw()``/``_daily()``와 같은 방식으로 캐싱한다 — 테마 전환 시마다
+    차트를 다시 그릴 때 이 데이터를 재계산하지 않기 위함(색만 다시 계산).
+    """
+    daily = _daily()
+    total_assets = int(_load_raw()[ASSET_COLUMN].nunique())
+
+    failure_days = (daily["failure_points"] > 0).groupby(daily[DATE_COLUMN]).sum()
+    high_risk_count = (daily["severity_level"] == "high_risk").groupby(daily[DATE_COLUMN]).sum()
+
+    trend = pd.DataFrame({
+        DATE_COLUMN: failure_days.index,
+        "failure_days": failure_days.to_numpy().astype(int),
+        "high_risk_pct": (
+            high_risk_count.to_numpy().astype(float) / total_assets * 100
+            if total_assets else 0.0
+        ),
+    })
+    return trend.sort_values(DATE_COLUMN).reset_index(drop=True)
 
 
 def load_priority_table(sort_by: str = "grade") -> list[dict]:
@@ -229,6 +265,141 @@ def load_asset_detail_kpis(asset_tag: str) -> dict:
         "last_failure_date": last_failure_date_str,
         "failure_days_count": int((asset_daily["failure_points"] > 0).sum()),
         "avg_power_30d_kw": float(recent_30d["power_consumption_kw"].mean()),
+    }
+
+
+def load_asset_sensor_series(asset_tag: str) -> pd.DataFrame:
+    """화면 ② "센서 8종 스몰 멀티플" — 선택 자산의 전체 기간 센서 시계열.
+
+    Returns:
+        transaction_date, 센서 8종(SENSOR_COLUMNS 순서), is_failure_day
+        (failure_points > 0), is_high_risk_day(위험 기준선 초과 = severity_level
+        "high_risk") 열을 가진 DataFrame. 날짜 오름차순.
+
+    Raises:
+        ValueError: asset_tag가 데이터에 없을 때.
+    """
+    assets = load_asset_list()
+    if asset_tag not in assets:
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+
+    daily = _daily()
+    asset_daily = daily[daily[ASSET_COLUMN].eq(asset_tag)].sort_values(DATE_COLUMN)
+
+    series = asset_daily[[DATE_COLUMN, *SENSOR_COLUMNS]].reset_index(drop=True)
+    series["is_failure_day"] = (asset_daily["failure_points"] > 0).to_numpy()
+    series["is_high_risk_day"] = (asset_daily["severity_level"] == "high_risk").to_numpy()
+    return series
+
+
+def load_asset_parts_history(asset_tag: str) -> pd.DataFrame:
+    """화면 ② "부품 출고 이력" — 선택 자산의 부품별 출고 금액 합계 상위 10개.
+
+    Returns:
+        part_no, part_description, total_issue_value_inr 3열, 금액 내림차순
+        상위 10행.
+
+    Raises:
+        ValueError: asset_tag가 데이터에 없을 때.
+    """
+    assets = load_asset_list()
+    if asset_tag not in assets:
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+
+    raw = _load_raw()
+    asset_raw = raw[raw[ASSET_COLUMN].eq(asset_tag)]
+
+    totals = (
+        asset_raw.groupby([PART_COLUMN, "part_description"])["issue_value_inr"]
+        .sum()
+        .reset_index()
+        .rename(columns={"issue_value_inr": "total_issue_value_inr"})
+        .sort_values("total_issue_value_inr", ascending=False)
+        .head(10)
+        .reset_index(drop=True)
+    )
+    return totals
+
+
+def load_asset_peer_comparison(asset_tag: str) -> dict:
+    """화면 ② "동종 기계 대비" — 선택 자산과 같은 machine_type인 나머지 1대의
+    베어링 온도(temp_bearing_degC) 분포를 비교한다.
+
+    기계 종류마다 자산이 정확히 2대뿐이라는 데이터 특성상 "동종 기계"는
+    선택 자산을 제외한 나머지 1대로 계산해서 구한다(하드코딩 금지).
+
+    Returns:
+        asset_tag, peer_asset_tag, asset_values(선택 자산의 temp_bearing_degC
+        1,095개), peer_values(동종 자산의 temp_bearing_degC 1,095개)를 담은 dict.
+
+    Raises:
+        ValueError: asset_tag가 데이터에 없거나, 동종(같은 machine_type) 자산이
+            정확히 1대가 아닐 때(0대 또는 2대 이상 — 데이터 가정이 깨진 경우).
+    """
+    assets = load_asset_list()
+    if asset_tag not in assets:
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+
+    raw = _load_raw()
+    machine_type = raw[raw[ASSET_COLUMN].eq(asset_tag)][MACHINE_COLUMN].iloc[0]
+    same_type_assets = sorted(raw[raw[MACHINE_COLUMN].eq(machine_type)][ASSET_COLUMN].unique())
+    peers = [a for a in same_type_assets if a != asset_tag]
+    if len(peers) != 1:
+        raise ValueError(
+            f"'{asset_tag}'(machine_type={machine_type})의 동종 기계가 정확히 1대가 "
+            f"아닙니다(현재 {len(peers)}대): {peers}"
+        )
+    peer_asset_tag = peers[0]
+
+    daily = _daily()
+    asset_values = daily[daily[ASSET_COLUMN].eq(asset_tag)].sort_values(DATE_COLUMN)[
+        "temp_bearing_degC"
+    ].tolist()
+    peer_values = daily[daily[ASSET_COLUMN].eq(peer_asset_tag)].sort_values(DATE_COLUMN)[
+        "temp_bearing_degC"
+    ].tolist()
+
+    return {
+        "asset_tag": asset_tag,
+        "peer_asset_tag": peer_asset_tag,
+        "asset_values": asset_values,
+        "peer_values": peer_values,
+    }
+
+
+def load_asset_failure_onset_trend(asset_tag: str) -> dict:
+    """화면 ② "고장 직전 센서 변화" — 선택 자산의 가장 최근 위험 기준선
+    시작 에피소드, t-7~t 구간의 베어링 온도.
+
+    Returns:
+        episode_start_date("YYYY-MM-DD"), relative_days([-7..0]),
+        dates(8개 실제 날짜 문자열), temp_bearing_degC(8개 값)를 담은 dict.
+
+    Raises:
+        ValueError: asset_tag가 데이터에 없거나, 위험 기준선 시작 에피소드가
+            하나도 없을 때.
+    """
+    assets = load_asset_list()
+    if asset_tag not in assets:
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+
+    daily = _daily()
+    asset_daily = daily[daily[ASSET_COLUMN].eq(asset_tag)].sort_values(DATE_COLUMN).reset_index(drop=True)
+
+    is_high_risk = (asset_daily["severity_level"] == "high_risk").to_numpy()
+    is_start = is_high_risk & ~np.r_[False, is_high_risk[:-1]]
+    start_indices = np.flatnonzero(is_start)
+    if len(start_indices) == 0:
+        raise ValueError(f"'{asset_tag}'에 위험 기준선 시작 에피소드가 없습니다.")
+
+    onset_idx = int(start_indices[-1])
+    window = asset_daily.iloc[max(0, onset_idx - 7):onset_idx + 1]
+
+    return {
+        "episode_start_date": asset_daily.iloc[onset_idx][DATE_COLUMN].strftime("%Y-%m-%d"),
+        "relative_days": list(range(-(len(window) - 1), 1)),
+        "dates": [d.strftime("%Y-%m-%d") for d in window[DATE_COLUMN]],
+        "temp_bearing_degC": window["temp_bearing_degC"].tolist(),
     }
 
 
