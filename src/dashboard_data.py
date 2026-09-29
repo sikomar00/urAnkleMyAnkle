@@ -341,12 +341,14 @@ def load_failure_trend() -> pd.DataFrame:
     return trend.sort_values(DATE_COLUMN).reset_index(drop=True)
 
 
-def load_priority_table(sort_by: str = "grade") -> list[dict]:
+def load_priority_table(sort_by: str = "grade", direction: str = "desc") -> list[dict]:
     """"점검 우선순위" 표의 행 데이터를 만든다.
 
     Args:
         sort_by: ``"grade"``(등급가중 고장점수 내림차순, 기본) 또는
             ``"threshold"``(기준선 초과 우선, 동률이면 고장점수 내림차순).
+        direction: ``"desc"``(기본) 또는 ``"asc"`` — sort_by 기준으로 정렬한
+            뒤 전체 순서를 뒤집는다. rank는 이 최종 순서 기준으로 매긴다.
     """
     raw = _load_raw()
     daily = _daily()
@@ -402,6 +404,8 @@ def load_priority_table(sort_by: str = "grade") -> list[dict]:
         rows.sort(key=lambda row: (not row["threshold_exceeded"], -row["failure_points"]))
     else:
         rows.sort(key=lambda row: -row["failure_points"])
+    if direction == "asc":
+        rows.reverse()
 
     for rank, row in enumerate(rows, start=1):
         row["rank"] = rank

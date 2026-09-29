@@ -192,6 +192,14 @@ def test_family_recurrence_intervals_rejects_unknown_inputs():
         dd.load_family_recurrence_intervals('AST-1041', 'NotAFamily')
 
 
+def test_priority_table_asc_direction_reverses_desc_and_reranks():
+    desc_rows = dd.load_priority_table('grade', 'desc')
+    asc_rows = dd.load_priority_table('grade', 'asc')
+    assert [r['asset_tag'] for r in asc_rows] == [r['asset_tag'] for r in desc_rows][::-1]
+    assert [r['rank'] for r in asc_rows] == list(range(1, len(asc_rows) + 1))
+    assert asc_rows[0]['failure_points'] <= desc_rows[0]['failure_points']
+
+
 def test_screen1_machine_status_covers_all_assets_sorted():
     rows = dd.load_screen1_machine_status()
     assert [r['asset_tag'] for r in rows] == sorted(r['asset_tag'] for r in rows)

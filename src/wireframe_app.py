@@ -292,7 +292,7 @@ DEFAULT_SEG = {"task": 0, "threshold": 0, "dataset": 0}
 
 # ① 화면의 "점검 우선순위" 표 정렬 축. KPI "종합 고장율" 타일을 클릭하면
 # "grade"(등급가중 고장점수, 기본) → "threshold"(기준선 초과)로 바뀐다.
-DEFAULT_PRIO_SORT = "grade"
+DEFAULT_PRIO_SORT = {"sort_by": "grade", "direction": "desc"}
 
 # ①에만 있는 타일이라 패턴 매칭 id를 쓴다 — 이유는 tile() 호출부 주석 참고.
 KPI_FAILRATE_ID = {"type": "kpi-drill", "index": "failrate"}
@@ -977,26 +977,32 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
     # 콘솔 경고가 뜬다 — 패턴 매칭 id({"type":...})를 쓰면 Dash가 "지금 이
     # id를 가진 컴포넌트가 0개일 수 있다"를 정상 상태로 취급해 경고가 안 뜬다.
     kpis = load_screen1_kpis()
+    # "최고 베어링 온도"·"부품 출고 금액(누적)"은 삭제한다 — 남은 4개가 같은
+    # 458px 폭(4×458 + 3×16 = 1880)으로 행 전체를 균등 분배한다.
     kpi_specs = [
         ("관측 기계 (대)", f"{kpis['observed_machines']:,}", None),
         ("고장 표시 기계·일", f"{kpis['failure_machine_days']:,}", None),
         ("종합 고장율 (%)", f"{kpis['failure_rate_pct']:.1f}%", KPI_FAILRATE_ID),
         ("평균 소비 전력 (kW)", f"{kpis['avg_power_kw']:,.2f}", None),
-        ("최고 베어링 온도 (°C)", f"{kpis['max_bearing_temp']:.1f}", None),
-        ("부품 출고 금액 (누적, INR)", f"{kpis['parts_issue_value_inr']:,.0f}", None),
     ]
-    row_a = row(ROW_KPI, [kpi_value_tile(label, value_text, tid=tid) for label, value_text, tid in kpi_specs])
+    row_a = row(ROW_KPI, [kpi_value_tile(label, value_text, w=458, tid=tid) for label, value_text, tid in kpi_specs])
 
     prio_cols = [("순위", 48, "right"), ("대상", 200, "left"), ("종류", 110, "left"), ("공장", 100, "left"),
                  ("등급가중 고장점수", 150, "right"), ("기준선 초과", 110, "center"),
                  ("최근 고장 표시일", 150, "left"), ("당일 고장 표시 부품 수", 190, "right")]
-    sort_idx = 5 if prio_sort == "threshold" else 4
-    sort_hint = ("정렬: 기준선 초과 (KPI '종합 고장율' 클릭으로 이동함)" if prio_sort == "threshold"
-                 else "정렬: 등급가중 고장점수 (기본)")
-    priority_records = load_priority_table(prio_sort)
+    sort_by = prio_sort.get("sort_by", "grade")
+    direction = prio_sort.get("direction", "desc")
+    sort_idx = 5 if sort_by == "threshold" else 4
+    sort_hint = ("정렬: 기준선 초과 (KPI '종합 고장율' 클릭으로 이동함)" if sort_by == "threshold"
+                 else "정렬: 등급가중 고장점수 (기본)") + (" · 오름차순" if direction == "asc" else " · 내림차순")
+    priority_records = load_priority_table(sort_by, direction)
+    dir_btn = html.Button("▲ 오름차순" if direction == "asc" else "▼ 내림차순",
+                           id={"type": "prio-dir-btn", "index": "screen1"}, n_clicks=0, style=btn_style(w=96))
     prio = card("점검 우선순위", 1090, ROW_MAIN,
                 priority_table(prio_cols, priority_records, 32, head_h=32, sort_col=sort_idx),
-                right=note(f"대상 = 엔티티 무관 (현재 기계 행만) · 헤더 고정 · 행 클릭 → ② · {sort_hint}"))
+                right=html.Div([note(f"대상 = 엔티티 무관 (현재 기계 행만) · 헤더 고정 · 행 클릭 → ② · {sort_hint}"),
+                                 dir_btn],
+                                style={"display": "flex", "alignItems": "center", "gap": "8px"}))
 
     def machine_tile(status_row):
         grade = status_row["current_grade"]
@@ -2400,11 +2406,29 @@ def drill_failrate_to_priority(n_clicks_list, current):
     # 화면 재렌더로 타일이 다시 만들어질 때의 n_clicks=0도 함께 무시한다.
     if not n_clicks_list or not any(n_clicks_list):
         return no_update, no_update
-    new = "grade" if (current or DEFAULT_PRIO_SORT) == "threshold" else "threshold"
+    current = current or DEFAULT_PRIO_SORT
+    new_sort_by = "grade" if current.get("sort_by") == "threshold" else "threshold"
     msg = ("'종합 고장율' 클릭 → 점검 우선순위를 기준선 초과 기준으로 정렬"
-           if new == "threshold" else
+           if new_sort_by == "threshold" else
            "'종합 고장율' 다시 클릭 → 점검 우선순위를 등급가중 고장점수 기준으로 복귀")
-    return new, msg
+    return {"sort_by": new_sort_by, "direction": current.get("direction", "desc")}, msg
+
+
+# 점검 우선순위 표의 오름차순 ↔ 내림차순 토글 — sort_by(등급가중 고장점수 ↔
+# 기준선 초과)는 그대로 두고 방향만 뒤집는다. drill_failrate_to_priority와
+# 같은 prio-sort-store를 쓰므로 화면 전환·테마 전환에도 함께 유지된다.
+@app.callback(
+    Output("prio-sort-store", "data", allow_duplicate=True),
+    Input({"type": "prio-dir-btn", "index": ALL}, "n_clicks"),
+    State("prio-sort-store", "data"),
+    prevent_initial_call=True,
+)
+def toggle_priority_direction(n_clicks_list, current):
+    if not n_clicks_list or not any(n_clicks_list):
+        return no_update
+    current = current or DEFAULT_PRIO_SORT
+    new_direction = "asc" if current.get("direction", "desc") == "desc" else "desc"
+    return {"sort_by": current.get("sort_by", "grade"), "direction": new_direction}
 
 
 # ------------------------------------------------------------
