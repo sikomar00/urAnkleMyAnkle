@@ -57,6 +57,7 @@ from .dashboard_data import (  # noqa: E402
     load_asset_peer_comparison,
     load_asset_sensor_series,
     load_current_classification_metrics,
+    load_current_classification_pr_curve_and_confusion,
     load_data_dictionary,
     load_data_quality_summary,
     load_data_reference_date,
@@ -64,6 +65,9 @@ from .dashboard_data import (  # noqa: E402
     load_family_feature_importance,
     load_family_pr_curve_and_confusion,
     load_family_recurrence_intervals,
+    load_part_failure_metrics,
+    load_part_failure_pr_curve_and_confusion,
+    load_part_failure_selected_model,
     load_priority_table,
     load_screen1_kpis,
     load_screen1_machine_status,
@@ -1166,6 +1170,44 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
                      style={"display": "flex", "flexDirection": "column", "gap": f"{GUTTER}px"})
 
 
+def _model_comparison_table(rows, selected_key, width=742):
+    """화면 ③ "모델 비교" 표 — 과제 0(현재 고장 표시 분류)·2(부품 고장 탐지)가
+    공유하는 렌더러. 열 순서는 모델 → AP → 정밀도 → 재현율 → F1 → 선택 여부로
+    고정한다(Accuracy는 상단 KPI 카드에 이미 있고 양성률이 낮아 부풀려지므로
+    이 표에는 넣지 않는다). ``rows``는 {"key","label","average_precision",
+    "precision","recall","f1"}를 가진 dict 목록이며, 결과가 있는 모델만 담아야
+    한다 — 빈 행을 채우지 않는다.
+    """
+    cols = [("모델", 182, "left"), ("AP", 93, "right"), ("정밀도", 93, "right"),
+            ("재현율", 93, "right"), ("F1", 93, "right"), ("선택", 72, "center")]
+
+    def cell(content, align="left", highlight=False):
+        return html.Td(content, style={"padding": "0 8px", "textAlign": align, "boxSizing": "border-box",
+                                        "background": SUNK if highlight else "none",
+                                        "borderBottom": f"1px solid {HAIR}"})
+
+    body_rows = []
+    for r in rows:
+        is_selected = r["key"] == selected_key
+        body_rows.append(html.Tr([
+            cell(html.Span(r["label"], style={"fontSize": "13px", "color": INK}), highlight=is_selected),
+            cell(f"{r['average_precision']:.3f}", align="right", highlight=is_selected),
+            cell(f"{r['precision']:.3f}", align="right", highlight=is_selected),
+            cell(f"{r['recall']:.3f}", align="right", highlight=is_selected),
+            cell(f"{r['f1']:.3f}", align="right", highlight=is_selected),
+            cell("선택" if is_selected else "—", align="center", highlight=is_selected),
+        ], style={"height": "32px"}))
+
+    thead = html.Tr(
+        [html.Th(l, style={"width": f"{w}px", "padding": "0 8px", "textAlign": a, "boxSizing": "border-box",
+                            **LABEL_12, "whiteSpace": "nowrap", "borderBottom": f"1px solid {CTRL}"})
+         for l, w, a in cols],
+        style={"height": "32px"},
+    )
+    return html.Table([html.Thead(thead), html.Tbody(body_rows)],
+                       style={"width": f"{width}px", "tableLayout": "fixed", "borderCollapse": "collapse"})
+
+
 # ============================================================
 # 화면 ③ 모델·예측 — 툴바 32 / 행 96 / 460 / 272 (마지막 행이 남는 높이 흡수)
 # ============================================================
@@ -1210,8 +1252,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
         [html.Div([seg("task", "과제", SEG_GROUPS["task"], sel=seg_state.get("task", 0)),
                    html.Div([note("툴바 1880 × 32"),
                              seg("threshold", "위험 기준선 (등급가중 고장점수)",
-                                 SEG_GROUPS["threshold"], sel=thr_sel),
-                             slot("값 추가 여지", 96, 32)],
+                                 SEG_GROUPS["threshold"], sel=thr_sel)],
                             style={"display": "flex", "alignItems": "center", "gap": "12px"})],
                   style={"height": "32px", "display": "flex", "alignItems": "center",
                          "justifyContent": "space-between", "gap": "16px"}),
@@ -1230,8 +1271,16 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
     #   자리에 부품군별 표가 대신 들어간다.
     #   과제 2(부품 고장 탐지)는 아직 자리표시자 그대로(타일 4개 × 458).
     kpi_labels = ["정확도", "정밀도", "재현율", "F1", "ROC-AUC", "평균정밀도(AP)"]
+    part_failure_kpi_labels = ["평균정밀도(AP)", "정밀도", "재현율", "F1"]
+    part_failure_kpi_cols = ["average_precision", "precision", "recall", "f1"]
     if task_sel == 2:
-        row_a = row(ROW_KPI, [tile(f"[지표 {i+1}]", w=458, sub="값 또는 빈 상태") for i in range(4)])
+        part_failure_metrics = load_part_failure_metrics()
+        selected_model = load_part_failure_selected_model()
+        selected_metrics = part_failure_metrics[selected_model]
+        row_a = row(ROW_KPI, [
+            kpi_value_tile(label, f"{selected_metrics[col]:.3f}", w=458)
+            for label, col in zip(part_failure_kpi_labels, part_failure_kpi_cols)
+        ])
     elif task_sel == 0:
         current_metrics = load_current_classification_metrics()["hist_gradient_boosting"]
         row_a = row(ROW_KPI, [
@@ -1242,13 +1291,21 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
         row_a = html.Div()
 
     if task_sel == 1:
+        # 부품군 진단 — ...
+        family_rows = load_asset_family_diagnosis(asset_tag)
+        valid_families = [fr["part_family"] for fr in family_rows]
+        family = family if family in valid_families else valid_families[0]
+        pr_cm = load_family_pr_curve_and_confusion(asset_tag, family)
+    elif task_sel == 0:
+        pr_cm = load_current_classification_pr_curve_and_confusion("hist_gradient_boosting")
+    else:
+        pr_cm = load_part_failure_pr_curve_and_confusion()
+
+    if task_sel == 1:
         # 부품군 진단 — mcomp 카드 자리에 선택 자산의 부품군 9종별 표를 넣는다
         # (기존 '모델 비교' 표와는 열 구성 자체가 달라 별도로 만든다).
         # average_precision 내림차순(load_asset_family_diagnosis가 이미 정렬)
         # 기준 1행이 최초 진입 기본 선택 부품군이다.
-        family_rows = load_asset_family_diagnosis(asset_tag)
-        valid_families = [fr["part_family"] for fr in family_rows]
-        family = family if family in valid_families else valid_families[0]
         family_cols = [
             ("부품군", 130, "left"), ("모델", 150, "left"), ("표본 수", 64, "right"),
             ("양성률(%)", 80, "right"), ("정밀도", 82, "right"), ("재현율", 82, "right"),
@@ -1287,93 +1344,60 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
         mcomp_body = html.Div([family_table])
         mcomp = card("부품군 진단", 774, ROW_MAIN, mcomp_body, right=note("행 = 부품군 · 열 = 지표 · 행 클릭 시 아래 카드 갱신"))
     else:
-        metric_cols = [("모델", 182, "left")] + [(f"[지표 {i+1}]", 93, "right") for i in range(6)]
-        model_rows = []
+        # 모델 비교 표 — 과제 0(현재 고장 표시 분류)·2(부품 고장 탐지) 공용.
+        # 열 순서는 모델 → AP → 정밀도 → 재현율 → F1 → 선택 여부로 고정하고
+        # Accuracy는 넣지 않는다(상단 KPI 카드에 이미 있고 양성률이 낮아
+        # 부풀려진다). 결과가 있는 모델만 행으로 넣는다.
         if task_sel == 0:
-            comparison_metrics = load_current_classification_metrics()
-            model_names = ["prior", "hist_gradient_boosting"]
+            metrics = load_current_classification_metrics()
+            comparison_rows = [
+                {"key": "prior", "label": "prior (기준)", **{
+                    col: metrics["prior"][col] for col in ("average_precision", "precision", "recall", "f1")
+                }},
+                {"key": "hist_gradient_boosting", "label": "hist_gradient_boosting", **{
+                    col: metrics["hist_gradient_boosting"][col]
+                    for col in ("average_precision", "precision", "recall", "f1")
+                }},
+            ]
+            selected_key = "hist_gradient_boosting"
         else:
-            comparison_metrics = None
-            model_names = ["기준 A", "기준 B", "RandomForest"]
-        for name in model_names:
-            cells = [html.Td(
-                html.Div([html.Span(style={"width": "10px", "height": "10px", "border": f"1px solid {CTRL}",
-                                            "boxSizing": "border-box"}),
-                          html.Span(name, style={"fontSize": "13px", "color": INK})],
-                         style={"display": "flex", "alignItems": "center", "gap": "8px"}),
-                style={"padding": "0 8px", "borderBottom": f"1px solid {HAIR}"})]
-            if comparison_metrics is not None:
-                row_pct = [comparison_metrics[name][col] * 100 for col in CLASSIFICATION_METRIC_COLUMNS]
-            else:
-                row_pct = [45] * 6
-            cells += [html.Td(html.Div(bar(pct, 8), style={"display": "flex", "justifyContent": "flex-end"}),
-                              style={"padding": "0 8px", "borderBottom": f"1px solid {HAIR}"}) for pct in row_pct]
-            model_rows.append(html.Tr(cells, style={"height": "32px"}))
-        model_rows.append(html.Tr(
-            html.Td("+ 레지스트리 모델 행 (가변 · 32px/행)", colSpan=7,
-                    style={"padding": "0 8px", "border": f"1px dashed {CTRL}", "background": SUNK, **LABEL_12}),
-            style={"height": "32px"}))
-        mthead = html.Tr([html.Th(l, style={"width": f"{w}px", "padding": "0 8px", "textAlign": a,
-                                             **LABEL_12, "whiteSpace": "nowrap", "borderBottom": f"1px solid {CTRL}"})
-                           for l, w, a in metric_cols], style={"height": "32px"})
-        mtable = html.Table([html.Thead(mthead), html.Tbody(model_rows)],
-                             style={"width": "740px", "tableLayout": "fixed", "borderCollapse": "collapse"})
-        mcomp_body = html.Div([mtable, html.Div(style={"flexGrow": "1"}),
-                               note("가시 한도: 헤더 32 + 모델 10행 × 32 = 352 / 392"),
-                               note("기계 종류 → 필터바 · 위험 기준선 → 툴바 (표의 축 아님)")])
-        mcomp = card("모델 비교", 774, ROW_MAIN, mcomp_body, right=note("행 = 모델 (레지스트리) · 열 = 지표"))
+            metrics = load_part_failure_metrics()
+            comparison_rows = [{"key": m, "label": m, **vals} for m, vals in metrics.items()]
+            selected_key = load_part_failure_selected_model()
+        mcomp_body = html.Div([_model_comparison_table(comparison_rows, selected_key)])
+        mcomp = card("모델 비교", 774, ROW_MAIN, mcomp_body,
+                     right=note(f"행 = 모델 · 선택 = AP 최댓값 ({selected_key})"))
 
-    if task_sel == 1:
-        pr_cm = load_family_pr_curve_and_confusion(asset_tag, family)
-        pr_body = html.Div(
-            dcc.Graph(id={"type": "family-pr-chart", "index": "screen3"},
-                      figure=_family_pr_figure(pr_cm, "light"),
-                      config={"displayModeBar": False, "responsive": True},
-                      style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
-            style={"width": "584px", "height": "392px", "display": "flex", "flexDirection": "column"})
-    else:
-        pr_body = html.Div([slot("범례 · 모델 n + 무작위 기준선", 584, 20),
-                            hstack([slot("y축 · 정밀도", 40, 342), slot("PR 곡선 영역", "가변", 342)], 0),
-                            hstack([html.Div(style={"width": "40px"}), slot("x축 · 재현율", "가변", 22)], 0)])
-    prc = card("PR 곡선", 616, ROW_MAIN, pr_body, right=note("모델 수만큼 + 무작위 기준선"))
+    pr_chart_id_type = {0: "classification-pr-chart", 1: "family-pr-chart", 2: "partfail-pr-chart"}[task_sel]
+    pr_body = html.Div(
+        dcc.Graph(id={"type": pr_chart_id_type, "index": "screen3"},
+                  figure=_family_pr_figure(pr_cm, "light"),
+                  config={"displayModeBar": False, "responsive": True},
+                  style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
+        style={"width": "584px", "height": "392px", "display": "flex", "flexDirection": "column"})
+    prc_note = f"모델: {pr_cm['model']}" if "model" in pr_cm else f"{asset_tag} · {family}"
+    prc = card("PR 곡선", 616, ROW_MAIN, pr_body, right=note(prc_note))
 
-    def cell(t):
-        return slot(t, 169, 160)
     def cm_cell(value):
         return html.Div(html.Span(str(value), style={"fontFamily": MONO, "fontSize": "24px",
                                                        "fontWeight": "600", "color": INK}),
                          style={"width": "169px", "height": "160px", "boxSizing": "border-box",
                                 "display": "flex", "alignItems": "center", "justifyContent": "center",
                                 "border": f"1px dashed {CTRL}", "background": SUNK})
-    if task_sel == 1:
-        c = pr_cm["confusion"]
-        cm_body = html.Div([
-            hstack([html.Div(style={"width": "72px"}),
-                    html.Div("예측 고장 표시 있음", style={"width": "169px", "textAlign": "center", **LABEL_12}),
-                    html.Div("예측 고장 표시 없음", style={"width": "169px", "textAlign": "center", **LABEL_12})],
-                   8, {"height": "24px", "alignItems": "center"}),
-            hstack([html.Div("실제 있음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
-                    cm_cell(c["tp"]), cm_cell(c["fn"])], 8, {"height": "160px"}),
-            hstack([html.Div("실제 없음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
-                    cm_cell(c["fp"]), cm_cell(c["tn"])], 8, {"height": "160px"}),
-            html.Div([html.Span("판정 임계값", style={**LABEL_12, "whiteSpace": "nowrap"}),
-                      html.Span(f"{pr_cm['cutoff']:.3f}", style=NUM_12)],
-                     style={"height": "32px", "display": "flex", "alignItems": "center", "gap": "8px"}),
-        ])
-    else:
-        cm_body = html.Div([
-            hstack([html.Div(style={"width": "72px"}),
-                    html.Div("예측 고장 표시 있음", style={"width": "169px", "textAlign": "center", **LABEL_12}),
-                    html.Div("예측 고장 표시 없음", style={"width": "169px", "textAlign": "center", **LABEL_12})],
-                   8, {"height": "24px", "alignItems": "center"}),
-            hstack([html.Div("실제 있음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
-                    cell("실제 있음 · 예측 있음"), cell("실제 있음 · 예측 없음")], 8, {"height": "160px"}),
-            hstack([html.Div("실제 없음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
-                    cell("실제 없음 · 예측 있음"), cell("실제 없음 · 예측 없음")], 8, {"height": "160px"}),
-            html.Div([html.Span("판정 임계값", style={**LABEL_12, "whiteSpace": "nowrap"}),
-                      slot("값 · 하단 슬라이더와 연동", 220, 24)],
-                     style={"height": "32px", "display": "flex", "alignItems": "center", "gap": "8px"}),
-        ])
+    c = pr_cm["confusion"]
+    cm_body = html.Div([
+        hstack([html.Div(style={"width": "72px"}),
+                html.Div("예측 고장 표시 있음", style={"width": "169px", "textAlign": "center", **LABEL_12}),
+                html.Div("예측 고장 표시 없음", style={"width": "169px", "textAlign": "center", **LABEL_12})],
+               8, {"height": "24px", "alignItems": "center"}),
+        hstack([html.Div("실제 있음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
+                cm_cell(c["tp"]), cm_cell(c["fn"])], 8, {"height": "160px"}),
+        hstack([html.Div("실제 없음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
+                cm_cell(c["fp"]), cm_cell(c["tn"])], 8, {"height": "160px"}),
+        html.Div([html.Span("판정 임계값", style={**LABEL_12, "whiteSpace": "nowrap"}),
+                  html.Span(f"{pr_cm['cutoff']:.3f}", style=NUM_12)],
+                 style={"height": "32px", "display": "flex", "alignItems": "center", "gap": "8px"}),
+    ])
     cmx = card("혼동행렬", 458, ROW_MAIN, cm_body, right=note("2 × 2"))
     row_b = row(ROW_MAIN, [mcomp, prc, cmx])
 
@@ -1393,19 +1417,15 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
             style={"display": "flex", "flexDirection": "column", "gap": "4px"},
         )
     else:
-        feat_body = html.Div(
-            [html.Div([html.Div(bar(70, 5), style={"width": "160px", "flexShrink": "0"}),
-                       html.Div(style={"flexGrow": "1", "height": "11px", "boxSizing": "border-box",
-                                        "border": f"1px dashed {CTRL}", "background": SUNK}),
-                       html.Div(bar(80, 5), style={"width": "48px", "flexShrink": "0"})],
-                      style={"height": "15px", "display": "flex", "alignItems": "center", "gap": "8px",
-                             "flexShrink": "0"})
-             for _ in range(12)],
+        # prior·로지스틱회귀/랜덤포레스트 모두 변수중요도를 사전 계산해 두지
+        # 않았다 — 그럴듯한 값을 새로 만들지 않고 데이터 없음을 그대로 밝힌다.
+        feat_body = empty_state(
+            "데이터 없음", "이 과제의 모델은 변수중요도를 사전 계산해 두지 않음", 742, 184,
         )
     if task_sel == 1:
         feat = card("주요 영향 변수 상위 10", 774, 252, feat_body, right=note("10행 · 부품군 자체 속성(자산 무관)"))
     else:
-        feat = card("주요 영향 변수 상위 12", 774, 252, feat_body, right=note("12행 × 15 · 직접 값 라벨"))
+        feat = card("주요 영향 변수", 774, 252, feat_body, right=note("데이터 없음"))
 
     slider = html.Div(
         [html.Label("판정 임계값 (즉시 재계산)", htmlFor="thr-slider", style={**LABEL_12, "whiteSpace": "nowrap"}),
@@ -2232,6 +2252,29 @@ def recolor_family_recur_chart(theme, _active_tab, asset_tag, family):
     family = family if family in valid_families else valid_families[0]
     intervals = load_family_recurrence_intervals(asset_tag, family)
     return [_family_recur_figure(intervals, theme or "light")]
+
+
+# ③ "현재 고장 표시 분류"/"부품 고장 탐지" 과제의 PR곡선도 같은 방식으로
+# 재색칠한다. 이 둘은 선택 자산·부품군과 무관한 전체 테스트 구간 지표라
+# family-pr-chart와 달리 State가 필요 없다 — heatmap-chart와 같은 패턴.
+@app.callback(
+    Output({"type": "classification-pr-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+)
+def recolor_classification_pr_chart(theme, _active_tab):
+    pr_cm = load_current_classification_pr_curve_and_confusion("hist_gradient_boosting")
+    return [_family_pr_figure(pr_cm, theme or "light")]
+
+
+@app.callback(
+    Output({"type": "partfail-pr-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+)
+def recolor_partfail_pr_chart(theme, _active_tab):
+    pr_cm = load_part_failure_pr_curve_and_confusion()
+    return [_family_pr_figure(pr_cm, theme or "light")]
 
 
 # <html>에도 같은 클래스를 얹는다. #root는 1920 고정폭이라 넓은 화면에서
