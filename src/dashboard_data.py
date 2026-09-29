@@ -269,6 +269,35 @@ def load_part_failure_metrics() -> dict:
     return result
 
 
+def load_current_classification_actual_rate(model: str = "hist_gradient_boosting") -> float:
+    """화면 ③ "모델 해석 요약" — "현재 고장 표시 분류" 과제의 실제 고장률
+    (테스트 구간 양성 비율). AP÷실제 고장률(무작위 기준 대비 배수) 계산에 쓴다.
+
+    Raises:
+        ValueError: model이 prior/hist_gradient_boosting이 아닐 때.
+    """
+    if model not in ("prior", "hist_gradient_boosting"):
+        raise ValueError(f"알 수 없는 model입니다: {model}")
+    metrics = pd.read_csv(DEFAULT_CLASSIFICATION_METRICS_PATH)
+    row = metrics.loc[metrics["scope_kind"].eq("overall") & metrics["model"].eq(model)].iloc[0]
+    return float(row["test_positive_rate"])
+
+
+def load_part_failure_actual_rate(model: str | None = None) -> float:
+    """화면 ③ "모델 해석 요약" — "부품 고장 탐지" 과제의 실제 고장률
+    (테스트 구간 양성 비율). ``model``이 ``None``이면 선택 모델을 쓴다.
+
+    Raises:
+        ValueError: model이 overall_results.csv에 없을 때.
+    """
+    overall = _part_failure_overall_raw()
+    model = model or load_part_failure_selected_model()
+    row = overall.loc[overall["model"].eq(model)]
+    if row.empty:
+        raise ValueError(f"알 수 없는 model입니다: {model}")
+    return float(row.iloc[0]["failure_rate"])
+
+
 def load_part_failure_selected_model() -> str:
     """"선택 여부" 열의 기준 — AP(PR_AUC)가 가장 높은 모델을 선택 모델로 삼는다."""
     metrics = load_part_failure_metrics()

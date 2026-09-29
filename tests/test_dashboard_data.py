@@ -280,3 +280,23 @@ def test_part_failure_pr_curve_and_confusion_defaults_to_selected_model():
 def test_part_failure_pr_curve_and_confusion_rejects_unknown_model():
     with pytest.raises(ValueError):
         dd.load_part_failure_pr_curve_and_confusion('not_a_model')
+
+
+def test_current_classification_actual_rate_matches_test_positive_rate():
+    rate = dd.load_current_classification_actual_rate('hist_gradient_boosting')
+    assert rate == pytest.approx(0.099676, abs=1e-5)
+
+
+def test_current_classification_actual_rate_rejects_unknown_model():
+    with pytest.raises(ValueError):
+        dd.load_current_classification_actual_rate('not_a_model')
+
+
+def test_part_failure_actual_rate_defaults_to_selected_model():
+    rate = dd.load_part_failure_actual_rate()
+    assert rate == pytest.approx(0.5062425475205162, abs=1e-6)
+
+
+def test_part_failure_actual_rate_rejects_unknown_model():
+    with pytest.raises(ValueError):
+        dd.load_part_failure_actual_rate('not_a_model')
