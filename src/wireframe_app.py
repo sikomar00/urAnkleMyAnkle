@@ -199,7 +199,6 @@ SCREENS = [
     ("2", "② 기계 상세"),
     ("3", "③ 모델·예측"),
     ("4", "④ 데이터"),
-    ("5", "⑤ 보고서 요약"),
 ]
 
 # ------------------------------------------------------------
@@ -1712,7 +1711,11 @@ def screen_5(seg_state=None, audience=DEFAULT_AUDIENCE):
                      style={"display": "flex", "flexDirection": "column", "gap": f"{GUTTER}px"})
 
 
-SCREEN_BUILDERS = {"1": screen_1, "2": screen_2, "3": screen_3, "4": screen_4, "5": screen_5}
+# screen_5()는 탭에서는 빠지지만 함수 자체는 지우지 않는다 — 헤더의 내보내기
+# 드롭다운(REPORT_AUDIENCES/build_report_pdf/xlsx)이 화면⑤ 없이도 정상
+# 동작하는지는 확인했지만, screen_5()가 그 보고서 구성의 참조 구현이라
+# 남겨 둔다(요청: "함수 자체는 삭제하지 마라").
+SCREEN_BUILDERS = {"1": screen_1, "2": screen_2, "3": screen_3, "4": screen_4}
 
 
 # ============================================================
