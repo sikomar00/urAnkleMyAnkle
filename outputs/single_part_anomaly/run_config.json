@@ -1,0 +1,29 @@
+{
+  "validation_start": "2024-01-01",
+  "test_start": "2024-07-01",
+  "min_normal_rows": 30,
+  "bootstrap_samples": 1000,
+  "random_state": 42,
+  "max_iter": 100,
+  "include_residual": true,
+  "z_thresholds": [
+    2.0,
+    3.0
+  ],
+  "expected_parts_per_asset": 20,
+  "input_path": "/Users/kodohyeon/Documents/project_LS/urAnkleMyAnkle/data/raw/synthetic_industrial_machine_data.csv",
+  "input_sha256": "4eb81e0e445b0d69ce166a7bf1eedccf8b1b4ea554f46ecb2b0cb08d5ce198e5",
+  "git_head": "e4651c3cd8ae54b9679828fb163646f6164bedf6",
+  "working_tree_dirty": true,
+  "analysis_source_sha256": "43e9c8c9fd1c51923b9c6b898d07e6d94363c09efa635af1396978cee9948deb",
+  "analysis_source_files": {
+    "src/single_part_anomaly_analysis.py": "0118ca425198a362e36add576447d6ff74ecf11ed0d7371b0e679ca3eb8863b6",
+    "src/current_single_part_anomaly.py": "c782f4cbe1e0efc4f9e0bf32c35d8a1a9670a889e374fe20dace6789c168381d"
+  },
+  "python_version": "3.11.16 (main, Aug 12 2026, 23:03:19) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "dependency_versions": {
+    "numpy": "1.26.4",
+    "pandas": "2.2.3",
+    "scikit-learn": "1.6.1"
+  }
+}

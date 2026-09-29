@@ -12,6 +12,20 @@
   → eda.py로 네 과제 결과 비교
 ```
 
+당일 Family 진단은 기존 장비 점수·개별 부품 모델과 분리되어 다음처럼 작동합니다.
+
+```text
+current_family_diagnosis.py
+  ├─ family_features.build_family_daily()
+  │    ├─ affected: 한 부품 이상 고장 표시
+  │    ├─ severe: 두 부품 이상 또는 A등급 부품 고장 표시
+  │    └─ all_failed: 발생률 통계 전용
+  ├─ family_features.build_family_history_features()
+  ├─ family_residual_features.OperatingResidualTransformer
+  ├─ family_diagnosis_experiments.run_family_experiments()
+  └─ family_diagnosis_report.render_family_summary()
+```
+
 학습과 테스트의 호출 관계는 다음과 같습니다.
 
 ```text
@@ -33,6 +47,12 @@ current_asset_score_model.py
 ```
 
 ## 2. 실행 파일
+
+0. `current_family_diagnosis.py`
+   - 목적: 당일 장비 센서로 9개 부품 Family의 이상·심각 점검 범위를 진단
+   - 실행: `python -m src.current_family_diagnosis --data dataVerification/synthetic_industrial_machine_data.csv`
+   - Feature: A(당일), B(과거 센서·Family 상태), C(운전조건 보정 잔차)
+   - 주의: 여러 Family가 동시에 양성일 수 있는 다중라벨이며 고장 확정이 아님
 
 1. `current_asset_model.py`
    - 목적: 장비의 당일 고장점수가 기준 이상인지 탐지
@@ -107,6 +127,25 @@ current_asset_score_model.py
 - 네 실행 파일의 공통 인자를 한곳에서 정의합니다.
 - 생략된 점수 기준을 12/13/14로, 생략된 임계값 정책을 세 정책 전체로 정규화합니다.
 - `run_tasks()`가 명령행 인자를 공통 학습기로 전달합니다.
+
+### Family 진단 모듈
+
+1. `family_features.py`
+   - 20개 부품 행을 장비·날짜·Family 긴 형식으로 집계합니다.
+   - Family 과거 Target은 반드시 `shift(1)` 후 계산합니다.
+2. `family_residual_features.py`
+   - 학습 구간의 모든 Family가 정상인 장비일만 기대 센서 모델에 사용합니다.
+   - 장비 정상일 30건 미만과 처음 보는 장비는 공통 모델로 fallback합니다.
+3. `family_diagnosis_experiments.py`
+   - Logistic Regression, Random Forest, HistGradientBoosting을 검증 AP로 비교합니다.
+   - 검증에서 F1, Precision 0.70·0.80, 상위 10% 임계값을 고정합니다.
+4. `family_diagnosis_report.py`
+   - Family별 지표와 Macro·Micro 다중라벨 지표, 순차 모델 진행 조건을 한글로 기록합니다.
+
+실행 결과는 `outputs/family_current/`에 저장됩니다. `experiment_summary.md`를 먼저 읽고,
+`metrics.csv`에서 Family별 AP·Precision·Recall·F1을 확인한 뒤,
+`multilabel_metrics.csv`에서 전체 진단 성능을 확인합니다. 당일 진단 Gate가 통과하지
+않으면 미래 Family 예측은 구현하지 않습니다.
 
 ## 4. 데이터 누수 방지
 
