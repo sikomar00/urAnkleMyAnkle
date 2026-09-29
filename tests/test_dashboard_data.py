@@ -227,3 +227,48 @@ def test_asset_failure_heatmap_shape_and_ast1041_total():
     assert heat['period'].nunique() == 37
     assert heat.groupby('asset_tag')['failed_part_count'].sum()['AST-1041'] == 2071
     assert (heat['failed_part_count'] >= 0).all()
+
+
+def test_current_classification_pr_curve_and_confusion_matches_metrics():
+    result = dd.load_current_classification_pr_curve_and_confusion('hist_gradient_boosting')
+    c = result['confusion']
+    assert c == {'tn': 15079, 'fp': 18233, 'fn': 641, 'tp': 3047}
+    precision = c['tp'] / (c['tp'] + c['fp'])
+    recall = c['tp'] / (c['tp'] + c['fn'])
+    assert precision == pytest.approx(0.14319, abs=1e-4)
+    assert recall == pytest.approx(0.82619, abs=1e-4)
+    assert len(result['precision_curve']) == len(result['recall_curve'])
+
+
+def test_current_classification_pr_curve_and_confusion_rejects_unknown_model():
+    with pytest.raises(ValueError):
+        dd.load_current_classification_pr_curve_and_confusion('not_a_model')
+
+
+def test_part_failure_metrics_has_both_models():
+    metrics = dd.load_part_failure_metrics()
+    assert set(metrics) == {'로지스틱 회귀', '랜덤 포레스트'}
+    for m in metrics.values():
+        assert set(m) == {'average_precision', 'precision', 'recall', 'f1'}
+    lr = metrics['로지스틱 회귀']
+    assert lr['average_precision'] == pytest.approx(0.61258, abs=1e-4)
+    assert lr['precision'] == pytest.approx(0.59586, abs=1e-4)
+    assert lr['recall'] == pytest.approx(0.60201, abs=1e-4)
+    assert lr['f1'] == pytest.approx(0.59892, abs=1e-4)
+
+
+def test_part_failure_selected_model_is_highest_average_precision():
+    assert dd.load_part_failure_selected_model() == '로지스틱 회귀'
+
+
+def test_part_failure_pr_curve_and_confusion_defaults_to_selected_model():
+    result = dd.load_part_failure_pr_curve_and_confusion()
+    assert result['model'] == '로지스틱 회귀'
+    assert result['confusion'] == {'tn': 8185, 'fp': 5894, 'fn': 5745, 'tp': 8690}
+    assert result['cutoff'] == pytest.approx(0.5)
+    assert len(result['precision_curve']) == len(result['recall_curve'])
+
+
+def test_part_failure_pr_curve_and_confusion_rejects_unknown_model():
+    with pytest.raises(ValueError):
+        dd.load_part_failure_pr_curve_and_confusion('not_a_model')

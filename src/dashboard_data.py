@@ -41,6 +41,11 @@ CLASSIFICATION_METRIC_COLUMNS = [
     "accuracy", "precision", "recall", "f1", "roc_auc", "average_precision",
 ]
 
+# 화면 ③ "현재 고장 표시 분류" 과제의 테스트 구간 원자료 예측 로그(PR곡선·혼동행렬용).
+DEFAULT_CLASSIFICATION_PREDICTIONS_PATH = (
+    PROJECT_ROOT / "outputs" / "current_state" / "test_predictions.csv"
+)
+
 # 화면 ③ "부품군 진단" 과제의 자산별 부품군(9종) 이상탐지 지표 원본.
 DEFAULT_FAMILY_METRICS_PATH = (
     PROJECT_ROOT / "outputs" / "family_current" / "metrics.csv"
@@ -48,6 +53,14 @@ DEFAULT_FAMILY_METRICS_PATH = (
 FAMILY_DIAGNOSIS_METRIC_COLUMNS = [
     "support", "positive_rate", "precision", "recall", "average_precision", "roc_auc",
 ]
+
+# 화면 ③ "부품 고장 탐지" 과제 원본. pf_within_7d(평가구간 2024-07-21~2024-12-25,
+# 부품·일 그레인, 향후 7일 내 고장 여부 이진분류)를 쓴다 — 후보(pf_next_day/
+# pf_within_3d/pf_count_7d/pf_first_day_class) 중 유일하게 두 모델 모두
+# Precision·Recall이 0이 아닌 결과를 낸다(나머지는 임계값 0.5에서 퇴화된
+# 예측이라 데모에 부적합).
+DEFAULT_PART_FAILURE_DIR = PROJECT_ROOT / "outputs" / "pf_within_7d"
+PART_FAILURE_METRIC_COLUMNS = ["average_precision", "precision", "recall", "f1"]
 
 # 화면 ③ "부품군 진단" 드릴다운(PR곡선·혼동행렬) 원본 — 일별 예측 로그.
 DEFAULT_FAMILY_TEST_PREDICTIONS_PATH = (
@@ -183,6 +196,125 @@ def load_current_classification_metrics() -> dict:
         r = row.iloc[0]
         result[model] = {col: float(r[col]) for col in CLASSIFICATION_METRIC_COLUMNS}
     return result
+
+
+@lru_cache(maxsize=1)
+def _current_classification_predictions_raw() -> pd.DataFrame:
+    path = DEFAULT_CLASSIFICATION_PREDICTIONS_PATH
+    if not path.exists():
+        raise FileNotFoundError(
+            "분류 예측 로그 test_predictions.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            "python -m src.industrial_training --mode current"
+        )
+    return pd.read_csv(path)
+
+
+def load_current_classification_pr_curve_and_confusion(model: str = "hist_gradient_boosting") -> dict:
+    """화면 ③ "현재 고장 표시 분류" 과제 — 선택 모델의 PR곡선 좌표와 혼동행렬
+    (scope_kind=="overall" 전체 테스트 구간 기준).
+
+    Raises:
+        ValueError: model이 prior/hist_gradient_boosting이 아닐 때.
+    """
+    if model not in ("prior", "hist_gradient_boosting"):
+        raise ValueError(f"알 수 없는 model입니다: {model}")
+
+    metrics = pd.read_csv(DEFAULT_CLASSIFICATION_METRICS_PATH)
+    overall_row = metrics.loc[metrics["scope_kind"].eq("overall") & metrics["model"].eq(model)].iloc[0]
+    cutoff = float(overall_row["threshold"])
+    confusion = {
+        "tn": int(overall_row["true_negative"]), "fp": int(overall_row["false_positive"]),
+        "fn": int(overall_row["false_negative"]), "tp": int(overall_row["true_positive"]),
+    }
+
+    preds = _current_classification_predictions_raw()
+    sub = preds.loc[
+        preds["scope_kind"].eq("overall") & preds["scope_name"].eq("all") & preds["model"].eq(model)
+    ]
+    precision, recall, _ = precision_recall_curve(sub["breakdown_flag"], sub["risk_score"])
+
+    return {
+        "model": model,
+        "precision_curve": precision.tolist(),
+        "recall_curve": recall.tolist(),
+        "cutoff": cutoff,
+        "confusion": confusion,
+    }
+
+
+@lru_cache(maxsize=1)
+def _part_failure_overall_raw() -> pd.DataFrame:
+    path = DEFAULT_PART_FAILURE_DIR / "overall_results.csv"
+    if not path.exists():
+        raise FileNotFoundError(
+            "부품 고장 탐지 overall_results.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            "python -m src.pf_within_7d"
+        )
+    return pd.read_csv(path)
+
+
+def load_part_failure_metrics() -> dict:
+    """화면 ③ "부품 고장 탐지" 과제 — 모델별(로지스틱 회귀/랜덤 포레스트)
+    AP(PR_AUC)·정밀도·재현율·F1. Accuracy는 양성률이 낮아 부풀려지므로 넣지 않는다.
+    """
+    overall = _part_failure_overall_raw()
+    result = {}
+    for _, r in overall.iterrows():
+        result[r["model"]] = {
+            "average_precision": float(r["PR_AUC"]),
+            "precision": float(r["Precision"]),
+            "recall": float(r["Recall"]),
+            "f1": float(r["F1"]),
+        }
+    return result
+
+
+def load_part_failure_selected_model() -> str:
+    """"선택 여부" 열의 기준 — AP(PR_AUC)가 가장 높은 모델을 선택 모델로 삼는다."""
+    metrics = load_part_failure_metrics()
+    return max(metrics, key=lambda m: metrics[m]["average_precision"])
+
+
+@lru_cache(maxsize=1)
+def _part_failure_predictions_raw() -> pd.DataFrame:
+    path = DEFAULT_PART_FAILURE_DIR / "predictions.csv"
+    if not path.exists():
+        raise FileNotFoundError(
+            "부품 고장 탐지 predictions.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            "python -m src.pf_within_7d"
+        )
+    return pd.read_csv(path)
+
+
+def load_part_failure_pr_curve_and_confusion(model: str | None = None) -> dict:
+    """화면 ③ "부품 고장 탐지" 과제 — 선택 모델의 PR곡선 좌표와 혼동행렬.
+
+    Args:
+        model: ``None``이면 :func:`load_part_failure_selected_model`이 고른 모델.
+
+    Raises:
+        ValueError: model이 overall_results.csv에 없을 때.
+    """
+    overall = _part_failure_overall_raw()
+    model = model or load_part_failure_selected_model()
+    row = overall.loc[overall["model"].eq(model)]
+    if row.empty:
+        raise ValueError(f"알 수 없는 model입니다: {model}")
+    r = row.iloc[0]
+    cutoff = float(r["probability_cutoff"])
+    confusion = {"tn": int(r["TN"]), "fp": int(r["FP"]), "fn": int(r["FN"]), "tp": int(r["TP"])}
+
+    preds = _part_failure_predictions_raw()
+    sub = preds.loc[preds["model"].eq(model)]
+    precision, recall, _ = precision_recall_curve(sub["target"], sub["probability"])
+
+    return {
+        "model": model,
+        "precision_curve": precision.tolist(),
+        "recall_curve": recall.tolist(),
+        "cutoff": cutoff,
+        "confusion": confusion,
+    }
 
 
 @lru_cache(maxsize=1)
