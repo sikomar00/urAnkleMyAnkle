@@ -19,6 +19,7 @@ class ActionLog(Base):
     log_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime, default=kst_now, nullable=False, index=True)
     actor_id: Mapped[str] = mapped_column(String(80), nullable=False, default="ANONYMOUS")
+    actor_role: Mapped[str] = mapped_column(String(10), nullable=False, default="UNKNOWN", index=True)
     event_code: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
     action_type: Mapped[str] = mapped_column(String(80), nullable=False)
     target_type: Mapped[str | None] = mapped_column(String(40))
@@ -26,6 +27,21 @@ class ActionLog(Base):
     action_detail: Mapped[str | None] = mapped_column(Text)
     result_status: Mapped[str] = mapped_column(String(12), nullable=False)
     block_reason: Mapped[str | None] = mapped_column(String(160))
+
+
+class LoginLog(Base):
+    """로그인·로그아웃·세션 상태만 따로 저장하는 인증 로그."""
+
+    __tablename__ = "login_logs"
+
+    log_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime, default=kst_now, nullable=False, index=True)
+    actor_id: Mapped[str] = mapped_column(String(80), nullable=False, default="ANONYMOUS")
+    actor_role: Mapped[str] = mapped_column(String(10), nullable=False, default="UNKNOWN", index=True)
+    event_code: Mapped[str] = mapped_column(String(60), nullable=False, index=True)
+    result_status: Mapped[str] = mapped_column(String(12), nullable=False)
+    block_reason: Mapped[str | None] = mapped_column(String(160))
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
 
 
 class FailureLog(Base):

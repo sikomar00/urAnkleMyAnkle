@@ -47,8 +47,8 @@ def local_failure_count() -> int:
 @lru_cache(maxsize=2)
 def _engine_for_url(url: str):
     parsed = make_url(url)
-    if parsed.drivername != "mysql+pymysql" or parsed.database != "testdb":
-        raise RuntimeError("MACHINE_DATABASE_URL은 mysql+pymysql 형식의 testdb를 가리켜야 합니다.")
+    if parsed.drivername != "mysql+pymysql" or parsed.database != "predictive_maintenance":
+        raise RuntimeError("MACHINE_DATABASE_URL은 mysql+pymysql 형식의 predictive_maintenance를 가리켜야 합니다.")
     return create_engine(url, pool_pre_ping=True, pool_recycle=1800, connect_args={"connect_timeout": 4})
 
 
@@ -60,27 +60,24 @@ def get_engine():
 
 
 def create_owned_tables() -> None:
-    """우리 모델 세 테이블만 생성한다. student/users 등 기존 테이블은 손대지 않는다."""
-    Base.metadata.create_all(get_engine())
+    """현재 남기는 관리자 계정 테이블만 생성한다.
+
+    이전 시범용 경보·시스템 로그 테이블은 더 이상 만들지 않는다.
+    """
+    AdminInfo.__table__.create(get_engine(), checkfirst=True)
 
 
 def db_state() -> dict:
-    """연결 또는 테이블 부재를 화면용 상태로 변환한다."""
+    """현재 사용하는 DB 연결 상태만 화면용 값으로 변환한다.
+
+    이전 시범용 dashboard_failure_alerts·dashboard_system_logs는 삭제됐으므로
+    이 함수에서 해당 테이블을 조회하지 않는다.
+    """
     try:
         with get_engine().connect() as connection:
             connection.execute(text("SELECT 1"))
-        with Session(get_engine()) as session:
-            unreviewed = session.scalar(
-                select(func.count()).select_from(FailureAlert).where(FailureAlert.status == "unreviewed")
-            ) or 0
-            today = utc_now().date()
-            saved_today = session.scalar(
-                select(func.count()).select_from(FailureAlert).where(func.date(FailureAlert.created_at) == today)
-            ) or 0
-            recent = session.scalar(select(func.max(FailureAlert.created_at)))
-        return {"connected": True, "message": "연결됨", "unreviewed": unreviewed,
-                "saved_today": saved_today, "recent": recent,
-                "failures": local_failure_count()}
+        return {"connected": True, "message": "연결됨", "unreviewed": None,
+                "saved_today": None, "recent": None, "failures": local_failure_count()}
     except Exception:
         return {"connected": False, "message": "연결 또는 테이블 확인 필요", "unreviewed": None,
                 "saved_today": None, "recent": None, "failures": local_failure_count()}

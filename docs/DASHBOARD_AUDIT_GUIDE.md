@@ -1,6 +1,8 @@
 # 5탭 대시보드의 MySQL 로그 기록 안내
 
-현재 브랜치 `KYS-dashboard`의 `src/wireframe_app.py`는 기존 ①~⑤ 탭을 유지합니다. 별도의 DB 관리 탭 없이 사용자의 의미 있는 조작을 `action_logs`, CSV에 표시된 부품 고장을 `failure_logs`, 프로그램 오류를 `error_logs`에 저장합니다. 세 **테이블은 하나의 MySQL 데이터베이스 `testdb`**에 있습니다. MySQL Workbench는 그 DB를 조회하는 프로그램이며 Python은 SQLAlchemy ORM과 PyMySQL로 MySQL 서버에 접속합니다. 기존 `student` 테이블은 수정하지 않습니다.
+현재 브랜치 `KYS-dashboard`의 `src/wireframe_app.py`는 기존 ①~⑤ 탭을 유지합니다. 별도의 DB 관리 탭 없이 사용자의 의미 있는 조작을 `action_logs`, CSV에 표시된 부품 고장을 `failure_logs`, 프로그램 오류를 `error_logs`에 저장합니다. 세 **테이블과 관리자 계정 테이블은 MySQL 데이터베이스 `predictive_maintenance`**에 있습니다. MySQL Workbench는 그 DB를 조회하는 프로그램이며 Python은 SQLAlchemy ORM과 PyMySQL로 MySQL 서버에 접속합니다.
+
+이전 시범 구조의 `dashboard_failure_alerts`, `dashboard_system_logs`는 사용하지 않아 삭제했습니다. 현재 로그인·행동·고장·오류 로그는 각각 `dashboard_admin_info`, `action_logs`, `failure_logs`, `error_logs`를 사용합니다.
 
 ## 실행
 
@@ -50,7 +52,7 @@ cd C:\urAnkleMyAnkle
 `security_service.py`는 비밀번호를 Argon2id 단방향 해시로 저장하고, 이름·전화번호·이메일을 AES-256-GCM으로 암호화합니다. AES 키는 `.env`에만 있고 DB에는 저장하지 않습니다. 앱 시작 시 `.env`의 단일 관리자 계정을 DB에 자동으로 한 번 준비합니다. Workbench에서 아래처럼 확인할 수 있습니다. `password_hash`는 원문 비밀번호와 달라야 하며, `name_encrypted` 등은 원문 대신 `v1:`로 시작하는 암호문이어야 합니다. 비밀번호 검증은 로그인·비밀번호 변경 때 서버에서 수행하며 개인정보 원문을 로그에 쓰지 않습니다.
 
 ```sql
-USE testdb;
+USE predictive_maintenance;
 SELECT log_id, occurred_at, actor_id, event_code, target_id, result_status
 FROM action_logs ORDER BY log_id DESC LIMIT 30;
 
@@ -65,7 +67,7 @@ SELECT login_id, password_hash, name_encrypted, phone_encrypted, email_encrypted
 FROM dashboard_admin_info;
 ```
 
-Workbench에서 `SELECT * FROM testdb.action_logs;`만 실행하면 최신순이 보장되지 않습니다. 위처럼 `ORDER BY log_id DESC`를 붙여 실행하면 가장 최근 저장 건이 맨 위에 표시됩니다. 같은 방식으로 `failure_logs`와 `error_logs`도 조회할 수 있습니다. 이 쿼리는 [`recent_logs.sql`](../sql/recent_logs.sql)에도 저장해 두었습니다. Workbench에서 해당 파일을 열고 원하는 SELECT 문을 실행하시면 됩니다.
+Workbench에서 `SELECT * FROM predictive_maintenance.action_logs;`만 실행하면 최신순이 보장되지 않습니다. 위처럼 `ORDER BY log_id DESC`를 붙여 실행하면 가장 최근 저장 건이 맨 위에 표시됩니다. 같은 방식으로 `failure_logs`와 `error_logs`도 조회할 수 있습니다. 이 쿼리는 [`recent_logs.sql`](../sql/recent_logs.sql)에도 저장해 두었습니다. Workbench에서 해당 파일을 열고 원하는 SELECT 문을 실행하시면 됩니다.
 
 정상 동작만 했다면 `error_logs`는 비어 있는 것이 맞습니다. 현재 ①~⑤의 일부 버튼은 원래 와이어프레임 기능으로 남아 있으므로 클릭하면 `BLOCKED`로 기록합니다. Dash 데이터 콜백은 로그인 세션 없이 호출하면 401로 차단됩니다. 이 구현은 교육용 프로젝트의 단일 관리자 로그인·로그·해시·암호화 검증 범위입니다.
 

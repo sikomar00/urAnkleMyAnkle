@@ -31,7 +31,7 @@
 
 ```sql
 SELECT occurred_at, actor_id, event_code, result_status, block_reason
-FROM testdb.action_logs
+FROM predictive_maintenance.action_logs
 WHERE event_code IN ('ACT_LOGIN', 'ACT_SESSION_EXTEND', 'ACT_LOGOUT', 'ACT_SESSION_EXPIRED')
 ORDER BY occurred_at DESC, log_id DESC;
 ```

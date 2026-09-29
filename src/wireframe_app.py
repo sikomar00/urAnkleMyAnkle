@@ -33,6 +33,7 @@
 """
 
 import io
+import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -65,11 +66,11 @@ from .dashboard_data import (  # noqa: E402
     load_table_page,
 )
 from .audit_service import (  # noqa: E402
-    change_admin_password, create_audit_tables, ensure_dashboard_admin, log_failure, record_action,
-    record_error, sync_if_csv_changed, verify_admin,
+    change_admin_password, create_audit_tables, ensure_dashboard_admin, list_user_accounts, log_failure,
+    record_action, record_error, sync_if_csv_changed,
 )
 from .dashboard_auth import (  # noqa: E402
-    current_session_state, extend_admin_session, install_auth,
+    current_session_state, end_admin_session, extend_admin_session, install_auth,
 )
 
 # ============================================================
@@ -577,7 +578,6 @@ def app_header():
                                  "display": "grid", "placeItems": "center", "cursor": "pointer",
                                  "fontSize": "13px", "fontWeight": "700"}),
              html.Div([
-                 html.Div("마이 프로필", style={"fontWeight": "700", "marginBottom": "8px"}),
                  html.Div(["아이디 · ", html.Span(id="profile-login-id")],
                           style={"fontSize": "12px", "marginBottom": "6px"}),
                  html.Div([
@@ -592,6 +592,8 @@ def app_header():
                            "alignItems": "center"}),
                  html.Button("비밀번호 변경", id="password-open-btn", n_clicks=0,
                              style={"display": "block", "width": "100%", "padding": "8px", "marginBottom": "5px"}),
+                 html.Button("계정 관리", id="account-manage-btn", n_clicks=0,
+                             style={"display": "none", "width": "100%", "padding": "8px", "marginBottom": "5px"}),
                  html.Button("로그아웃", id="logout-btn", n_clicks=0,
                              style={"display": "block", "width": "100%", "padding": "8px"}),
              ], style={"position": "absolute", "right": "0", "top": "40px", "width": "210px",
@@ -1819,6 +1821,8 @@ app.layout = html.Div(
         # ②의 "‹ 이전 기계"/"다음 기계 ›"가 바꾸는, 현재 상세를 보고 있는 기계.
         # prio-sort-store와 동일하게 세션 메모리(storage_type 미지정)로 둔다.
         dcc.Store(id="selected-asset-store", data=load_asset_list()[0]),
+        # 일반 계정이 제한 탭을 눌렀을 때 되돌아갈 마지막 허용 탭을 기억한다.
+        dcc.Store(id="last-allowed-tab-store", data="1"),
         dcc.Store(id="theme-store", data="light", storage_type="local"),
         dcc.Store(id="audit-sync-status"),
         dcc.Store(id="audit-audience-event"),
@@ -1906,6 +1910,37 @@ app.layout = html.Div(
                       "borderRadius": "10px", "boxShadow": "0 12px 40px #0005", "textAlign": "center"}),
         ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 320,
                   "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
+        # ADMIN 역할에서만 열 수 있는 일반 계정 목록입니다. 이름은 서버에서만 복호화합니다.
+        html.Div(id="account-management-modal", children=[
+            html.Div([
+                html.H3("계정 관리", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
+                html.Div(id="account-list-body"),
+                html.Div([
+                    html.Button("닫기", id="account-management-close-btn", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
+                                       "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                ], style={"display": "flex", "justifyContent": "center", "marginTop": "20px"}),
+            ], style={"width": "460px", "maxWidth": "calc(100vw - 32px)", "background": "#fff", "color": "#222",
+                      "padding": "22px", "borderRadius": "10px", "boxShadow": "0 12px 40px #0005"}),
+        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 330,
+                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
+        # 일반 계정이 ⑤ 보고서 요약을 선택하면 현재 화면을 유지하고 이 안내만 보여 준다.
+        html.Div(id="report-access-modal", children=[
+            html.Div([
+                html.H3("접근 권한", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
+                html.P("접근 권한이 필요합니다.",
+                       style={"marginBottom": "26px", "textAlign": "center"}),
+                html.Div([
+                    html.Button("확인", id="report-access-modal-close", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
+                                       "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                ], style={"display": "flex", "justifyContent": "center"}),
+            ], style={"width": "330px", "background": "#fff", "color": "#222", "padding": "22px",
+                      "borderRadius": "10px", "boxShadow": "0 12px 40px #0005", "textAlign": "center"}),
+        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 340,
+                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
         app_header(),
         filter_bar(),
         html.Main(
@@ -1925,14 +1960,31 @@ app.layout = html.Div(
 # ------------------------------------------------------------
 @app.callback(
     Output("screen-content", "children"),
+    Output("screen-tabs", "value"),
+    Output("last-allowed-tab-store", "data"),
+    Output("report-access-modal", "style"),
     Input("screen-tabs", "value"),
     Input("seg-store", "data"),
     Input("report-audience-dd", "value"),
     Input("prio-sort-store", "data"),
     Input("selected-asset-store", "data"),
+    Input("report-access-modal-close", "n_clicks"),
+    State("last-allowed-tab-store", "data"),
     State("actor-id-input", "value"),
 )
-def render_screen(active, seg_state, audience, prio_sort, selected_asset, actor_id):
+def render_screen(active, seg_state, audience, prio_sort, selected_asset, _close_clicks, last_allowed, actor_id):
+    # 일반 계정은 ⑤ 보고서 요약의 내용과 내보내기 기능에 접근할 수 없다.
+    # 탭 값을 마지막 허용 화면으로 즉시 되돌려 기존 화면도 그대로 유지한다.
+    if ctx.triggered_id == "report-access-modal-close":
+        return no_update, no_update, no_update, {"display": "none"}
+    if ctx.triggered_id == "screen-tabs" and active == "5" and str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
+        record_action("ACT_REPORT_ACCESS_BLOCKED", "보고서 요약 접근 차단", actor_id=actor_id,
+                      target_type="tab", target_id="5", status="BLOCKED",
+                      block_reason="관리자 역할이 필요합니다.")
+        return no_update, str(last_allowed or "1"), no_update, {
+            "display": "flex", "position": "fixed", "inset": 0, "zIndex": 340,
+            "background": "#0006", "alignItems": "center", "justifyContent": "center",
+        }
     if ctx.triggered_id == "screen-tabs":
         record_action("ACT_TAB_OPEN", "화면 이동", actor_id=actor_id,
                       target_type="tab", target_id=active)
@@ -1942,11 +1994,13 @@ def render_screen(active, seg_state, audience, prio_sort, selected_asset, actor_
     if active == "2":
         kwargs["asset_tag"] = selected_asset
     try:
-        return SCREEN_BUILDERS[active](**kwargs)
+        allowed_tab = active if ctx.triggered_id == "screen-tabs" else no_update
+        return SCREEN_BUILDERS[active](**kwargs), no_update, allowed_tab, {"display": "none"}
     except Exception as exc:
         log_failure("ACT_SCREEN_RENDER", "화면 조회", exc, actor_id=actor_id,
                     source="wireframe_app.render_screen", target_id=active)
-        return html.Div("화면을 불러오지 못했습니다. 오류 로그를 확인해 주세요.")
+        return (html.Div("화면을 불러오지 못했습니다. 오류 로그를 확인해 주세요."),
+                no_update, no_update, {"display": "none"})
 
 
 # ②의 "‹ 이전 기계"/"다음 기계 ›" — 알파벳순으로 순환 이동한다. nav_btn()이
@@ -2340,10 +2394,54 @@ def toggle_password_panel(_open, _close, style):
 
 
 @app.callback(Output("profile-display", "children"), Output("profile-login-id", "children"),
-              Output("session-state", "data"), Input("screen-tabs", "value"))
+              Output("session-state", "data"), Output("account-manage-btn", "style"),
+              Input("screen-tabs", "value"))
 def display_profile(_active_tab):
     login_id = str(session.get("admin_id", "관리자"))
-    return login_id[:2].upper(), login_id, current_session_state()
+    role = str(session.get("role", "UNKNOWN")).upper()
+    account_button = {"display": "block", "width": "100%", "padding": "8px", "marginBottom": "5px"}
+    if role != "ADMIN":
+        account_button["display"] = "none"
+    return login_id[:2].upper(), login_id, current_session_state(), account_button
+
+
+@app.callback(Output("account-management-modal", "style"), Output("account-list-body", "children"),
+              Input("account-manage-btn", "n_clicks"), Input("account-management-close-btn", "n_clicks"),
+              prevent_initial_call=True)
+def toggle_account_management(open_clicks, close_clicks):
+    """일반 계정 목록은 ADMIN 역할의 서버 세션에서만 복호화해 보여 준다."""
+    if not (open_clicks or close_clicks):
+        return no_update, no_update
+    if ctx.triggered_id == "account-management-close-btn":
+        return {"display": "none"}, no_update
+    if str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
+        return {"display": "none"}, no_update
+    rows = list_user_accounts()
+    record_action("ACT_ACCOUNT_LIST_VIEW", "일반 계정 목록 조회", target_type="account", target_id="USER")
+    if not rows:
+        return ({"display": "flex", "position": "fixed", "inset": 0, "zIndex": 330,
+                 "background": "#0006", "alignItems": "center", "justifyContent": "center"},
+                html.P("생성된 일반 계정이 없습니다.", style={"textAlign": "center", "margin": "12px 0"}))
+    header = html.Div([
+        html.Span("아이디", style={"fontWeight": "700"}),
+        html.Span("이름", style={"fontWeight": "700"}),
+        html.Span("접속 상태", style={"fontWeight": "700", "textAlign": "right"}),
+    ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 90px", "gap": "12px",
+              "padding": "8px 4px", "borderBottom": "1px solid #d7dde3"})
+    items = [header]
+    for row in rows:
+        online_badge = html.Span(
+            "● 접속 중" if row["is_online"] else "○ 미접속",
+            style={"color": "#15803d" if row["is_online"] else "#6b7280", "fontSize": "12px",
+                   "fontWeight": "700", "textAlign": "right",
+                   "textShadow": "0 0 7px #86efac" if row["is_online"] else "none"},
+        )
+        items.append(html.Div([
+            html.Span(row["login_id"]), html.Span(row["name"]), online_badge,
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 90px", "gap": "12px",
+                  "padding": "10px 4px", "borderBottom": "1px solid #eef0f2"}))
+    return ({"display": "flex", "position": "fixed", "inset": 0, "zIndex": 330,
+             "background": "#0006", "alignItems": "center", "justifyContent": "center"}, items)
 
 
 # 브라우저는 초 단위 카운트다운만 표시한다. 실제 로그인 허용·차단은
@@ -2488,8 +2586,7 @@ def logout_admin(confirm_clicks, session_decline_clicks, password_confirm_clicks
         "password-success-confirm-btn": "password_changed",
     }
     reason = reason_by_button[ctx.triggered_id]
-    record_action("ACT_LOGOUT", "로그아웃", detail={"reason": reason})
-    session.clear()
+    end_admin_session(reason)
     return "/login"
 
 
@@ -2505,4 +2602,6 @@ if __name__ == "__main__":
         print(f"[DB] 연결 또는 초기 적재 실패: {type(exc).__name__} — instance/audit_fallback.log 확인")
     # 최신 Dash(2.17+)는 app.run, 이전 버전은 app.run_server를 쓴다.
     # 이전 실행본이 8050 포트에 남아 오래된 시간 기록을 만들 수 있어 새 포트를 사용한다.
-    app.run(port=8052, debug=False)
+    # 같은 사내·가정 네트워크의 다른 기기도 접속할 수 있도록 모든 네트워크 인터페이스에서 받는다.
+    # 외부 인터넷 공개는 별도의 방화벽·공유기·HTTPS 설정이 필요하므로 여기서 자동으로 열지 않는다.
+    app.run(host=os.environ.get("DASHBOARD_HOST", "0.0.0.0"), port=8052, debug=False)

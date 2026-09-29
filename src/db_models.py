@@ -2,7 +2,7 @@
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -24,6 +24,11 @@ class AdminInfo(Base):
     name_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     phone_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     email_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    # 기존 테이블에는 마이그레이션 함수가 안전하게 추가한다.
+    role: Mapped[str] = mapped_column(String(10), nullable=False, default="USER", index=True)
+    is_online: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    session_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 

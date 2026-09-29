@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 from flask import session
 
 from src import audit_service
-from src.audit_models import ActionLog
+from src.audit_models import ActionLog, LoginLog
 from src.db_models import Base
 from src.wireframe_app import app
 
@@ -50,7 +50,7 @@ def test_login_blocks_dash_and_uses_registered_admin(monkeypatch):
         "output": profile_output,
         "outputs": [{"id": component, "property": property_name} for component, property_name in (
             ("profile-display", "children"), ("profile-login-id", "children"),
-            ("session-state", "data"))],
+            ("session-state", "data"), ("account-manage-btn", "style"))],
         "inputs": [{"id": "screen-tabs", "property": "value", "value": "1"}],
         "state": [], "changedPropIds": ["screen-tabs.value"],
     })
@@ -60,10 +60,10 @@ def test_login_blocks_dash_and_uses_registered_admin(monkeypatch):
         session["admin_id"] = "admin01"
         assert audit_service.record_action("ACT_TAB_OPEN", "화면 이동", actor_id="forged-id")
     with Session(engine) as db:
-        rows = db.scalars(select(ActionLog).where(ActionLog.event_code == "ACT_LOGIN")
-                          .order_by(ActionLog.log_id)).all()
+        rows = db.scalars(select(LoginLog).where(LoginLog.event_code.in_(("ACT_LOGIN", "ACT_LOGIN_BLOCKED")))
+                          .order_by(LoginLog.log_id)).all()
         assert [(row.actor_id, row.result_status) for row in rows] == [
-            ("ANONYMOUS", "BLOCKED"), ("admin01", "SUCCESS")]
+            ("admin01", "BLOCKED"), ("admin01", "SUCCESS")]
         assert db.scalar(select(ActionLog.actor_id).where(ActionLog.event_code == "ACT_TAB_OPEN")) == "admin01"
     logout_open_output = next(
         key for key, spec in app.callback_map.items()
@@ -149,7 +149,7 @@ def test_session_extend_and_expiry_are_logged_once(monkeypatch):
     assert client.get("/").status_code == 302
     assert client.get("/_dash-layout").status_code == 401
     with Session(engine) as db:
-        codes = db.scalars(select(ActionLog.event_code).order_by(ActionLog.log_id)).all()
+        codes = db.scalars(select(LoginLog.event_code).order_by(LoginLog.log_id)).all()
         assert codes.count("ACT_SESSION_EXTEND") == 1
         assert codes.count("ACT_SESSION_EXPIRED") == 1
 
