@@ -57,3 +57,17 @@ def test_asset_sensor_series_shape_and_flags():
 def test_asset_sensor_series_rejects_unknown_asset():
     with pytest.raises(ValueError):
         dd.load_asset_sensor_series('AST-9999')
+
+
+def test_asset_parts_history_top10_and_ranking():
+    parts = dd.load_asset_parts_history('AST-1041')
+    assert len(parts) == 10
+    assert list(parts.columns) == ['part_no', 'part_description', 'total_issue_value_inr']
+    assert parts.iloc[0]['part_no'] == 'MRO-20031'
+    assert int(parts.iloc[0]['total_issue_value_inr']) == 281600
+    assert parts['total_issue_value_inr'].is_monotonic_decreasing
+
+
+def test_asset_parts_history_rejects_unknown_asset():
+    with pytest.raises(ValueError):
+        dd.load_asset_parts_history('AST-9999')

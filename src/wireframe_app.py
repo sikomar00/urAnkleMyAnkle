@@ -49,6 +49,7 @@ from .dashboard_data import (  # noqa: E402
     export_table_csv,
     load_asset_detail_kpis,
     load_asset_list,
+    load_asset_parts_history,
     load_asset_sensor_series,
     load_data_dictionary,
     load_data_quality_summary,
@@ -754,6 +755,29 @@ def _smult_figure(df, theme):
     return fig
 
 
+def _parts_figure(df, theme):
+    """화면 ② "부품 출고 이력" — 부품별 출고 금액 상위 10개 가로 막대.
+    금액 내림차순이 위로 오도록 autorange="reversed"."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    fig = go.Figure(go.Bar(
+        x=df["total_issue_value_inr"], y=df["part_no"], orientation="h",
+        marker_color=colors["ink"],
+        text=[f"{v:,.0f}" for v in df["total_issue_value_inr"]],
+        textposition="outside", textfont=dict(color=colors["muted"], size=11),
+        cliponaxis=False,
+        customdata=df["part_description"],
+        hovertemplate="%{y} · %{customdata}<br>%{text} INR<extra></extra>",
+    ))
+    fig.update_yaxes(autorange="reversed", showgrid=False, tickfont=dict(size=11))
+    fig.update_xaxes(visible=False, range=[0, df["total_issue_value_inr"].max() * 1.35])
+    fig.update_layout(
+        height=132, margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+        font=dict(size=11, color=colors["muted"]), bargap=0.28, showlegend=False,
+    )
+    return fig
+
+
 def priority_table(cols, records, row_h, head_h=32, sort_col=None):
     """table_placeholder()와 같은 헤더/셀 스타일을 쓰되, 자리표시 막대 대신
     load_priority_table()이 만든 실제 자산별 값을 채운다. table_placeholder()
@@ -974,7 +998,11 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
 
     anom = card("이상 점수 추이", 616, 144, slot("라인 + 임계선", 584, 76), right=note("임계선 포함"))
     clus = card("군집 위치", 616, 144, slot("산점도 · 군집 1 / 2 / 3", 584, 76), right=note("선택 기계 표시"))
-    parts = card("부품 출고 이력", 616, 200, slot("가로 막대", 584, 132))
+    parts = card("부품 출고 이력", 616, 200,
+                 dcc.Graph(id={"type": "parts-chart", "index": "screen2"},
+                           figure=_parts_figure(load_asset_parts_history(asset_tag), "light"),
+                           config={"displayModeBar": False, "responsive": True},
+                           style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}))
     rightcol = col(616, 520, [anom, clus, parts])
     row_b = row(520, [smult, rightcol])
 
@@ -1787,6 +1815,20 @@ def recolor_smult_chart(theme, _active_tab, asset_tag):
     assets = load_asset_list()
     asset_tag = asset_tag if asset_tag in assets else assets[0]
     return [_smult_figure(load_asset_sensor_series(asset_tag), theme or "light")]
+
+
+# 화면② "부품 출고 이력" 막대차트도 같은 방식으로 재색칠한다. smult-chart와
+# id 타입을 나눠야 두 콜백의 Output 매칭 개수가 서로 섞이지 않는다.
+@app.callback(
+    Output({"type": "parts-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+    State("selected-asset-store", "data"),
+)
+def recolor_parts_chart(theme, _active_tab, asset_tag):
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
+    return [_parts_figure(load_asset_parts_history(asset_tag), theme or "light")]
 
 
 # <html>에도 같은 클래스를 얹는다. #root는 1920 고정폭이라 넓은 화면에서

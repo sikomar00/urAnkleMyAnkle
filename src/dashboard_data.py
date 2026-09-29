@@ -291,6 +291,35 @@ def load_asset_sensor_series(asset_tag: str) -> pd.DataFrame:
     return series
 
 
+def load_asset_parts_history(asset_tag: str) -> pd.DataFrame:
+    """화면 ② "부품 출고 이력" — 선택 자산의 부품별 출고 금액 합계 상위 10개.
+
+    Returns:
+        part_no, part_description, total_issue_value_inr 3열, 금액 내림차순
+        상위 10행.
+
+    Raises:
+        ValueError: asset_tag가 데이터에 없을 때.
+    """
+    assets = load_asset_list()
+    if asset_tag not in assets:
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+
+    raw = _load_raw()
+    asset_raw = raw[raw[ASSET_COLUMN].eq(asset_tag)]
+
+    totals = (
+        asset_raw.groupby([PART_COLUMN, "part_description"])["issue_value_inr"]
+        .sum()
+        .reset_index()
+        .rename(columns={"issue_value_inr": "total_issue_value_inr"})
+        .sort_values("total_issue_value_inr", ascending=False)
+        .head(10)
+        .reset_index(drop=True)
+    )
+    return totals
+
+
 def load_data_dictionary() -> list[dict]:
     """화면 ④ "데이터 사전" 22행을 CSV 컬럼 순서 그대로 반환한다."""
     raw = _load_raw()
