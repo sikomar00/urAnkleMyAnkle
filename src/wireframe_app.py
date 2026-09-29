@@ -289,11 +289,6 @@ KPI_FAILRATE_ID = {"type": "kpi-drill", "index": "failrate"}
 # 공용 프리미티브
 # ============================================================
 
-def dim(w, h):
-    """카드/타일 우측 상단 치수 주석."""
-    return html.Span(f"{w} × {h}", style=NUM_12)
-
-
 def note(text, style=None):
     """작은 보조 설명(micro-11)."""
     s = dict(MICRO_11)
@@ -330,7 +325,6 @@ def slot(label, w, h, sub=None):
 def card(title, w, h, body, right=None):
     """카드 = 1px 테두리 + 라운드, 그림자 없음. 제목 줄 36px 고정."""
     header_right = [right] if right else []
-    header_right.append(dim(w, h))
     return html.Section(
         [
             html.Div(
@@ -380,7 +374,7 @@ def tile(label, w=300, h=96, sub="값 · value-28", tid=None):
     kwargs = {"id": tid, "n_clicks": 0} if tid else {}
     return html.Div(
         [
-            html.Div([html.Span(label, style=LABEL_12), dim(w, h)],
+            html.Div([html.Span(label, style=LABEL_12)],
                       style={"height": "16px", "display": "flex", "justifyContent": "space-between", "gap": "8px"}),
             slot(sub, 168, 32),
         ],
@@ -510,8 +504,7 @@ def empty_state(title, reason, w, h):
         [note("EmptyState"),
          html.Span(title, style={"margin": "0", "fontSize": "14px", "lineHeight": "20px",
                                   "fontWeight": "600", "color": INK}),
-         html.Span(reason, style={"fontSize": "13px", "lineHeight": "18px", "color": INK2, "textAlign": "center"}),
-         html.Span(f"{w} × {h}", style=NUM_12)],
+         html.Span(reason, style={"fontSize": "13px", "lineHeight": "18px", "color": INK2, "textAlign": "center"})],
         style={"width": f"{w}px", "height": f"{h}px", "boxSizing": "border-box",
                "border": f"1px dashed {CTRL}", "borderRadius": "4px", "display": "flex",
                "flexDirection": "column", "alignItems": "center", "justifyContent": "center",
@@ -535,8 +528,7 @@ def app_header():
         [slot("시스템명 · title-16", 180, 28),
          html.Div([html.Span("데이터 기준일", style=LABEL_12),
                    html.Span(load_data_reference_date(), style=NUM_12)],
-                  style={"display": "flex", "alignItems": "center", "gap": "6px"}),
-         note("1920 × 56")],
+                  style={"display": "flex", "alignItems": "center", "gap": "6px"})],
         style={"display": "flex", "alignItems": "center", "gap": "12px", "minWidth": "0"},
     )
     center = dcc.Tabs(
@@ -614,7 +606,6 @@ def filter_bar():
                             "cursor": "pointer", "whiteSpace": "nowrap", "flexShrink": "0"}),
          html.Div(style={"flexGrow": "1"}),
          # storage_type="local" 이므로 새로고침·재접속 후에도 마지막 선택이 남는다.
-         note("1920 × 56", {"whiteSpace": "nowrap", "flexShrink": "0"}),
          html.Div([html.Span("현재 필터", style={**LABEL_12, "whiteSpace": "nowrap"}),
                    html.Span(id="filter-echo", style={**NUM_12, "whiteSpace": "nowrap"})],
                   style={"display": "flex", "alignItems": "center", "gap": "6px", "flexShrink": "0"}),
@@ -652,7 +643,7 @@ def kpi_value_tile(label, value_text, w=300, h=96, tid=None):
              "cursor": "pointer" if tid else "default"}
     kwargs = {"id": tid, "n_clicks": 0} if tid else {}
     return html.Div(
-        [html.Div([html.Span(label, style=LABEL_12), dim(w, h)],
+        [html.Div([html.Span(label, style=LABEL_12)],
                    style={"height": "16px", "display": "flex", "justifyContent": "space-between", "gap": "8px"}),
          html.Div(html.Span(value_text, style={"fontFamily": MONO, "fontSize": "22px",
                                                  "fontWeight": "600", "color": INK}),
@@ -975,7 +966,7 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
                            style={"display": "grid", "gridTemplateColumns": "repeat(2, minmax(0, 1fr))",
                                   "gridTemplateRows": "repeat(5, 72px)", "columnGap": "8px", "rowGap": "8px",
                                   "width": "742px", "height": "392px"})
-    status = card("기계 상태", 774, ROW_MAIN, tiles_grid, right=note("타일 367 × 72 · 2열 × 5행 · 간격 8"))
+    status = card("기계 상태", 774, ROW_MAIN, tiles_grid)
     row_b = row(ROW_MAIN, [prio, status])
 
     ylabels = html.Div([slot(f"기계 {i+1}", 112, 25) for i in range(10)],
@@ -1065,8 +1056,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
          metric("위험도", 120, f"{detail['risk_score']:,.0f}"),
          metric("최근 고장 표시일", 140, detail["last_failure_date"] or "—"),
          metric("고장 표시 일수 (일)", 140, f"{detail['failure_days_count']:,}"),
-         metric("평균 소비 전력 (kW)", 140, f"{detail['avg_power_30d_kw']:,.2f}"),
-         dim(1880, 88)],
+         metric("평균 소비 전력 (kW)", 140, f"{detail['avg_power_30d_kw']:,.2f}")],
         style={"width": "1880px", "height": "88px", "boxSizing": "border-box", "background": CARD,
                "outline": f"1px solid {HAIR}", "outlineOffset": "-1px", "borderRadius": "4px",
                "padding": "16px", "display": "flex", "alignItems": "center", "gap": "16px"},
@@ -1078,8 +1068,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
         [html.Div(label, style={"height": f"{SMULT_PANEL_H}px", "flexShrink": "0",
                                  "display": "flex", "alignItems": "center", **LABEL_12})
          for label, _ in SMULT_SENSORS]
-        + [html.Div(note("8 × 48 + 7 × 4 + 40 = 452"),
-                    style={"height": f"{SMULT_AXIS_H}px", "flexShrink": "0", "display": "flex",
+        + [html.Div(style={"height": f"{SMULT_AXIS_H}px", "flexShrink": "0", "display": "flex",
                            "alignItems": "center"})],
         style={"width": "160px", "flexShrink": "0", "display": "flex", "flexDirection": "column",
                "gap": f"{SMULT_GAP}px"},
@@ -1165,8 +1154,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
 
     toolbar = html.Div(
         [html.Div([seg("task", "과제", SEG_GROUPS["task"], sel=seg_state.get("task", 0)),
-                   html.Div([note("툴바 1880 × 32"),
-                             seg("threshold", "위험 기준선 (등급가중 고장점수)",
+                   html.Div([seg("threshold", "위험 기준선 (등급가중 고장점수)",
                                  SEG_GROUPS["threshold"], sel=thr_sel),
                              slot("값 추가 여지", 96, 32)],
                             style={"display": "flex", "alignItems": "center", "gap": "12px"})],
@@ -1276,7 +1264,6 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
         mtable = html.Table([html.Thead(mthead), html.Tbody(model_rows)],
                              style={"width": "740px", "tableLayout": "fixed", "borderCollapse": "collapse"})
         mcomp_body = html.Div([mtable, html.Div(style={"flexGrow": "1"}),
-                               note("가시 한도: 헤더 32 + 모델 10행 × 32 = 352 / 392"),
                                note("기계 종류 → 필터바 · 위험 기준선 → 툴바 (표의 축 아님)")])
         mcomp = card("모델 비교", 774, ROW_MAIN, mcomp_body, right=note("행 = 모델 (레지스트리) · 열 = 지표"))
 
@@ -1331,7 +1318,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
                       slot("값 · 하단 슬라이더와 연동", 220, 24)],
                      style={"height": "32px", "display": "flex", "alignItems": "center", "gap": "8px"}),
         ])
-    cmx = card("혼동행렬", 458, ROW_MAIN, cm_body, right=note("2 × 2"))
+    cmx = card("혼동행렬", 458, ROW_MAIN, cm_body)
     row_b = row(ROW_MAIN, [mcomp, prc, cmx])
 
     if task_sel == 1:
@@ -1362,7 +1349,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
     if task_sel == 1:
         feat = card("주요 영향 변수 상위 10", 774, 252, feat_body, right=note("10행 · 부품군 자체 속성(자산 무관)"))
     else:
-        feat = card("주요 영향 변수 상위 12", 774, 252, feat_body, right=note("12행 × 15 · 직접 값 라벨"))
+        feat = card("주요 영향 변수 상위 12", 774, 252, feat_body, right=note("직접 값 라벨"))
 
     slider = html.Div(
         [html.Label("판정 임계값 (즉시 재계산)", htmlFor="thr-slider", style={**LABEL_12, "whiteSpace": "nowrap"}),
@@ -1541,8 +1528,7 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE):
 
     dict_rows = load_data_dictionary()
     ddict = card("데이터 사전 (22열)", 932, ROW_SUB,
-                 hstack([dict_half(dict_rows[:11]), dict_half(dict_rows[11:])], 16),
-                 right=note("11행 × 2단 · 행 22"))
+                 hstack([dict_half(dict_rows[:11]), dict_half(dict_rows[11:])], 16))
 
     def info_box(text, w, h=94):
         """slot()의 점선 테두리 대신 실제 문장을 보여준다 — screen_4 전용."""
