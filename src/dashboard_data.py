@@ -320,6 +320,52 @@ def load_asset_parts_history(asset_tag: str) -> pd.DataFrame:
     return totals
 
 
+def load_asset_peer_comparison(asset_tag: str) -> dict:
+    """화면 ② "동종 기계 대비" — 선택 자산과 같은 machine_type인 나머지 1대의
+    베어링 온도(temp_bearing_degC) 분포를 비교한다.
+
+    기계 종류마다 자산이 정확히 2대뿐이라는 데이터 특성상 "동종 기계"는
+    선택 자산을 제외한 나머지 1대로 계산해서 구한다(하드코딩 금지).
+
+    Returns:
+        asset_tag, peer_asset_tag, asset_values(선택 자산의 temp_bearing_degC
+        1,095개), peer_values(동종 자산의 temp_bearing_degC 1,095개)를 담은 dict.
+
+    Raises:
+        ValueError: asset_tag가 데이터에 없거나, 동종(같은 machine_type) 자산이
+            정확히 1대가 아닐 때(0대 또는 2대 이상 — 데이터 가정이 깨진 경우).
+    """
+    assets = load_asset_list()
+    if asset_tag not in assets:
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+
+    raw = _load_raw()
+    machine_type = raw[raw[ASSET_COLUMN].eq(asset_tag)][MACHINE_COLUMN].iloc[0]
+    same_type_assets = sorted(raw[raw[MACHINE_COLUMN].eq(machine_type)][ASSET_COLUMN].unique())
+    peers = [a for a in same_type_assets if a != asset_tag]
+    if len(peers) != 1:
+        raise ValueError(
+            f"'{asset_tag}'(machine_type={machine_type})의 동종 기계가 정확히 1대가 "
+            f"아닙니다(현재 {len(peers)}대): {peers}"
+        )
+    peer_asset_tag = peers[0]
+
+    daily = _daily()
+    asset_values = daily[daily[ASSET_COLUMN].eq(asset_tag)].sort_values(DATE_COLUMN)[
+        "temp_bearing_degC"
+    ].tolist()
+    peer_values = daily[daily[ASSET_COLUMN].eq(peer_asset_tag)].sort_values(DATE_COLUMN)[
+        "temp_bearing_degC"
+    ].tolist()
+
+    return {
+        "asset_tag": asset_tag,
+        "peer_asset_tag": peer_asset_tag,
+        "asset_values": asset_values,
+        "peer_values": peer_values,
+    }
+
+
 def load_data_dictionary() -> list[dict]:
     """화면 ④ "데이터 사전" 22행을 CSV 컬럼 순서 그대로 반환한다."""
     raw = _load_raw()
