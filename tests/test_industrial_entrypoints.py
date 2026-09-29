@@ -19,6 +19,10 @@ from src.current_single_part_anomaly import (
     DEFAULT_OUTPUT as SINGLE_PART_DEFAULT_OUTPUT,
     build_parser as build_single_part_parser,
 )
+from src.current_probabilistic_asset_risk import (
+    DEFAULT_OUTPUT as PROBABILISTIC_DEFAULT_OUTPUT,
+    build_parser as build_probabilistic_parser,
+)
 from src.industrial_training import DEFAULT_DATA
 from src.forecast_asset_model import build_parser, default_output_path
 
@@ -29,6 +33,7 @@ from src.forecast_asset_model import build_parser, default_output_path
     "src/current_asset_severity_experiments.py",
     "src/current_family_diagnosis.py",
     "src/current_single_part_anomaly.py",
+    "src/current_probabilistic_asset_risk.py",
     "src/current_part_model.py", "src/forecast_part_model.py",
     "src/current_state_model.py", "src/timeseries_model.py",
 ])
@@ -86,6 +91,14 @@ def test_single_part_anomaly_defaults():
     assert args.bootstrap_samples == 1_000
     assert args.expected_parts_per_asset == 20
     assert args.skip_residual is False
+
+
+def test_probabilistic_asset_risk_defaults():
+    args = build_probabilistic_parser().parse_args([])
+    assert args.output == PROBABILISTIC_DEFAULT_OUTPUT
+    assert args.high_risk_thresholds == [12, 13]
+    assert args.fpr_policies == [0.05, 0.10]
+    assert args.bootstrap_samples == 2_000
 
 
 @pytest.mark.parametrize(

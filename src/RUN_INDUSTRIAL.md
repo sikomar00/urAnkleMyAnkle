@@ -191,3 +191,33 @@ LightGBM은 macOS의 `libomp` 같은 네이티브 의존성 문제를 피하기 
 기존 `current_state_model.py`는 새 `current_part_model.py`로,
 `timeseries_model.py`는 새 `forecast_part_model.py`로 연결됩니다. 기존 기본 출력 경로인
 `outputs/current_state`, `outputs/timeseries`도 유지합니다.
+
+## 7. 확률 기반 장비 당일 위험 실험
+
+장비의 당일 위험을 먼저 판단하고, 부품별 고장확률을 장비 예상 점수와 고위험 확률의
+입력으로 사용하려면 다음 명령을 실행합니다.
+
+```bash
+cd /Users/kodohyeon/Documents/project_LS/urAnkleMyAnkle
+source /Users/kodohyeon/Documents/project_LS/venv/bin/activate
+python -m src.current_probabilistic_asset_risk
+```
+
+기본 실행은 A1(당일 센서·정적정보), A2(A1+과거 부품 고장 이력), B0(과거 고장률
+기준선)를 비교합니다. 12점과 13점 이상 확률을 모두 계산하고, 보정 구간의 음성
+장비일 FPR을 5%·10%로 제한한 두 알림 정책을 테스트에 고정 적용합니다.
+
+주요 결과 파일은 `outputs/probabilistic_asset_risk/`에 생성됩니다.
+
+- `part_probabilities.csv`: 부품별 보정 고장확률과 확률·점수 기여도 순위
+- `asset_risk_predictions.csv`: 예상 점수, 0~47점 분포, 12·13점 이상 확률, 4단계 확률
+- `score_metrics.csv`: 예상 점수 MAE·RMSE·Pearson·Spearman과 기준선 비교
+- `high_risk_metrics.csv`: 12·13점 PR-AUC·Brier·정책별 Precision/Recall/F1
+- `severity_metrics.csv`, `confusion_matrices.csv`: 4단계 평가
+- `ranking_metrics.csv`: Top 3 보조 지표와 무작위·B0 비교에 사용할 순위 지표
+- `experiment_summary.md`: 세 줄 요약, 한 페이지 요약과 장비 위험·부품 특정 결론
+- `run_config.json`, `models/`: 재현 설정과 저장 모델
+
+Top 3는 기본적으로 `참고용 위험 순위`입니다. 보정 구간에서 B0와 무작위 기준을
+유의하게 넘은 경우에만 `우선 점검 후보`로 표시됩니다. 이 순위는 특정 부품의 고장
+원인을 확정하거나 즉시 교체를 지시하는 결과가 아닙니다.
