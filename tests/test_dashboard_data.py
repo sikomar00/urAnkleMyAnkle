@@ -300,3 +300,37 @@ def test_part_failure_actual_rate_defaults_to_selected_model():
 def test_part_failure_actual_rate_rejects_unknown_model():
     with pytest.raises(ValueError):
         dd.load_part_failure_actual_rate('not_a_model')
+
+
+def test_current_classification_at_threshold_recomputes_confusion():
+    result = dd.load_current_classification_at_threshold('hist_gradient_boosting', 0.2)
+    assert result['predicted_alerts'] == 111 + 549
+    assert result['false_alarms'] == 549
+    assert result['missed_failures'] == 3577
+    assert result['total_rows'] == 37000
+    assert result['precision'] == pytest.approx(111 / (111 + 549))
+    assert result['recall'] == pytest.approx(111 / (111 + 3577))
+
+
+def test_current_classification_at_threshold_rejects_unknown_model():
+    with pytest.raises(ValueError):
+        dd.load_current_classification_at_threshold('not_a_model', 0.5)
+
+
+def test_part_failure_at_threshold_matches_default_cutoff_confusion():
+    result = dd.load_part_failure_at_threshold('로지스틱 회귀', 0.5)
+    assert result['predicted_alerts'] == 8690 + 5894
+    assert result['false_alarms'] == 5894
+    assert result['missed_failures'] == 5745
+    assert result['total_rows'] == 28514
+
+
+def test_part_failure_at_threshold_defaults_to_selected_model():
+    result = dd.load_part_failure_at_threshold(None, 0.3)
+    assert result['predicted_alerts'] == 14410 + 14037
+    assert result['missed_failures'] == 25
+
+
+def test_part_failure_at_threshold_rejects_unknown_model():
+    with pytest.raises(ValueError):
+        dd.load_part_failure_at_threshold('not_a_model', 0.5)

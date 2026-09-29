@@ -269,6 +269,57 @@ def load_part_failure_metrics() -> dict:
     return result
 
 
+def _confusion_at_threshold(actual: pd.Series, score: pd.Series, threshold: float) -> dict:
+    """화면 ③ "판정 임계값 조정" 슬라이더 — 임의 임계값에서의 혼동행렬·지표를
+    즉시 재계산한다. 학습·평가를 다시 하지 않는다 — 이미 저장된 예측 확률을
+    다시 이진화할 뿐이다."""
+    predicted = (score >= threshold).astype(int)
+    tp = int(((predicted == 1) & (actual == 1)).sum())
+    fp = int(((predicted == 1) & (actual == 0)).sum())
+    fn = int(((predicted == 0) & (actual == 1)).sum())
+    tn = int(((predicted == 0) & (actual == 0)).sum())
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    recall = tp / (tp + fn) if (tp + fn) else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+    return {
+        "precision": precision, "recall": recall, "f1": f1,
+        "predicted_alerts": tp + fp, "false_alarms": fp, "missed_failures": fn,
+        "total_rows": tp + fp + fn + tn,
+    }
+
+
+def load_current_classification_at_threshold(model: str, threshold: float) -> dict:
+    """화면 ③ "판정 임계값 조정" — "현재 고장 표시 분류" 과제, 임의 임계값에서의
+    실시간 재계산.
+
+    Raises:
+        ValueError: model이 prior/hist_gradient_boosting이 아닐 때.
+    """
+    if model not in ("prior", "hist_gradient_boosting"):
+        raise ValueError(f"알 수 없는 model입니다: {model}")
+    preds = _current_classification_predictions_raw()
+    sub = preds.loc[
+        preds["scope_kind"].eq("overall") & preds["scope_name"].eq("all") & preds["model"].eq(model)
+    ]
+    return _confusion_at_threshold(sub["breakdown_flag"], sub["risk_score"], threshold)
+
+
+def load_part_failure_at_threshold(model: str | None, threshold: float) -> dict:
+    """화면 ③ "판정 임계값 조정" — "부품 고장 탐지" 과제, 임의 임계값에서의
+    실시간 재계산. ``model``이 ``None``이면 선택 모델을 쓴다.
+
+    Raises:
+        ValueError: model이 predictions.csv에 없을 때.
+    """
+    overall = _part_failure_overall_raw()
+    model = model or load_part_failure_selected_model()
+    if model not in overall["model"].to_numpy():
+        raise ValueError(f"알 수 없는 model입니다: {model}")
+    preds = _part_failure_predictions_raw()
+    sub = preds.loc[preds["model"].eq(model)]
+    return _confusion_at_threshold(sub["target"], sub["probability"], threshold)
+
+
 def load_current_classification_actual_rate(model: str = "hist_gradient_boosting") -> float:
     """화면 ③ "모델 해석 요약" — "현재 고장 표시 분류" 과제의 실제 고장률
     (테스트 구간 양성 비율). AP÷실제 고장률(무작위 기준 대비 배수) 계산에 쓴다.
