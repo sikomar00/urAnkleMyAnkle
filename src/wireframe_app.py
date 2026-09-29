@@ -66,7 +66,7 @@ from .dashboard_data import (  # noqa: E402
     load_table_page,
 )
 from .audit_service import (  # noqa: E402
-    change_admin_password, create_audit_tables,
+    change_admin_password, create_audit_tables, delete_user_accounts,
     ensure_dashboard_admin, list_user_accounts, log_failure, record_action, record_error, sync_if_csv_changed,
 )
 from .dashboard_auth import (  # noqa: E402
@@ -1826,6 +1826,8 @@ app.layout = html.Div(
         # 서버가 발급한 만료 시각만 담는다. 비밀번호·키는 브라우저에 두지 않는다.
         dcc.Store(id="session-state"),
         dcc.Store(id="session-prompt-state", data={"shown": False}),
+        dcc.Store(id="account-delete-mode", data=False),
+        dcc.Store(id="account-delete-refresh", data=0),
         dcc.Interval(id="audit-csv-interval", interval=60_000, n_intervals=0),
         dcc.Interval(id="session-timer", interval=1_000, n_intervals=0),
         dcc.Location(id="auth-redirect", refresh=True),
@@ -1910,17 +1912,65 @@ app.layout = html.Div(
         # ADMIN 역할에서만 열 수 있는 일반 계정 목록입니다. 이름은 서버에서만 복호화합니다.
         html.Div(id="account-management-modal", children=[
             html.Div([
-                html.H3("계정 관리", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
+                html.Div([
+                    html.H3("계정 관리", style={"margin": 0, "textAlign": "left"}),
+                    html.Button("계정 삭제", id="account-delete-mode-btn", n_clicks=0,
+                                style={"padding": "7px 11px", "border": "1px solid #b42318",
+                                       "borderRadius": "6px", "background": "#fff", "color": "#b42318",
+                                       "fontWeight": "700", "cursor": "pointer"}),
+                ], style={"display": "flex", "alignItems": "center", "justifyContent": "space-between",
+                          "marginBottom": "18px"}),
                 html.Div(id="account-list-body"),
+                html.Div(id="account-delete-header", children=[
+                    html.Span("아이디", style={"fontWeight": "700"}),
+                    html.Span("이름", style={"fontWeight": "700"}),
+                    html.Span("접속 상태", style={"fontWeight": "700", "textAlign": "right"}),
+                    html.Span("선택", style={"fontWeight": "700", "textAlign": "right"}),
+                ], style={"display": "none", "gridTemplateColumns": "1fr 1fr 90px 38px",
+                          "gap": "8px", "padding": "8px 4px", "borderBottom": "1px solid #d7dde3"}),
+                dcc.Checklist(id="account-delete-selection", options=[], value=[],
+                              style={"display": "none"},
+                              inputStyle={"marginLeft": "8px", "cursor": "pointer"},
+                              labelStyle={"display": "flex", "flexDirection": "row-reverse", "width": "100%",
+                                          "alignItems": "center", "padding": "10px 4px",
+                                          "borderBottom": "1px solid #eef0f2", "cursor": "pointer"}),
+                html.Div(id="account-delete-feedback", role="status",
+                         style={"minHeight": "18px", "fontSize": "13px", "color": "#b42318",
+                                "textAlign": "center", "marginTop": "12px"}),
                 html.Div([
                     html.Button("닫기", id="account-management-close-btn", n_clicks=0,
                                 style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
                                        "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
                                        "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                    html.Button("확인", id="account-delete-confirm-btn", n_clicks=0,
+                                style={"display": "none", "minWidth": "120px", "padding": "11px 18px",
+                                       "border": "1px solid #2563eb", "borderRadius": "6px",
+                                       "background": "#2563eb", "color": "#fff", "fontSize": "15px",
+                                       "fontWeight": "700", "cursor": "pointer", "marginLeft": "auto"}),
                 ], style={"display": "flex", "justifyContent": "center", "marginTop": "20px"}),
-            ], style={"width": "460px", "maxWidth": "calc(100vw - 32px)", "background": "#fff", "color": "#222",
+            ], style={"width": "520px", "maxWidth": "calc(100vw - 32px)", "background": "#fff", "color": "#222",
                       "padding": "22px", "borderRadius": "10px", "boxShadow": "0 12px 40px #0005"}),
         ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 330,
+                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
+        html.Div(id="account-delete-confirm-modal", children=[
+            html.Div([
+                html.H3("계정 삭제", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
+                html.P(id="account-delete-confirm-message",
+                       style={"marginBottom": "26px", "textAlign": "center"}),
+                html.Div([
+                    html.Button("예", id="account-delete-yes-btn", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
+                                       "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                    html.Button("아니오", id="account-delete-no-btn", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
+                                       "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                ], style={"display": "flex", "justifyContent": "center", "gap": "10px"}),
+            ], style={"width": "380px", "maxWidth": "calc(100vw - 32px)", "background": "#fff",
+                      "color": "#222", "padding": "22px", "borderRadius": "10px",
+                      "boxShadow": "0 12px 40px #0005"}),
+        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 340,
                   "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
         # 일반 계정이 PDF·Excel을 누르면 파일 생성 없이 이 안내만 보여 준다.
         html.Div(id="export-access-modal", children=[
@@ -2404,10 +2454,11 @@ def display_profile(_active_tab):
 
 @app.callback(Output("account-management-modal", "style"), Output("account-list-body", "children"),
               Input("account-manage-btn", "n_clicks"), Input("account-management-close-btn", "n_clicks"),
+              Input("account-delete-refresh", "data"),
               prevent_initial_call=True)
-def toggle_account_management(open_clicks, close_clicks):
+def toggle_account_management(open_clicks, close_clicks, refresh):
     """일반 계정 목록은 ADMIN 역할의 서버 세션에서만 복호화해 보여 준다."""
-    if not (open_clicks or close_clicks):
+    if not (open_clicks or close_clicks or refresh):
         return no_update, no_update
     if ctx.triggered_id == "account-management-close-btn":
         return {"display": "none"}, no_update
@@ -2439,6 +2490,110 @@ def toggle_account_management(open_clicks, close_clicks):
                   "padding": "10px 4px", "borderBottom": "1px solid #eef0f2"}))
     return ({"display": "flex", "position": "fixed", "inset": 0, "zIndex": 330,
              "background": "#0006", "alignItems": "center", "justifyContent": "center"}, items)
+
+
+@app.callback(Output("account-delete-selection", "options"),
+              Input("account-manage-btn", "n_clicks"), Input("account-delete-refresh", "data"),
+              prevent_initial_call=True)
+def load_account_delete_options(open_clicks, refresh):
+    """선택 행 전체를 눌러 체크할 수 있게 일반 계정만 표시한다."""
+    if not (open_clicks or refresh) or str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
+        return []
+    options = []
+    for row in list_user_accounts():
+        online = bool(row["is_online"])
+        label = html.Div([
+            html.Span(row["login_id"]),
+            html.Span(row["name"]),
+            html.Span("● 접속 중" if online else "○ 미접속",
+                      style={"color": "#15803d" if online else "#6b7280", "fontSize": "12px",
+                             "fontWeight": "700", "textAlign": "right"}),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 90px", "gap": "8px",
+                  "alignItems": "center", "width": "100%"})
+        options.append({"label": label, "value": row["login_id"]})
+    return options
+
+
+@app.callback(Output("account-delete-mode", "data"), Output("account-delete-selection", "value"),
+              Input("account-manage-btn", "n_clicks"),
+              Input("account-management-close-btn", "n_clicks"),
+              Input("account-delete-mode-btn", "n_clicks"),
+              Input("account-delete-refresh", "data"),
+              State("account-delete-mode", "data"), prevent_initial_call=True)
+def toggle_account_delete_mode(_open, _close, _mode_click, _refresh, current_mode):
+    if ctx.triggered_id == "account-delete-mode-btn":
+        if str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
+            return False, []
+        return not bool(current_mode), []
+    return False, []
+
+
+@app.callback(Output("account-list-body", "style"), Output("account-delete-header", "style"),
+              Output("account-delete-selection", "style"),
+              Output("account-delete-confirm-btn", "style"),
+              Output("account-delete-mode-btn", "children"),
+              Input("account-delete-mode", "data"))
+def show_account_delete_mode(enabled):
+    confirm_style = {"display": "inline-block" if enabled else "none", "minWidth": "120px",
+                     "padding": "11px 18px", "border": "1px solid #2563eb", "borderRadius": "6px",
+                     "background": "#2563eb", "color": "#fff", "fontSize": "15px", "fontWeight": "700",
+                     "cursor": "pointer", "marginLeft": "auto"}
+    header_style = {"display": "grid" if enabled else "none",
+                    "gridTemplateColumns": "1fr 1fr 90px 38px", "gap": "8px",
+                    "padding": "8px 4px", "borderBottom": "1px solid #d7dde3"}
+    return ({"display": "none" if enabled else "block"}, header_style,
+            {"display": "block" if enabled else "none"}, confirm_style,
+            "선택 취소" if enabled else "계정 삭제")
+
+
+@app.callback(Output("account-delete-confirm-modal", "style"),
+              Output("account-delete-confirm-message", "children"),
+              Output("account-delete-refresh", "data"),
+              Output("account-delete-feedback", "children"),
+              Input("account-delete-confirm-btn", "n_clicks"),
+              Input("account-delete-no-btn", "n_clicks"),
+              Input("account-delete-yes-btn", "n_clicks"),
+              Input("account-manage-btn", "n_clicks"),
+              Input("account-management-close-btn", "n_clicks"),
+              State("account-delete-selection", "value"),
+              State("account-delete-refresh", "data"), prevent_initial_call=True)
+def confirm_account_delete(_confirm, _no, _yes, _open, _close, selected, refresh):
+    triggered = ctx.triggered_id
+    hidden = {"display": "none"}
+    if triggered in {"account-manage-btn", "account-management-close-btn", "account-delete-no-btn"}:
+        session.pop("pending_account_delete", None)
+        return hidden, "", no_update, ""
+    if str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
+        session.pop("pending_account_delete", None)
+        record_action("ACT_ACCOUNT_DELETE_BLOCKED", "일반 계정 삭제 차단", target_type="account",
+                      status="BLOCKED", block_reason="관리자 권한 필요")
+        return hidden, "", no_update, "접근 권한이 필요합니다."
+    selected = list(dict.fromkeys(selected or []))
+    if triggered == "account-delete-confirm-btn":
+        if not selected:
+            return hidden, "", no_update, "삭제할 계정을 선택해 주세요."
+        session["pending_account_delete"] = selected
+        return ({"display": "flex", "position": "fixed", "inset": 0, "zIndex": 340,
+                 "background": "#0006", "alignItems": "center", "justifyContent": "center"},
+                f"선택한 일반 계정 {len(selected)}개를 정말로 삭제하시겠습니까?",
+                no_update, "")
+    if triggered != "account-delete-yes-btn":
+        return no_update, no_update, no_update, no_update
+    pending = session.pop("pending_account_delete", None)
+    if not pending:
+        return hidden, "", no_update, "삭제 확인을 다시 진행해 주세요."
+    try:
+        deleted = delete_user_accounts(pending, actor_id=str(session.get("admin_id", "")))
+    except (PermissionError, ValueError) as exc:
+        record_action("ACT_ACCOUNT_DELETE_BLOCKED", "일반 계정 삭제 차단", target_type="account",
+                      status="BLOCKED", block_reason=type(exc).__name__)
+        return hidden, "", no_update, "계정 목록이 변경되었습니다. 다시 선택해 주세요."
+    except Exception as exc:
+        log_failure("ACT_ACCOUNT_DELETE", "일반 계정 삭제", exc,
+                    actor_id=str(session.get("admin_id", "")),
+                    source="wireframe_app.confirm_account_delete")
+        return hidden, "", no_update, "계정 삭제 중 오류가 발생했습니다."
+    return hidden, "", int(refresh or 0) + 1, f"일반 계정 {deleted}개를 삭제했습니다."
 
 
 # 브라우저는 초 단위 카운트다운만 표시한다. 실제 로그인 허용·차단은

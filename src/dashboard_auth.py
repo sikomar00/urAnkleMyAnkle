@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from flask import abort, redirect, render_template_string, request, session, url_for
 
 from .audit_service import (
+    account_identity_for_session,
     authenticate_account,
     log_failure,
     record_action,
@@ -54,11 +55,15 @@ def current_session_state() -> dict | None:
 
 def start_admin_session(login_id: str, role: str) -> dict:
     """로그인 성공 시 계정 역할을 포함한 정확히 10분짜리 세션을 시작한다."""
+    identity = account_identity_for_session(login_id)
+    if identity is None or identity[1] != role:
+        raise PermissionError("로그인 계정을 확인할 수 없습니다.")
     expiry = _now_utc() + SESSION_TIMEOUT
     session.clear()
     session.permanent = True
     session["admin_id"] = login_id
     session["role"] = role
+    session["account_pk"] = identity[0]
     session["expires_at"] = expiry.isoformat()
     update_account_session(login_id, role, _naive_utc(expiry), online=True)
     return current_session_state() or {}
@@ -193,6 +198,26 @@ def install_auth(server) -> None:
             if request.path.startswith(("/_dash", "/assets/")):
                 abort(401)
             return redirect(url_for("dashboard_login"))
+        if admin_id:
+            try:
+                identity = account_identity_for_session(str(admin_id))
+            except Exception:
+                # 계정 DB를 확인할 수 없으면 보호된 화면을 열어 주지 않는다.
+                abort(503)
+            if (identity is None or identity[1] != session.get("role")
+                    or session.get("account_pk") != identity[0]):
+                previous_role = str(session.get("role", "UNKNOWN"))
+                session.clear()
+                record_login_event(
+                    "ACT_SESSION_REVOKED", actor_id=str(admin_id), actor_role=previous_role,
+                    status="BLOCKED", block_reason="계정 삭제 또는 역할 변경",
+                    source="dashboard_auth.require_admin_session",
+                )
+                if request.path.startswith(("/_dash", "/assets/")):
+                    abort(401)
+                if request.path in ("/login", "/register"):
+                    return None
+                return redirect(url_for("dashboard_login"))
         if request.path == "/login" or request.path == "/register" or admin_id:
             return None
         if request.path.startswith(("/_dash", "/assets/")):

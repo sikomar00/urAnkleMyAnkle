@@ -30,13 +30,14 @@ def _engine(monkeypatch):
     return engine
 
 
-def _create_test_account(role: str, login_id: str) -> None:
+def _create_test_account(role: str, login_id: str) -> int:
     """세션 유효성 검증을 통과할 최소 계정을 만든다."""
     audit_service.register_account(
         role=role, login_id=login_id, password="test-password", password_confirm="test-password",
         name=f"{login_id} 이름", phone="010-0000-0000", email=f"{login_id}@example.com",
         invite_code="invite-code" if role == "ADMIN" else "",
     )
+    return audit_service.account_identity_for_session(login_id)[0]
 
 
 def test_registers_roles_and_encrypts_personal_data(monkeypatch):
@@ -137,13 +138,14 @@ def _export_callback_response(client, *, export_button: str, audience: str = "mg
 def test_user_cannot_export_pdf_or_excel(monkeypatch):
     """일반 계정은 직접 콜백을 호출해도 PDF·Excel 파일을 만들 수 없다."""
     engine = _engine(monkeypatch)
-    _create_test_account("USER", "user01")
+    account_pk = _create_test_account("USER", "user01")
     monkeypatch.setattr(wireframe_app, "build_report_pdf", lambda *_args: pytest.fail("PDF를 만들면 안 됩니다."))
     monkeypatch.setattr(wireframe_app, "build_report_xlsx", lambda *_args: pytest.fail("Excel을 만들면 안 됩니다."))
     client = app.server.test_client()
     with client.session_transaction() as browser_session:
         browser_session["admin_id"] = "user01"
         browser_session["role"] = "USER"
+        browser_session["account_pk"] = account_pk
         browser_session["expires_at"] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
 
     pdf_response = _export_callback_response(client, export_button="export-pdf-btn")
@@ -164,12 +166,13 @@ def test_user_cannot_export_pdf_or_excel(monkeypatch):
 def test_admin_can_export_excel(monkeypatch):
     """관리자 계정은 서버 측 역할 확인을 통과하고 Excel 파일을 받는다."""
     engine = _engine(monkeypatch)
-    _create_test_account("ADMIN", "admin01")
+    account_pk = _create_test_account("ADMIN", "admin01")
     monkeypatch.setattr(wireframe_app, "build_report_xlsx", lambda *_args: b"excel-content")
     client = app.server.test_client()
     with client.session_transaction() as browser_session:
         browser_session["admin_id"] = "admin01"
         browser_session["role"] = "ADMIN"
+        browser_session["account_pk"] = account_pk
         browser_session["expires_at"] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
 
     response = _export_callback_response(client, export_button="export-xlsx-btn")
@@ -186,13 +189,14 @@ def test_admin_can_export_excel(monkeypatch):
 def test_export_failure_writes_action_and_error_logs(monkeypatch):
     """관리자 내보내기 실패는 행동 로그 FAILED와 오류 로그를 함께 남긴다."""
     engine = _engine(monkeypatch)
-    _create_test_account("ADMIN", "admin01")
+    account_pk = _create_test_account("ADMIN", "admin01")
     monkeypatch.setattr(wireframe_app, "build_report_xlsx",
                         lambda *_args: (_ for _ in ()).throw(RuntimeError("export test failure")))
     client = app.server.test_client()
     with client.session_transaction() as browser_session:
         browser_session["admin_id"] = "admin01"
         browser_session["role"] = "ADMIN"
+        browser_session["account_pk"] = account_pk
         browser_session["expires_at"] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
 
     response = _export_callback_response(client, export_button="export-xlsx-btn")

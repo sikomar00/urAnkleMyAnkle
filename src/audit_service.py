@@ -11,18 +11,19 @@ from pathlib import Path
 from threading import Lock
 
 import pandas as pd
-from sqlalchemy import inspect, select, text
+from sqlalchemy import inspect, select, text, update
 from sqlalchemy.orm import Session
 
 from .audit_models import ActionLog, ErrorLog, FailureLog, LoginLog, kst_now
 from .dashboard_data import _data_path
-from .db_models import AdminInfo, utc_now
+from .db_models import AdminInfo, SystemLog, utc_now
 from .db_service import get_engine
 from .security_service import decrypt_personal_data, encrypt_personal_data, hash_password, verify_password
 
 
 AUTH_EVENT_CODES = {
-    "ACT_LOGIN", "ACT_LOGOUT", "ACT_SESSION_EXTEND", "ACT_SESSION_EXPIRED", "ACT_LOGIN_BLOCKED",
+    "ACT_LOGIN", "ACT_LOGOUT", "ACT_SESSION_EXTEND", "ACT_SESSION_EXPIRED", "ACT_SESSION_REVOKED",
+    "ACT_LOGIN_BLOCKED",
 }
 VALID_ROLES = {"ADMIN", "USER", "UNKNOWN"}
 
@@ -301,6 +302,68 @@ def list_user_accounts() -> list[dict]:
             result.append({"login_id": row.login_id, "name": decrypt_personal_data(row.name_encrypted),
                            "is_online": online})
         return result
+
+
+def account_identity_for_session(login_id: str) -> tuple[int, str] | None:
+    """계정 번호와 역할을 확인해 같은 아이디로 재가입해도 옛 세션을 구분한다."""
+    if not isinstance(login_id, str) or not login_id:
+        return None
+    with Session(get_engine()) as db:
+        identity = db.execute(select(AdminInfo.id, AdminInfo.role).where(
+            AdminInfo.login_id == login_id)).one_or_none()
+    return (identity.id, identity.role) if identity and identity.role in {"ADMIN", "USER"} else None
+
+
+def account_role_for_session(login_id: str) -> str | None:
+    """계정이 여전히 존재하고 유효한 역할인지 확인한다."""
+    identity = account_identity_for_session(login_id)
+    return identity[1] if identity else None
+
+
+def delete_user_accounts(login_ids: list[str], actor_id: str) -> int:
+    """관리자가 선택한 일반 계정만 삭제하고 이력을 같은 트랜잭션에 남긴다."""
+    if not isinstance(actor_id, str) or not actor_id.strip() or len(actor_id.strip()) > 80:
+        raise PermissionError("관리자 계정을 확인할 수 없습니다.")
+    actor_id = actor_id.strip()
+    if not isinstance(login_ids, list) or not login_ids:
+        raise ValueError("삭제할 일반 계정을 선택해 주세요.")
+    if any(not isinstance(value, str) or not value.strip() or len(value.strip()) > 80
+           for value in login_ids):
+        raise ValueError("삭제할 계정 아이디가 올바르지 않습니다.")
+    targets = list(dict.fromkeys(value.strip() for value in login_ids))
+
+    # 요청 중 호출되었다면 화면의 서명된 로그인 세션과 인자로 받은 관리자도 일치해야 한다.
+    from flask import has_request_context, session as flask_session
+
+    if has_request_context() and (flask_session.get("admin_id") != actor_id
+                                  or flask_session.get("role") != "ADMIN"):
+        raise PermissionError("관리자 권한이 필요합니다.")
+
+    with Session(get_engine()) as db, db.begin():
+        actor = db.scalar(select(AdminInfo).where(AdminInfo.login_id == actor_id).with_for_update())
+        if actor is None or actor.role != "ADMIN":
+            raise PermissionError("관리자 권한이 필요합니다.")
+
+        rows = db.scalars(select(AdminInfo).where(AdminInfo.login_id.in_(targets)).with_for_update()).all()
+        if len(rows) != len(targets):
+            raise ValueError("선택한 계정을 찾을 수 없습니다.")
+        if any(row.role != "USER" for row in rows):
+            raise PermissionError("일반 계정만 삭제할 수 있습니다.")
+
+        # 이전 버전의 시스템 로그 테이블에는 계정 번호를 참조하는 외래 키가 있다.
+        # 로그 행 자체는 보존하고 계정 참조만 해제한다.
+        if inspect(db.connection()).has_table(SystemLog.__tablename__):
+            db.execute(update(SystemLog).where(SystemLog.admin_id.in_([row.id for row in rows]))
+                       .values(admin_id=None))
+
+        for row in rows:
+            db.add(ActionLog(
+                occurred_at=kst_now(), event_code="ACT_ACCOUNT_DELETE", action_type="일반 계정 삭제",
+                actor_id=actor_id, actor_role="ADMIN", target_type="account", target_id=row.login_id,
+                action_detail="{}", result_status="SUCCESS",
+            ))
+            db.delete(row)
+    return len(rows)
 
 
 def change_admin_password(login_id: str, current_password: str, new_password: str) -> bool:

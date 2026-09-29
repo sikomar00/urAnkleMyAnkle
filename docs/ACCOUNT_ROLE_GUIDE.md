@@ -49,9 +49,12 @@ Set-ExecutionPolicy -Scope Process Bypass
 | 비밀번호 변경·로그아웃·세션 연장 | 가능 | 가능 |
 | 일반 계정 목록 조회 | 가능 | 불가 |
 | 일반 계정의 복호화된 이름 조회 | 가능 | 불가 |
+| 일반 계정 삭제 | 가능 | 불가 |
 | 관리자 계정 생성 | 관리인 코드가 맞을 때 가능 | 로그인 화면에서 관리인 코드가 맞을 때 가능 |
 
-관리자 프로필에는 `계정 관리` 버튼이 표시됩니다. 이 창은 USER 역할 계정의 아이디·복호화된 이름·접속 상태만 표시합니다. 초록색 원은 현재 세션이 유효한 일반 계정을 뜻합니다.
+관리자 프로필에는 `계정 관리` 버튼이 표시됩니다. 이 창은 USER 역할 계정의 아이디·복호화된 이름·접속 상태를 표시합니다. 초록색 원은 현재 세션이 유효한 일반 계정을 뜻합니다. 일반 계정 프로필에는 탈퇴 버튼이 없습니다.
+
+관리자는 계정 관리에서 **계정 삭제 → 대상 행 선택 → 확인 → 예** 순서로 일반 계정을 삭제합니다. 삭제 전 확인 창에서 **아니오**를 누르면 DB는 바뀌지 않습니다. **예**를 누르면 선택한 일반 계정 행만 삭제하고 `action_logs`에 관리자 아이디·역할·대상 아이디를 남깁니다. 기존 행동·로그인 기록은 보존됩니다. 접속 중이던 삭제 계정도 다음 서버 요청부터 차단됩니다. 관리자 계정은 이 화면에서 삭제할 수 없습니다.
 
 ## 가입 흐름
 
@@ -80,6 +83,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 | `ACT_LOGOUT` | 로그아웃 |
 | `ACT_SESSION_EXTEND` | 10분 세션 초기화 |
 | `ACT_SESSION_EXPIRED` | 10분 세션 만료 |
+| `ACT_SESSION_REVOKED` | 계정 삭제 또는 역할 변경으로 기존 로그인 차단 |
 
 ### `action_logs`
 
@@ -89,6 +93,8 @@ Set-ExecutionPolicy -Scope Process Bypass
 | `ACT_ADMIN_REGISTER` | 관리자 계정 생성 성공 |
 | `ACT_ACCOUNT_REGISTER_BLOCKED` | 계정 생성 차단 |
 | `ACT_ACCOUNT_LIST_VIEW` | 관리자 계정 목록 조회 |
+| `ACT_ACCOUNT_DELETE` | 관리자가 일반 계정 삭제 성공 |
+| `ACT_ACCOUNT_DELETE_BLOCKED` | 관리자 권한 또는 대상 확인 실패로 삭제 차단 |
 | `ACT_PASSWORD_CHANGE` | 비밀번호 변경 |
 | `ACT_TAB_OPEN` | 탭 이동 |
 | `ACT_FILTER_CHANGE` | 조회 조건 변경 |
