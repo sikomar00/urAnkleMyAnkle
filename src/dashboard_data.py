@@ -13,8 +13,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.metrics import confusion_matrix, precision_recall_curve
 
 from .asset_features import add_asset_severity, build_asset_daily
+from .family_features import FAMILY_NAMES, build_family_daily
 from .industrial_data import (
     ASSET_COLUMN,
     CURRENT_TARGET,
@@ -46,6 +48,15 @@ DEFAULT_FAMILY_METRICS_PATH = (
 FAMILY_DIAGNOSIS_METRIC_COLUMNS = [
     "support", "positive_rate", "precision", "recall", "average_precision", "roc_auc",
 ]
+
+# 화면 ③ "부품군 진단" 드릴다운(PR곡선·혼동행렬) 원본 — 일별 예측 로그.
+DEFAULT_FAMILY_TEST_PREDICTIONS_PATH = (
+    PROJECT_ROOT / "outputs" / "family_current" / "test_predictions.csv"
+)
+# 화면 ③ "부품군 진단" 드릴다운(변수중요도) 원본.
+DEFAULT_FAMILY_FEATURE_IMPORTANCE_PATH = (
+    PROJECT_ROOT / "outputs" / "family_current" / "feature_importance.csv"
+)
 
 # 화면 ③ 세그먼트 컨트롤의 위험 기준선(12/13/14) 중 기본값과 동일하게 고정한다.
 # 세그먼트와의 연동은 이번 작업 범위 밖이다.
@@ -483,6 +494,7 @@ def load_asset_family_diagnosis(asset_tag: str) -> list[dict]:
     if len(selected) != 9:
         raise ValueError(f"{asset_tag}의 부품군 진단 행이 9개가 아닙니다: {len(selected)}개")
 
+    selected = selected.sort_values("average_precision", ascending=False)
     return [
         {
             "part_family": r["part_family"],
@@ -492,6 +504,133 @@ def load_asset_family_diagnosis(asset_tag: str) -> list[dict]:
         }
         for _, r in selected.iterrows()
     ]
+
+
+def load_family_feature_importance(part_family: str) -> list[dict]:
+    """화면 ③ "부품군 진단" 드릴다운 — 선택 부품군의 변수중요도 상위 10개
+    (target=="affected" 고정, 자산과 무관한 모델 자체 속성).
+
+    Raises:
+        ValueError: part_family가 9종에 없거나, 해당 데이터가 없을 때.
+    """
+    if part_family not in FAMILY_NAMES:
+        raise ValueError(f"알 수 없는 part_family입니다: {part_family}")
+
+    path = DEFAULT_FAMILY_FEATURE_IMPORTANCE_PATH
+    if not path.exists():
+        raise FileNotFoundError(
+            "부품군 변수중요도 feature_importance.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            "python -m src.current_family_diagnosis "
+            "--data dataVerification/synthetic_industrial_machine_data.csv"
+        )
+    importance = pd.read_csv(path)
+    selected = importance.loc[
+        importance["part_family"].eq(part_family) & importance["target"].eq("affected")
+    ]
+    if selected.empty:
+        raise ValueError(f"{part_family}의 변수중요도 데이터가 없습니다.")
+
+    top10 = selected.sort_values("importance_mean", ascending=False).head(10)
+    return [
+        {"feature": r["feature"], "importance_mean": float(r["importance_mean"])}
+        for _, r in top10.iterrows()
+    ]
+
+
+@lru_cache(maxsize=1)
+def _family_test_predictions_raw() -> pd.DataFrame:
+    path = DEFAULT_FAMILY_TEST_PREDICTIONS_PATH
+    if not path.exists():
+        raise FileNotFoundError(
+            "부품군 진단 test_predictions.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            "python -m src.current_family_diagnosis "
+            "--data dataVerification/synthetic_industrial_machine_data.csv"
+        )
+    return pd.read_csv(path)
+
+
+def load_family_pr_curve_and_confusion(asset_tag: str, part_family: str) -> dict:
+    """화면 ③ "부품군 진단" 드릴다운 — 선택 자산·부품군의 PR곡선 좌표와
+    혼동행렬(임계값은 metrics.csv의 probability_cutoff를 그대로 써서
+    load_asset_family_diagnosis()가 이미 보여준 precision/recall과 일치시킨다).
+
+    Raises:
+        ValueError: asset_tag/part_family가 유효하지 않거나, 필요한 행이
+            정확히 하나가 아닐 때.
+    """
+    assets = load_asset_list()
+    if asset_tag not in assets:
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+    if part_family not in FAMILY_NAMES:
+        raise ValueError(f"알 수 없는 part_family입니다: {part_family}")
+
+    metrics = _family_metrics_raw()
+    metrics_row = metrics.loc[
+        metrics["scope_kind"].eq("asset_tag")
+        & metrics["scope_name"].eq(asset_tag)
+        & metrics["part_family"].eq(part_family)
+        & metrics["target"].eq("affected")
+        & metrics["threshold_policy"].eq("f1")
+        & metrics["split"].eq("test")
+    ]
+    if len(metrics_row) != 1:
+        raise ValueError(
+            f"{asset_tag}/{part_family}의 metrics 행이 1개가 아닙니다: {len(metrics_row)}개"
+        )
+    cutoff = float(metrics_row.iloc[0]["probability_cutoff"])
+
+    preds = _family_test_predictions_raw()
+    sub = preds.loc[
+        preds["asset_tag"].eq(asset_tag)
+        & preds["part_family"].eq(part_family)
+        & preds["target"].eq("affected")
+        & preds["threshold_policy"].eq("f1")
+    ]
+    if sub.empty:
+        raise ValueError(f"{asset_tag}/{part_family}의 test_predictions 행이 없습니다.")
+
+    precision, recall, _ = precision_recall_curve(sub["actual"], sub["risk_score"])
+    predicted = (sub["risk_score"] >= cutoff).astype(int)
+    tn, fp, fn, tp = confusion_matrix(sub["actual"], predicted, labels=[0, 1]).ravel()
+
+    return {
+        "precision_curve": precision.tolist(),
+        "recall_curve": recall.tolist(),
+        "cutoff": cutoff,
+        "confusion": {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)},
+    }
+
+
+@lru_cache(maxsize=1)
+def _family_daily() -> pd.DataFrame:
+    return build_family_daily(_load_raw())
+
+
+def load_family_recurrence_intervals(asset_tag: str, part_family: str) -> list[int]:
+    """화면 ③ "부품군 진단" 드릴다운 — 선택 자산·부품군의 affected 에피소드
+    연속 시작일 사이 간격(일수). load_asset_failure_onset_trend()와 같은
+    방식으로 에피소드 시작점을 탐지한다.
+
+    Raises:
+        ValueError: asset_tag/part_family가 유효하지 않을 때.
+    """
+    assets = load_asset_list()
+    if asset_tag not in assets:
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+    if part_family not in FAMILY_NAMES:
+        raise ValueError(f"알 수 없는 part_family입니다: {part_family}")
+
+    daily = _family_daily()
+    sub = daily.loc[
+        daily[ASSET_COLUMN].eq(asset_tag) & daily["part_family"].eq(part_family)
+    ].sort_values(DATE_COLUMN)
+
+    is_affected = sub["affected"].to_numpy().astype(bool)
+    is_start = is_affected & ~np.r_[False, is_affected[:-1]]
+    start_dates = sub[DATE_COLUMN].to_numpy()[is_start]
+    if len(start_dates) < 2:
+        return []
+    return np.diff(start_dates).astype("timedelta64[D]").astype(int).tolist()
 
 
 def load_data_dictionary() -> list[dict]:

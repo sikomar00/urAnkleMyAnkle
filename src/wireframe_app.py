@@ -60,6 +60,9 @@ from .dashboard_data import (  # noqa: E402
     load_data_quality_summary,
     load_data_reference_date,
     load_failure_trend,
+    load_family_feature_importance,
+    load_family_pr_curve_and_confusion,
+    load_family_recurrence_intervals,
     load_priority_table,
     load_screen1_kpis,
     load_screen5_kpis,
@@ -268,7 +271,7 @@ NO_DATA_MARK = "데이터 미연결"
 # 화면 탭을 옮겼다 돌아와도 선택이 유지되도록 seg-store에 모아둔다.
 # ------------------------------------------------------------
 SEG_GROUPS = {
-    "task": ["현재 고장 표시 분류", "부품군 진단", "단독 부품 이상 탐지"],
+    "task": ["현재 고장 표시 분류", "부품군 진단", "부품 고장 탐지"],
     "threshold": ["12", "13", "14"],
     "dataset": ["원자료", "기계·일 집계", "부품 출고", "모델 입력 피처"],
 }
@@ -841,6 +844,39 @@ def _pre_figure(trend, theme):
     return fig
 
 
+def _family_pr_figure(pr_cm, theme):
+    """화면 ③ "부품군 진단" 드릴다운 — 선택 자산·부품군의 PR곡선."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    fig = go.Figure(go.Scatter(
+        x=pr_cm["recall_curve"], y=pr_cm["precision_curve"], mode="lines",
+        line=dict(color=colors["ink"], width=1.6),
+    ))
+    fig.update_yaxes(title="정밀도", range=[0, 1.02], gridcolor=colors["hair"],
+                      tickfont=dict(size=11), color=colors["muted"])
+    fig.update_xaxes(title="재현율", range=[0, 1.02], showgrid=False,
+                      tickfont=dict(size=11), color=colors["muted"])
+    fig.update_layout(
+        height=392, margin=dict(l=48, r=16, t=8, b=40),
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+        font=dict(size=11, color=colors["muted"]), showlegend=False,
+    )
+    return fig
+
+
+def _family_recur_figure(intervals, theme):
+    """화면 ③ "부품군 진단" 드릴다운 — 선택 자산·부품군의 재발 간격(일) 분포."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    fig = go.Figure(go.Histogram(x=intervals, marker=dict(color=colors["ink"])))
+    fig.update_yaxes(title="빈도", gridcolor=colors["hair"], tickfont=dict(size=11), color=colors["muted"])
+    fig.update_xaxes(title="간격(일)", showgrid=False, tickfont=dict(size=11), color=colors["muted"])
+    fig.update_layout(
+        height=184, margin=dict(l=40, r=8, t=4, b=32), bargap=0.08,
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+        font=dict(size=11, color=colors["muted"]), showlegend=False,
+    )
+    return fig
+
+
 def priority_table(cols, records, row_h, head_h=32, sort_col=None):
     """table_placeholder()와 같은 헤더/셀 스타일을 쓰되, 자리표시 막대 대신
     load_priority_table()이 만든 실제 자산별 값을 채운다. table_placeholder()
@@ -1091,7 +1127,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
 # 화면 ③ 모델·예측 — 툴바 32 / 행 96 / 460 / 272 (마지막 행이 남는 높이 흡수)
 # ============================================================
 
-def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
+def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=None):
     seg_state = seg_state or DEFAULT_SEG
     thr_sel = seg_state.get("threshold", 0)
     thr_changed = thr_sel != DEFAULT_SEG["threshold"]
@@ -1149,7 +1185,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
     #   과제 0(현재 고장 표시 분류)은 실제 값(hist_gradient_boosting 기준) 타일 6개.
     #   과제 1(부품군 진단)은 KPI 타일 행 자체를 만들지 않는다 — mcomp 카드
     #   자리에 부품군별 표가 대신 들어간다.
-    #   과제 2(단독 부품 이상 탐지)는 아직 자리표시자 그대로(타일 4개 × 458).
+    #   과제 2(부품 고장 탐지)는 아직 자리표시자 그대로(타일 4개 × 458).
     kpi_labels = ["정확도", "정밀도", "재현율", "F1", "ROC-AUC", "평균정밀도(AP)"]
     if task_sel == 2:
         row_a = row(ROW_KPI, [tile(f"[지표 {i+1}]", w=458, sub="값 또는 빈 상태") for i in range(4)])
@@ -1165,30 +1201,37 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
     if task_sel == 1:
         # 부품군 진단 — mcomp 카드 자리에 선택 자산의 부품군 9종별 표를 넣는다
         # (기존 '모델 비교' 표와는 열 구성 자체가 달라 별도로 만든다).
+        # average_precision 내림차순(load_asset_family_diagnosis가 이미 정렬)
+        # 기준 1행이 최초 진입 기본 선택 부품군이다.
         family_rows = load_asset_family_diagnosis(asset_tag)
+        valid_families = [fr["part_family"] for fr in family_rows]
+        family = family if family in valid_families else valid_families[0]
         family_cols = [
             ("부품군", 130, "left"), ("모델", 150, "left"), ("표본 수", 64, "right"),
             ("양성률(%)", 80, "right"), ("정밀도", 82, "right"), ("재현율", 82, "right"),
             ("AP", 72, "right"), ("ROC-AUC", 82, "right"),
         ]
-        def family_cell(content, align="left"):
+        def family_cell(content, align="left", highlight=False):
             # boxSizing 없이는 padding이 지정한 width 위에 더해져 8열이 카드
             # 폭(742px)을 넘기고 overflow:hidden에 잘린다(기존 '모델 비교'
             # 표에도 있던 문제이나, 그 표는 이번 범위 밖이라 손대지 않는다).
             return html.Td(content, style={"width": "auto", "padding": "0 8px", "textAlign": align,
-                                            "boxSizing": "border-box",
+                                            "boxSizing": "border-box", "background": SUNK if highlight else "none",
                                             "borderBottom": f"1px solid {HAIR}"})
         family_body_rows = [
             html.Tr([
-                family_cell(html.Span(fr["part_family"], style={"fontSize": "13px", "color": INK})),
-                family_cell(html.Span(fr["model"], style={"fontSize": "13px", "color": INK})),
-                family_cell(str(fr["support"]), align="right"),
-                family_cell(f"{fr['positive_rate'] * 100:.1f}%", align="right"),
-                family_cell(f"{fr['precision']:.3f}", align="right"),
-                family_cell(f"{fr['recall']:.3f}", align="right"),
-                family_cell(f"{fr['average_precision']:.3f}", align="right"),
-                family_cell(f"{fr['roc_auc']:.3f}", align="right"),
-            ], style={"height": "32px"})
+                family_cell(html.Span(fr["part_family"], style={"fontSize": "13px", "color": INK}),
+                            highlight=fr["part_family"] == family),
+                family_cell(html.Span(fr["model"], style={"fontSize": "13px", "color": INK}),
+                            highlight=fr["part_family"] == family),
+                family_cell(str(fr["support"]), align="right", highlight=fr["part_family"] == family),
+                family_cell(f"{fr['positive_rate'] * 100:.1f}%", align="right", highlight=fr["part_family"] == family),
+                family_cell(f"{fr['precision']:.3f}", align="right", highlight=fr["part_family"] == family),
+                family_cell(f"{fr['recall']:.3f}", align="right", highlight=fr["part_family"] == family),
+                family_cell(f"{fr['average_precision']:.3f}", align="right", highlight=fr["part_family"] == family),
+                family_cell(f"{fr['roc_auc']:.3f}", align="right", highlight=fr["part_family"] == family),
+            ], id={"type": "family-row", "index": fr["part_family"]}, n_clicks=0,
+               style={"height": "32px", "cursor": "pointer"})
             for fr in family_rows
         ]
         family_thead = html.Tr([html.Th(l, style={"width": f"{w}px", "padding": "0 8px", "textAlign": a,
@@ -1199,7 +1242,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
         family_table = html.Table([html.Thead(family_thead), html.Tbody(family_body_rows)],
                                    style={"width": "742px", "tableLayout": "fixed", "borderCollapse": "collapse"})
         mcomp_body = html.Div([family_table])
-        mcomp = card("부품군 진단", 774, ROW_MAIN, mcomp_body, right=note("행 = 부품군 · 열 = 지표"))
+        mcomp = card("부품군 진단", 774, ROW_MAIN, mcomp_body, right=note("행 = 부품군 · 열 = 지표 · 행 클릭 시 아래 카드 갱신"))
     else:
         metric_cols = [("모델", 182, "left")] + [(f"[지표 {i+1}]", 93, "right") for i in range(6)]
         model_rows = []
@@ -1238,7 +1281,13 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
         mcomp = card("모델 비교", 774, ROW_MAIN, mcomp_body, right=note("행 = 모델 (레지스트리) · 열 = 지표"))
 
     if task_sel == 1:
-        pr_body = empty_state("이 과제에는 해당 없음", "부품군 진단 과제에서는 표시하지 않음", 584, 392)
+        pr_cm = load_family_pr_curve_and_confusion(asset_tag, family)
+        pr_body = html.Div(
+            dcc.Graph(id={"type": "family-pr-chart", "index": "screen3"},
+                      figure=_family_pr_figure(pr_cm, "light"),
+                      config={"displayModeBar": False, "responsive": True},
+                      style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
+            style={"width": "584px", "height": "392px", "display": "flex", "flexDirection": "column"})
     else:
         pr_body = html.Div([slot("범례 · 모델 n + 무작위 기준선", 584, 20),
                             hstack([slot("y축 · 정밀도", 40, 342), slot("PR 곡선 영역", "가변", 342)], 0),
@@ -1247,8 +1296,27 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
 
     def cell(t):
         return slot(t, 169, 160)
+    def cm_cell(value):
+        return html.Div(html.Span(str(value), style={"fontFamily": MONO, "fontSize": "24px",
+                                                       "fontWeight": "600", "color": INK}),
+                         style={"width": "169px", "height": "160px", "boxSizing": "border-box",
+                                "display": "flex", "alignItems": "center", "justifyContent": "center",
+                                "border": f"1px dashed {CTRL}", "background": SUNK})
     if task_sel == 1:
-        cm_body = empty_state("이 과제에는 해당 없음", "부품군 진단 과제에서는 표시하지 않음", 426, 392)
+        c = pr_cm["confusion"]
+        cm_body = html.Div([
+            hstack([html.Div(style={"width": "72px"}),
+                    html.Div("예측 고장 표시 있음", style={"width": "169px", "textAlign": "center", **LABEL_12}),
+                    html.Div("예측 고장 표시 없음", style={"width": "169px", "textAlign": "center", **LABEL_12})],
+                   8, {"height": "24px", "alignItems": "center"}),
+            hstack([html.Div("실제 있음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
+                    cm_cell(c["tp"]), cm_cell(c["fn"])], 8, {"height": "160px"}),
+            hstack([html.Div("실제 없음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
+                    cm_cell(c["fp"]), cm_cell(c["tn"])], 8, {"height": "160px"}),
+            html.Div([html.Span("판정 임계값", style={**LABEL_12, "whiteSpace": "nowrap"}),
+                      html.Span(f"{pr_cm['cutoff']:.3f}", style=NUM_12)],
+                     style={"height": "32px", "display": "flex", "alignItems": "center", "gap": "8px"}),
+        ])
     else:
         cm_body = html.Div([
             hstack([html.Div(style={"width": "72px"}),
@@ -1267,7 +1335,20 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
     row_b = row(ROW_MAIN, [mcomp, prc, cmx])
 
     if task_sel == 1:
-        feat_body = empty_state("이 과제에는 해당 없음", "부품군 진단 과제에서는 표시하지 않음", 742, 184)
+        fi_rows = load_family_feature_importance(family)
+        max_importance = max(r["importance_mean"] for r in fi_rows)
+        feat_body = html.Div(
+            [html.Div([
+                html.Div(r["feature"], style={"width": "220px", "flexShrink": "0", "fontSize": "12px",
+                                               "color": INK, "whiteSpace": "nowrap", "overflow": "hidden",
+                                               "textOverflow": "ellipsis"}),
+                html.Div(bar(r["importance_mean"] / max_importance * 100, 8), style={"flexGrow": "1"}),
+                html.Div(f"{r['importance_mean']:.3f}",
+                         style={**NUM_12, "width": "56px", "textAlign": "right", "flexShrink": "0"}),
+             ], style={"height": "14px", "display": "flex", "alignItems": "center", "gap": "8px", "flexShrink": "0"})
+             for r in fi_rows],
+            style={"display": "flex", "flexDirection": "column", "gap": "4px"},
+        )
     else:
         feat_body = html.Div(
             [html.Div([html.Div(bar(70, 5), style={"width": "160px", "flexShrink": "0"}),
@@ -1278,7 +1359,10 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
                              "flexShrink": "0"})
              for _ in range(12)],
         )
-    feat = card("주요 영향 변수 상위 12", 774, 252, feat_body, right=note("12행 × 15 · 직접 값 라벨"))
+    if task_sel == 1:
+        feat = card("주요 영향 변수 상위 10", 774, 252, feat_body, right=note("10행 · 부품군 자체 속성(자산 무관)"))
+    else:
+        feat = card("주요 영향 변수 상위 12", 774, 252, feat_body, right=note("12행 × 15 · 직접 값 라벨"))
 
     slider = html.Div(
         [html.Label("판정 임계값 (즉시 재계산)", htmlFor="thr-slider", style={**LABEL_12, "whiteSpace": "nowrap"}),
@@ -1293,12 +1377,26 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
                              hstack([html.Div(style={"width": "40px"}), slot("x축 · 위험도", "가변", 22)], 0)])
     thr = card("판정 임계값 조정", 616, 252, thr_body, right=slider)
 
-    # 선행 경보 지표는 아직 어떤 과제에도 연결되지 않았다(과거에는 "7일
-    # 사전 예측" 과제에서만 조건부로 활성화했으나, 그 과제 자체가 "부품군
-    # 진단"으로 바뀌면서 대상이 없어졌다).
-    lead_body = empty_state("이 과제에는 해당 없음",
-                             "선행 경보 지표가 아직 어느 과제에도 연결되지 않음", 426, 184)
-    lead = card("선행 경보 일수 분포", 458, 252, lead_body)
+    # 옛 "선행 경보 일수 분포"는 대상 과제("7일 사전 예측")가 "부품군
+    # 진단"으로 바뀌면서 없어졌다 — 이 카드를 "재발 간격"으로 다시
+    # 정의한다(부품군 진단 과제에서만 실제 값, 나머지는 해당 없음).
+    if task_sel == 1:
+        intervals = load_family_recurrence_intervals(asset_tag, family)
+        if intervals:
+            lead_body = html.Div(
+                dcc.Graph(id={"type": "family-recur-chart", "index": "screen3"},
+                          figure=_family_recur_figure(intervals, "light"),
+                          config={"displayModeBar": False, "responsive": True},
+                          style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
+                style={"width": "426px", "height": "184px", "display": "flex", "flexDirection": "column"})
+        else:
+            lead_body = empty_state("이 과제에는 해당 없음",
+                                     "재발 이력이 2회 미만이라 간격을 계산할 수 없음", 426, 184)
+    else:
+        lead_body = empty_state("이 과제에는 해당 없음",
+                                 "재발 간격 지표가 이 과제에는 연결되지 않음", 426, 184)
+    lead = card("재발 간격", 458, 252, lead_body,
+                right=note("과거 재발 간격 — 예측이 아닌 회고적 통계"))
     row_c = row(252, [feat, thr, lead])
 
     return html.Div([toolbar, row_a, row_b, row_c],
@@ -1848,6 +1946,9 @@ app.layout = html.Div(
         # ②의 "‹ 이전 기계"/"다음 기계 ›"가 바꾸는, 현재 상세를 보고 있는 기계.
         # prio-sort-store와 동일하게 세션 메모리(storage_type 미지정)로 둔다.
         dcc.Store(id="selected-asset-store", data=load_asset_list()[0]),
+        # ③ "부품군 진단" 표 행 클릭이 바꾸는, 현재 드릴다운 중인 부품군.
+        # None이면 screen_3()이 정렬 후 1행(average_precision 최댓값)으로 대체한다.
+        dcc.Store(id="selected-family-store", data=None),
         dcc.Store(id="theme-store", data="light", storage_type="local"),
         app_header(),
         filter_bar(),
@@ -1873,8 +1974,9 @@ app.layout = html.Div(
     Input("report-audience-dd", "value"),
     Input("prio-sort-store", "data"),
     Input("selected-asset-store", "data"),
+    Input("selected-family-store", "data"),
 )
-def render_screen(active, seg_state, audience, prio_sort, selected_asset):
+def render_screen(active, seg_state, audience, prio_sort, selected_asset, selected_family):
     kwargs = {"seg_state": seg_state, "audience": audience or DEFAULT_AUDIENCE}
     if active == "1":
         kwargs["prio_sort"] = prio_sort or DEFAULT_PRIO_SORT
@@ -1882,6 +1984,7 @@ def render_screen(active, seg_state, audience, prio_sort, selected_asset):
         kwargs["asset_tag"] = selected_asset
     if active == "3":
         kwargs["asset_tag"] = selected_asset
+        kwargs["family"] = selected_family
     return SCREEN_BUILDERS[active](**kwargs)
 
 
@@ -1912,6 +2015,24 @@ def cycle_selected_asset(_clicks, current_asset):
     else:
         return no_update
     return assets[idx]
+
+
+# ③ "부품군 진단" 표의 행 클릭 — family-row는 task_sel==1일 때만 DOM에
+# 있으므로, 다른 과제·다른 화면을 보는 동안은 이 패턴매칭 Input에 매치될
+# 대상이 없어 콜백 자체가 호출되지 않는다. cycle_selected_asset과 같은
+# 이유로 n_clicks 전부가 falsy인 마운트 시 유령 발화를 무시한다.
+@app.callback(
+    Output("selected-family-store", "data"),
+    Input({"type": "family-row", "index": ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def select_family_row(n_clicks_list):
+    if not n_clicks_list or not any(n_clicks_list):
+        return no_update
+    triggered = ctx.triggered_id
+    if not triggered:
+        return no_update
+    return triggered["index"]
 
 
 # ------------------------------------------------------------
@@ -2009,6 +2130,43 @@ def recolor_pre_chart(theme, _active_tab, asset_tag):
     assets = load_asset_list()
     asset_tag = asset_tag if asset_tag in assets else assets[0]
     return [_pre_figure(load_asset_failure_onset_trend(asset_tag), theme or "light")]
+
+
+# ③ "부품군 진단" 드릴다운의 PR곡선·재발간격 차트도 같은 방식으로 재색칠한다.
+# family-pr-chart/family-recur-chart는 task_sel==1일 때만 DOM에 있으므로
+# 다른 과제·다른 화면에서는 호출 자체가 안 된다 — asset_tag/family 폴백은
+# screen_3()의 폴백 로직과 동일하게 반복한다(그 함수 자체를 State로 참조할
+# 수는 없으므로).
+@app.callback(
+    Output({"type": "family-pr-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+    State("selected-asset-store", "data"),
+    State("selected-family-store", "data"),
+)
+def recolor_family_pr_chart(theme, _active_tab, asset_tag, family):
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
+    valid_families = [r["part_family"] for r in load_asset_family_diagnosis(asset_tag)]
+    family = family if family in valid_families else valid_families[0]
+    pr_cm = load_family_pr_curve_and_confusion(asset_tag, family)
+    return [_family_pr_figure(pr_cm, theme or "light")]
+
+
+@app.callback(
+    Output({"type": "family-recur-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+    State("selected-asset-store", "data"),
+    State("selected-family-store", "data"),
+)
+def recolor_family_recur_chart(theme, _active_tab, asset_tag, family):
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
+    valid_families = [r["part_family"] for r in load_asset_family_diagnosis(asset_tag)]
+    family = family if family in valid_families else valid_families[0]
+    intervals = load_family_recurrence_intervals(asset_tag, family)
+    return [_family_recur_figure(intervals, theme or "light")]
 
 
 # <html>에도 같은 클래스를 얹는다. #root는 1920 고정폭이라 넓은 화면에서
