@@ -9,8 +9,8 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from src import audit_service
-from src.audit_models import ActionLog, LoginLog
+from src import audit_service, wireframe_app
+from src.audit_models import ActionLog, ErrorLog, LoginLog
 from src.db_models import AdminInfo, Base
 from src.wireframe_app import app
 
@@ -28,6 +28,15 @@ def _engine(monkeypatch):
     monkeypatch.setenv("DASHBOARD_AES_KEY", base64.b64encode(bytes(range(32))).decode())
     monkeypatch.setenv("DASHBOARD_ADMIN_INVITE_CODE", "invite-code")
     return engine
+
+
+def _create_test_account(role: str, login_id: str) -> None:
+    """세션 유효성 검증을 통과할 최소 계정을 만든다."""
+    audit_service.register_account(
+        role=role, login_id=login_id, password="test-password", password_confirm="test-password",
+        name=f"{login_id} 이름", phone="010-0000-0000", email=f"{login_id}@example.com",
+        invite_code="invite-code" if role == "ADMIN" else "",
+    )
 
 
 def test_registers_roles_and_encrypts_personal_data(monkeypatch):
@@ -98,43 +107,98 @@ def test_register_popup_creates_user_account(monkeypatch):
         assert account.role == "USER"
 
 
-def test_user_cannot_open_report_summary_tab(monkeypatch):
-    """일반 계정이 ⑤ 탭을 누르면 마지막 허용 탭으로 돌아가고 차단 로그를 남긴다."""
+def _export_callback_response(client, *, export_button: str, audience: str = "mgr"):
+    """PDF·Excel 버튼 콜백을 브라우저 요청과 같은 형식으로 호출한다."""
+    output = next(key for key in app.callback_map if key.startswith("..report-download.data"))
+    pdf_clicks = 1 if export_button == "export-pdf-btn" else 0
+    excel_clicks = 1 if export_button == "export-xlsx-btn" else 0
+    return client.post("/_dash-update-component", json={
+        "output": output,
+        "outputs": [
+            {"id": "report-download", "property": "data"},
+            {"id": "action-echo", "property": "children"},
+            {"id": "export-access-modal", "property": "style"},
+        ],
+        "inputs": [
+            {"id": "export-pdf-btn", "property": "n_clicks", "value": pdf_clicks},
+            {"id": "export-xlsx-btn", "property": "n_clicks", "value": excel_clicks},
+            {"id": "export-access-modal-close", "property": "n_clicks", "value": 0},
+        ],
+        "state": [
+            {"id": "report-audience-dd", "property": "value", "value": audience},
+            {"id": "filter-store", "property": "data", "value": {}},
+            {"id": "seg-store", "property": "data", "value": {}},
+            {"id": "actor-id-input", "property": "value", "value": ""},
+        ],
+        "changedPropIds": [f"{export_button}.n_clicks"],
+    })
+
+
+def test_user_cannot_export_pdf_or_excel(monkeypatch):
+    """일반 계정은 직접 콜백을 호출해도 PDF·Excel 파일을 만들 수 없다."""
     engine = _engine(monkeypatch)
+    _create_test_account("USER", "user01")
+    monkeypatch.setattr(wireframe_app, "build_report_pdf", lambda *_args: pytest.fail("PDF를 만들면 안 됩니다."))
+    monkeypatch.setattr(wireframe_app, "build_report_xlsx", lambda *_args: pytest.fail("Excel을 만들면 안 됩니다."))
     client = app.server.test_client()
     with client.session_transaction() as browser_session:
         browser_session["admin_id"] = "user01"
         browser_session["role"] = "USER"
         browser_session["expires_at"] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
 
-    output = next(key for key in app.callback_map if key.startswith("..screen-content.children"))
-    response = client.post("/_dash-update-component", json={
-        "output": output,
-        "outputs": [
-            {"id": "screen-content", "property": "children"},
-            {"id": "screen-tabs", "property": "value"},
-            {"id": "last-allowed-tab-store", "property": "data"},
-            {"id": "report-access-modal", "property": "style"},
-        ],
-        "inputs": [
-            {"id": "screen-tabs", "property": "value", "value": "5"},
-            {"id": "seg-store", "property": "data", "value": {}},
-            {"id": "report-audience-dd", "property": "value", "value": "mgr"},
-            {"id": "prio-sort-store", "property": "data", "value": "grade"},
-            {"id": "selected-asset-store", "property": "data", "value": "AST-001"},
-            {"id": "report-access-modal-close", "property": "n_clicks", "value": 0},
-        ],
-        "state": [
-            {"id": "last-allowed-tab-store", "property": "data", "value": "2"},
-            {"id": "actor-id-input", "property": "value", "value": ""},
-        ],
-        "changedPropIds": ["screen-tabs.value"],
-    })
+    pdf_response = _export_callback_response(client, export_button="export-pdf-btn")
+    excel_response = _export_callback_response(client, export_button="export-xlsx-btn")
+    assert pdf_response.status_code == 200
+    assert excel_response.status_code == 200
+    assert pdf_response.json["response"]["export-access-modal"]["style"]["display"] == "flex"
+    assert excel_response.json["response"]["export-access-modal"]["style"]["display"] == "flex"
+    with Session(engine) as session:
+        logs = session.scalars(select(ActionLog).where(
+            ActionLog.event_code == "ACT_EXPORT_ACCESS_BLOCKED").order_by(ActionLog.log_id)).all()
+        assert [(log.actor_id, log.actor_role, log.target_id, log.result_status) for log in logs] == [
+            ("user01", "USER", "pdf", "BLOCKED"),
+            ("user01", "USER", "excel", "BLOCKED"),
+        ]
 
+
+def test_admin_can_export_excel(monkeypatch):
+    """관리자 계정은 서버 측 역할 확인을 통과하고 Excel 파일을 받는다."""
+    engine = _engine(monkeypatch)
+    _create_test_account("ADMIN", "admin01")
+    monkeypatch.setattr(wireframe_app, "build_report_xlsx", lambda *_args: b"excel-content")
+    client = app.server.test_client()
+    with client.session_transaction() as browser_session:
+        browser_session["admin_id"] = "admin01"
+        browser_session["role"] = "ADMIN"
+        browser_session["expires_at"] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+
+    response = _export_callback_response(client, export_button="export-xlsx-btn")
     assert response.status_code == 200
     payload = response.json["response"]
-    assert payload["screen-tabs"]["value"] == "2"
-    assert payload["report-access-modal"]["style"]["display"] == "flex"
+    assert payload["report-download"]["data"]["filename"].endswith(".xlsx")
+    assert payload["export-access-modal"]["style"]["display"] == "none"
     with Session(engine) as session:
-        log = session.scalar(select(ActionLog).where(ActionLog.event_code == "ACT_REPORT_ACCESS_BLOCKED"))
-        assert (log.actor_id, log.actor_role, log.result_status) == ("user01", "USER", "BLOCKED")
+        log = session.scalar(select(ActionLog).where(ActionLog.event_code == "ACT_REPORT_EXPORT"))
+        assert (log.actor_id, log.actor_role, log.target_type, log.target_id, log.result_status) == (
+            "admin01", "ADMIN", "export", "excel", "SUCCESS")
+
+
+def test_export_failure_writes_action_and_error_logs(monkeypatch):
+    """관리자 내보내기 실패는 행동 로그 FAILED와 오류 로그를 함께 남긴다."""
+    engine = _engine(monkeypatch)
+    _create_test_account("ADMIN", "admin01")
+    monkeypatch.setattr(wireframe_app, "build_report_xlsx",
+                        lambda *_args: (_ for _ in ()).throw(RuntimeError("export test failure")))
+    client = app.server.test_client()
+    with client.session_transaction() as browser_session:
+        browser_session["admin_id"] = "admin01"
+        browser_session["role"] = "ADMIN"
+        browser_session["expires_at"] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+
+    response = _export_callback_response(client, export_button="export-xlsx-btn")
+    assert response.status_code == 200
+    with Session(engine) as session:
+        action = session.scalar(select(ActionLog).where(ActionLog.event_code == "ACT_REPORT_EXPORT"))
+        error = session.scalar(select(ErrorLog).where(ErrorLog.error_code == "ERR_REPORT_EXPORT"))
+        assert (action.actor_id, action.actor_role, action.result_status) == ("admin01", "ADMIN", "FAILED")
+        assert (error.actor_id, error.action_type, error.error_type) == ("admin01", "보고서 내보내기", "RuntimeError")

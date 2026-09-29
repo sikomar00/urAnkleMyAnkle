@@ -66,8 +66,8 @@ from .dashboard_data import (  # noqa: E402
     load_table_page,
 )
 from .audit_service import (  # noqa: E402
-    change_admin_password, create_audit_tables, ensure_dashboard_admin, list_user_accounts, log_failure,
-    record_action, record_error, sync_if_csv_changed,
+    change_admin_password, create_audit_tables,
+    ensure_dashboard_admin, list_user_accounts, log_failure, record_action, record_error, sync_if_csv_changed,
 )
 from .dashboard_auth import (  # noqa: E402
     current_session_state, end_admin_session, extend_admin_session, install_auth,
@@ -189,7 +189,6 @@ SCREENS = [
     ("2", "② 기계 상세"),
     ("3", "③ 모델·예측"),
     ("4", "④ 데이터"),
-    ("5", "⑤ 보고서 요약"),
 ]
 
 # ------------------------------------------------------------
@@ -1501,7 +1500,7 @@ def screen_5(seg_state=None, audience=DEFAULT_AUDIENCE):
                      style={"display": "flex", "flexDirection": "column", "gap": f"{GUTTER}px"})
 
 
-SCREEN_BUILDERS = {"1": screen_1, "2": screen_2, "3": screen_3, "4": screen_4, "5": screen_5}
+SCREEN_BUILDERS = {"1": screen_1, "2": screen_2, "3": screen_3, "4": screen_4}
 
 
 # ============================================================
@@ -1821,8 +1820,6 @@ app.layout = html.Div(
         # ②의 "‹ 이전 기계"/"다음 기계 ›"가 바꾸는, 현재 상세를 보고 있는 기계.
         # prio-sort-store와 동일하게 세션 메모리(storage_type 미지정)로 둔다.
         dcc.Store(id="selected-asset-store", data=load_asset_list()[0]),
-        # 일반 계정이 제한 탭을 눌렀을 때 되돌아갈 마지막 허용 탭을 기억한다.
-        dcc.Store(id="last-allowed-tab-store", data="1"),
         dcc.Store(id="theme-store", data="light", storage_type="local"),
         dcc.Store(id="audit-sync-status"),
         dcc.Store(id="audit-audience-event"),
@@ -1925,14 +1922,14 @@ app.layout = html.Div(
                       "padding": "22px", "borderRadius": "10px", "boxShadow": "0 12px 40px #0005"}),
         ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 330,
                   "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
-        # 일반 계정이 ⑤ 보고서 요약을 선택하면 현재 화면을 유지하고 이 안내만 보여 준다.
-        html.Div(id="report-access-modal", children=[
+        # 일반 계정이 PDF·Excel을 누르면 파일 생성 없이 이 안내만 보여 준다.
+        html.Div(id="export-access-modal", children=[
             html.Div([
                 html.H3("접근 권한", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
                 html.P("접근 권한이 필요합니다.",
                        style={"marginBottom": "26px", "textAlign": "center"}),
                 html.Div([
-                    html.Button("확인", id="report-access-modal-close", n_clicks=0,
+                    html.Button("확인", id="export-access-modal-close", n_clicks=0,
                                 style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
                                        "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
                                        "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
@@ -1955,36 +1952,20 @@ app.layout = html.Div(
 )
 
 
+
 # ------------------------------------------------------------
 # 화면 렌더 — 탭 / 세그먼트 상태 / 보고서 대상이 바뀌면 다시 그린다
 # ------------------------------------------------------------
 @app.callback(
     Output("screen-content", "children"),
-    Output("screen-tabs", "value"),
-    Output("last-allowed-tab-store", "data"),
-    Output("report-access-modal", "style"),
     Input("screen-tabs", "value"),
     Input("seg-store", "data"),
     Input("report-audience-dd", "value"),
     Input("prio-sort-store", "data"),
     Input("selected-asset-store", "data"),
-    Input("report-access-modal-close", "n_clicks"),
-    State("last-allowed-tab-store", "data"),
     State("actor-id-input", "value"),
 )
-def render_screen(active, seg_state, audience, prio_sort, selected_asset, _close_clicks, last_allowed, actor_id):
-    # 일반 계정은 ⑤ 보고서 요약의 내용과 내보내기 기능에 접근할 수 없다.
-    # 탭 값을 마지막 허용 화면으로 즉시 되돌려 기존 화면도 그대로 유지한다.
-    if ctx.triggered_id == "report-access-modal-close":
-        return no_update, no_update, no_update, {"display": "none"}
-    if ctx.triggered_id == "screen-tabs" and active == "5" and str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
-        record_action("ACT_REPORT_ACCESS_BLOCKED", "보고서 요약 접근 차단", actor_id=actor_id,
-                      target_type="tab", target_id="5", status="BLOCKED",
-                      block_reason="관리자 역할이 필요합니다.")
-        return no_update, str(last_allowed or "1"), no_update, {
-            "display": "flex", "position": "fixed", "inset": 0, "zIndex": 340,
-            "background": "#0006", "alignItems": "center", "justifyContent": "center",
-        }
+def render_screen(active, seg_state, audience, prio_sort, selected_asset, actor_id):
     if ctx.triggered_id == "screen-tabs":
         record_action("ACT_TAB_OPEN", "화면 이동", actor_id=actor_id,
                       target_type="tab", target_id=active)
@@ -1994,13 +1975,11 @@ def render_screen(active, seg_state, audience, prio_sort, selected_asset, _close
     if active == "2":
         kwargs["asset_tag"] = selected_asset
     try:
-        allowed_tab = active if ctx.triggered_id == "screen-tabs" else no_update
-        return SCREEN_BUILDERS[active](**kwargs), no_update, allowed_tab, {"display": "none"}
+        return SCREEN_BUILDERS[active](**kwargs)
     except Exception as exc:
         log_failure("ACT_SCREEN_RENDER", "화면 조회", exc, actor_id=actor_id,
                     source="wireframe_app.render_screen", target_id=active)
-        return (html.Div("화면을 불러오지 못했습니다. 오류 로그를 확인해 주세요."),
-                no_update, no_update, {"display": "none"})
+        return html.Div("화면을 불러오지 못했습니다. 오류 로그를 확인해 주세요.")
 
 
 # ②의 "‹ 이전 기계"/"다음 기계 ›" — 알파벳순으로 순환 이동한다. nav_btn()이
@@ -2287,15 +2266,32 @@ def drill_failrate_to_priority(n_clicks_list, current, actor_id):
 @app.callback(
     Output("report-download", "data"),
     Output("action-echo", "children", allow_duplicate=True),
+    Output("export-access-modal", "style"),
     Input("export-pdf-btn", "n_clicks"),
     Input("export-xlsx-btn", "n_clicks"),
+    Input("export-access-modal-close", "n_clicks"),
     State("report-audience-dd", "value"),
     State("filter-store", "data"),
     State("seg-store", "data"),
     State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def export_report(_pdf, _xlsx, audience, filters, seg_state, actor_id):
+def export_report(_pdf, _xlsx, _close, audience, filters, seg_state, actor_id):
+    if ctx.triggered_id == "export-access-modal-close":
+        return no_update, no_update, {"display": "none"}
+
+    export_format = "pdf" if ctx.triggered_id == "export-pdf-btn" else "excel"
+    # 버튼은 보이지만, 파일을 만드는 직전에 서버 세션의 역할을 다시 확인한다.
+    # 일반 사용자가 요청을 직접 바꾸더라도 PDF·Excel은 받을 수 없다.
+    if str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
+        record_action("ACT_EXPORT_ACCESS_BLOCKED", "파일 내보내기 접근 차단", actor_id=actor_id,
+                      target_type="export", target_id=export_format, status="BLOCKED",
+                      block_reason="관리자 역할이 필요합니다.")
+        return no_update, "파일 내보내기는 관리자 계정만 사용할 수 있습니다.", {
+            "display": "flex", "position": "fixed", "inset": 0, "zIndex": 340,
+            "background": "#0006", "alignItems": "center", "justifyContent": "center",
+        }
+
     audience = audience or DEFAULT_AUDIENCE
     aud = REPORT_AUDIENCES[audience]
     stamp = datetime.now().strftime("%Y%m%d-%H%M")
@@ -2310,12 +2306,13 @@ def export_report(_pdf, _xlsx, audience, filters, seg_state, actor_id):
     except Exception as exc:  # noqa: BLE001 — 실패 이유를 화면에 그대로 보여준다
         log_failure("ACT_REPORT_EXPORT", "보고서 내보내기", exc, actor_id=actor_id,
                     source="wireframe_app.export_report", target_id=ctx.triggered_id)
-        return no_update, f"내보내기 실패 — {type(exc).__name__}"
+        return no_update, f"내보내기 실패 — {type(exc).__name__}", {"display": "none"}
     record_action("ACT_REPORT_EXPORT", "보고서 내보내기", actor_id=actor_id,
-                  target_type="report", target_id=name,
-                  detail={"audience": audience, "format": "pdf" if ctx.triggered_id == "export-pdf-btn" else "xlsx"})
+                  target_type="export", target_id=export_format,
+                  detail={"audience": audience, "format": export_format})
     return (dcc.send_bytes(lambda b: b.write(payload), name, type=mime),
-            f"{aud['label']} 보고서 내보냄 — {name} (섹션 {len(aud['sections'])}개 · 값은 {NO_DATA_MARK})")
+            f"{aud['label']} 보고서 내보냄 — {name} (섹션 {len(aud['sections'])}개 · 값은 {NO_DATA_MARK})",
+            {"display": "none"})
 
 
 # ------------------------------------------------------------

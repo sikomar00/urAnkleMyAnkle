@@ -50,7 +50,7 @@ def test_login_blocks_dash_and_uses_registered_admin(monkeypatch):
         "output": profile_output,
         "outputs": [{"id": component, "property": property_name} for component, property_name in (
             ("profile-display", "children"), ("profile-login-id", "children"),
-            ("session-state", "data"), ("account-manage-btn", "style"))],
+                ("session-state", "data"), ("account-manage-btn", "style"))],
         "inputs": [{"id": "screen-tabs", "property": "value", "value": "1"}],
         "state": [], "changedPropIds": ["screen-tabs.value"],
     })

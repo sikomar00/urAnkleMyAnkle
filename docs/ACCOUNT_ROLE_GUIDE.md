@@ -45,7 +45,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 | 기능 | ADMIN | USER |
 | --- | --- | --- |
 | 대시보드 ①~④ 탭 | 가능 | 가능 |
-| ⑤ 보고서 요약 | 가능 | 불가 — 접근 권한 안내 표시 |
+| PDF·Excel 내보내기 | 가능 | 불가 — 접근 권한 안내 표시 |
 | 비밀번호 변경·로그아웃·세션 연장 | 가능 | 가능 |
 | 일반 계정 목록 조회 | 가능 | 불가 |
 | 일반 계정의 복호화된 이름 조회 | 가능 | 불가 |
@@ -93,7 +93,10 @@ Set-ExecutionPolicy -Scope Process Bypass
 | `ACT_TAB_OPEN` | 탭 이동 |
 | `ACT_FILTER_CHANGE` | 조회 조건 변경 |
 | `ACT_REPORT_EXPORT` | 보고서 다운로드 |
+| `ACT_EXPORT_ACCESS_BLOCKED` | 일반 계정의 PDF·Excel 내보내기 차단 |
 | `ACT_CSV_EXPORT` | CSV 다운로드 |
+
+PDF·Excel 내보내기 성공과 권한 차단은 `action_logs`에 남습니다. 파일 생성 중 실제 오류가 발생하면 같은 내보내기 행동은 `FAILED`로 기록되고, 오류 원인은 `error_logs`에 `ERR_REPORT_EXPORT`로 함께 남습니다.
 
 두 로그 테이블 모두 `actor_id`와 `actor_role`을 저장합니다. 로그인과 로그아웃 이벤트는 `action_logs`에 중복 저장하지 않습니다.
 

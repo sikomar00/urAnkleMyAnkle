@@ -104,11 +104,11 @@ def test_auto_scan_runs_only_when_csv_changes(tmp_path, monkeypatch):
     assert len(calls) == 4
 
 
-def test_original_five_screens_remain_available():
+def test_four_operational_screens_remain_available():
     from src import wireframe_app
 
-    assert len(wireframe_app.SCREENS) == 5
-    assert set(wireframe_app.SCREEN_BUILDERS) == {"1", "2", "3", "4", "5"}
+    assert len(wireframe_app.SCREENS) == 4
+    assert set(wireframe_app.SCREEN_BUILDERS) == {"1", "2", "3", "4"}
     client = wireframe_app.app.server.test_client()
     assert client.get("/").status_code == 302
     assert client.get("/login").status_code == 200

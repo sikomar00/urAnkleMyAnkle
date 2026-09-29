@@ -1,6 +1,6 @@
-# 5탭 대시보드의 MySQL 로그 기록 안내
+# 4탭 대시보드의 MySQL 로그 기록 안내
 
-현재 브랜치 `KYS-dashboard`의 `src/wireframe_app.py`는 기존 ①~⑤ 탭을 유지합니다. 별도의 DB 관리 탭 없이 사용자의 의미 있는 조작을 `action_logs`, CSV에 표시된 부품 고장을 `failure_logs`, 프로그램 오류를 `error_logs`에 저장합니다. 세 **테이블과 관리자 계정 테이블은 MySQL 데이터베이스 `predictive_maintenance`**에 있습니다. MySQL Workbench는 그 DB를 조회하는 프로그램이며 Python은 SQLAlchemy ORM과 PyMySQL로 MySQL 서버에 접속합니다.
+현재 브랜치 `KYS-dashboard`의 `src/wireframe_app.py`는 ①~④ 탭을 유지합니다. 별도의 DB 관리 탭 없이 사용자의 의미 있는 조작을 `action_logs`, CSV에 표시된 부품 고장을 `failure_logs`, 프로그램 오류를 `error_logs`에 저장합니다. 이 로그 테이블과 계정 테이블은 MySQL 데이터베이스 `predictive_maintenance`에 있습니다. MySQL Workbench는 그 DB를 조회하는 프로그램이며 Python은 SQLAlchemy ORM과 PyMySQL로 MySQL 서버에 접속합니다.
 
 이전 시범 구조의 `dashboard_failure_alerts`, `dashboard_system_logs`는 사용하지 않아 삭제했습니다. 현재 로그인·행동·고장·오류 로그는 각각 `dashboard_admin_info`, `action_logs`, `failure_logs`, `error_logs`를 사용합니다.
 
@@ -30,7 +30,7 @@ cd C:\urAnkleMyAnkle
 
 | 구분 | 코드 | 발생 조건 |
 | --- | --- | --- |
-| 행동 | `ACT_TAB_OPEN` | ①~⑤ 탭 이동 |
+| 행동 | `ACT_TAB_OPEN` | ①~④ 탭 이동 |
 | 행동 | `ACT_FILTER_CHANGE` | 공장·종류·설비·기간 선택 또는 초기화 |
 | 행동 | `ACT_ASSET_NAVIGATE` | 이전·다음 설비 이동 |
 | 행동 | `ACT_SEGMENT_CHANGE` | 분석 항목 전환 |
