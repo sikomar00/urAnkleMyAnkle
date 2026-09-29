@@ -31,6 +31,14 @@ DEFAULT_DATA_PATH = (
     PROJECT_ROOT / "data" / "raw" / "synthetic_industrial_machine_data.csv"
 )
 
+# 화면 ③ "현재 고장 표시 분류" 과제의 모델 비교 지표 원본.
+DEFAULT_CLASSIFICATION_METRICS_PATH = (
+    PROJECT_ROOT / "outputs" / "current_state" / "metrics.csv"
+)
+CLASSIFICATION_METRIC_COLUMNS = [
+    "accuracy", "precision", "recall", "f1", "roc_auc", "average_precision",
+]
+
 # 화면 ③ 세그먼트 컨트롤의 위험 기준선(12/13/14) 중 기본값과 동일하게 고정한다.
 # 세그먼트와의 연동은 이번 작업 범위 밖이다.
 HIGH_RISK_THRESHOLD = 12
@@ -126,6 +134,36 @@ def load_screen5_kpis() -> dict:
         "parts_issue_value_inr": kpis["parts_issue_value_inr"],
         "avg_power_kw": kpis["avg_power_kw"],
     }
+
+
+@lru_cache(maxsize=1)
+def load_current_classification_metrics() -> dict:
+    """화면 ③ "현재 고장 표시 분류" 과제의 모델 비교 지표(prior vs
+    hist_gradient_boosting). scope_kind == "overall" 행만 사용한다.
+
+    ``load_failure_trend()``와 같은 방식으로 캐싱한다 — 테마 전환·탭 전환
+    시마다 재계산하지 않기 위함.
+
+    Raises:
+        FileNotFoundError: outputs/current_state/metrics.csv가 없을 때.
+        ValueError: overall 스코프에 필요한 모델이 없을 때.
+    """
+    path = DEFAULT_CLASSIFICATION_METRICS_PATH
+    if not path.exists():
+        raise FileNotFoundError(
+            "분류 지표 metrics.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            "python -m src.industrial_training --mode current"
+        )
+    metrics = pd.read_csv(path)
+    overall = metrics.loc[metrics["scope_kind"].eq("overall")]
+    result = {}
+    for model in ("prior", "hist_gradient_boosting"):
+        row = overall.loc[overall["model"].eq(model)]
+        if row.empty:
+            raise ValueError(f"metrics.csv에 필요한 모델이 없습니다: {model}")
+        r = row.iloc[0]
+        result[model] = {col: float(r[col]) for col in CLASSIFICATION_METRIC_COLUMNS}
+    return result
 
 
 @lru_cache(maxsize=1)

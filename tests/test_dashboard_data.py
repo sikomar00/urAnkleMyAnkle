@@ -100,3 +100,16 @@ def test_asset_failure_onset_trend_uses_most_recent_episode():
 def test_asset_failure_onset_trend_rejects_unknown_asset():
     with pytest.raises(ValueError):
         dd.load_asset_failure_onset_trend('AST-9999')
+
+
+def test_current_classification_metrics_has_prior_and_hist_gradient_boosting():
+    metrics = dd.load_current_classification_metrics()
+    assert set(metrics) == {'prior', 'hist_gradient_boosting'}
+    for model_metrics in metrics.values():
+        assert set(model_metrics) == set(dd.CLASSIFICATION_METRIC_COLUMNS)
+
+
+def test_current_classification_metrics_hist_gradient_boosting_values():
+    hgb = dd.load_current_classification_metrics()['hist_gradient_boosting']
+    assert hgb['roc_auc'] == pytest.approx(0.6815, abs=1e-4)
+    assert hgb['average_precision'] == pytest.approx(0.1534, abs=1e-4)
