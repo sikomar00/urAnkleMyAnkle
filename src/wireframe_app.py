@@ -50,11 +50,9 @@ from .dashboard_data import (  # noqa: E402
     export_table_csv,
     load_asset_detail_kpis,
     load_asset_failure_heatmap,
-    load_asset_failure_onset_trend,
     load_asset_family_diagnosis,
     load_asset_list,
     load_asset_parts_history,
-    load_asset_peer_comparison,
     load_asset_sensor_series,
     load_current_classification_metrics,
     load_current_classification_pr_curve_and_confusion,
@@ -826,62 +824,8 @@ def _parts_figure(df, theme):
     return fig
 
 
-def _hex_to_rgba(hex_color, alpha):
-    """FIGURE_COLORS의 hex 값을 박스플롯 fillcolor용 rgba 문자열로 바꾼다 —
-    새 색상 값을 만드는 게 아니라 기존 hex를 그대로 반투명하게 쓰는 것뿐이다."""
-    r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
-    return f"rgba({r},{g},{b},{alpha})"
 
 
-def _peer_figure(comparison, theme):
-    """화면 ② "동종 기계 대비" — 선택 자산 vs 동종 나머지 1대의 베어링 온도
-    분포 박스플롯 2개. 선택 기계는 진한 테두리·채움, 동종 기계는 옅게 그려
-    어느 쪽이 선택 기계인지 시각적으로 드러낸다."""
-    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
-    fig = go.Figure()
-    fig.add_trace(go.Box(
-        y=comparison["asset_values"], name=f"{comparison['asset_tag']} (선택)",
-        line=dict(color=colors["ink"], width=2),
-        fillcolor=_hex_to_rgba(colors["ink"], 0.55),
-        marker_color=colors["ink"], boxpoints=False,
-    ))
-    fig.add_trace(go.Box(
-        y=comparison["peer_values"], name=f"{comparison['peer_asset_tag']} (동종)",
-        line=dict(color=colors["muted"], width=1),
-        fillcolor=_hex_to_rgba(colors["muted"], 0.12),
-        marker_color=colors["muted"], boxpoints=False,
-    ))
-    fig.update_yaxes(gridcolor=colors["hair"], tickfont=dict(size=11), color=colors["muted"])
-    fig.update_xaxes(tickfont=dict(size=11), color=colors["muted"])
-    fig.update_layout(
-        height=220, margin=dict(l=32, r=8, t=4, b=22),
-        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
-        font=dict(size=11, color=colors["muted"]), showlegend=False,
-    )
-    return fig
-
-
-def _pre_figure(trend, theme):
-    """화면 ② "고장 직전 센서 변화" — 가장 최근 위험 기준선 에피소드의
-    t-7~t 베어링 온도 추이. x축은 실제 날짜 대신 상대 위치(t-7..t)로
-    표시하고, 실제 날짜는 호버 툴팁에서만 보여준다."""
-    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
-    labels = [f"t{d}" if d != 0 else "t" for d in trend["relative_days"]]
-    fig = go.Figure(go.Scatter(
-        x=labels, y=trend["temp_bearing_degC"], mode="lines+markers",
-        line=dict(color=colors["ink"], width=1.6), marker=dict(size=5, color=colors["ink"]),
-        customdata=trend["dates"],
-        hovertemplate="%{x} · %{customdata}<br>%{y}°C<extra></extra>",
-    ))
-    fig.add_vline(x="t", line=dict(color=colors["muted"], width=1, dash="dash"))
-    fig.update_yaxes(gridcolor=colors["hair"], tickfont=dict(size=11), color=colors["muted"])
-    fig.update_xaxes(showgrid=False, tickfont=dict(size=11), color=colors["muted"])
-    fig.update_layout(
-        height=220, margin=dict(l=32, r=8, t=4, b=22),
-        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
-        font=dict(size=11, color=colors["muted"]), showlegend=False,
-    )
-    return fig
 
 
 def _family_pr_figure(pr_cm, theme):
@@ -1147,31 +1091,21 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
     smult = card("센서 8종 스몰 멀티플", 1248, 520, sm_body,
                  right=note("x축 공유 · 밴드 = 위험 기준선 초과일"))
 
-    anom = card("이상 점수 추이", 616, 144, slot("라인 + 임계선", 584, 76), right=note("임계선 포함"))
-    clus = card("군집 위치", 616, 144, slot("산점도 · 군집 1 / 2 / 3", 584, 76), right=note("선택 기계 표시"))
-    parts = card("부품 출고 이력", 616, 200,
+    # "이상 점수 추이"·"군집 위치"·"고장 직전 센서 변화"·"동종 기계 대비" 4개
+    # 카드를 삭제한다. K-Means 결과(군집·이상 점수)는 화면④ 데이터 조회의
+    # 그레인 토글로 옮겨 원자료 조회로는 남길 계획이었으나, 그 산출물
+    # (dataVerification/outputs/kmeans_assignments.csv)이 리포지토리 어디에도
+    # 없다 — 대시보드는 모델을 재실행하지 않는다는 공통 제약과 충돌해 새로
+    # 만들지 않았다(별도 오프라인 클러스터링 스크립트가 먼저 필요).
+    # "부품 출고 이력"만 남아 오른쪽 칸(616 × 520)을 그대로 채운다.
+    parts = card("부품 출고 이력", 616, 520,
                  dcc.Graph(id={"type": "parts-chart", "index": "screen2"},
                            figure=_parts_figure(load_asset_parts_history(asset_tag), "light"),
                            config={"displayModeBar": False, "responsive": True},
                            style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}))
-    rightcol = col(616, 520, [anom, clus, parts])
-    row_b = row(520, [smult, rightcol])
+    row_b = row(520, [smult, parts])
 
-    pre = card("고장 직전 센서 변화", 932, 288,
-               dcc.Graph(id={"type": "pre-chart", "index": "screen2"},
-                         figure=_pre_figure(load_asset_failure_onset_trend(asset_tag), "light"),
-                         config={"displayModeBar": False, "responsive": True},
-                         style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
-               right=note("고장 표시 시점 t=0 · t−7 ~ t"))
-    peer = card("동종 기계 대비", 932, 288,
-                dcc.Graph(id={"type": "peer-chart", "index": "screen2"},
-                          figure=_peer_figure(load_asset_peer_comparison(asset_tag), "light"),
-                          config={"displayModeBar": False, "responsive": True},
-                          style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
-                right=note("동일 종류 나머지 1대 대비"))
-    row_c = row(288, [pre, peer])
-
-    return html.Div([strip, row_b, row_c],
+    return html.Div([strip, row_b],
                      style={"display": "flex", "flexDirection": "column", "gap": f"{GUTTER}px"})
 
 
@@ -2195,35 +2129,6 @@ def recolor_parts_chart(theme, _active_tab, asset_tag):
     assets = load_asset_list()
     asset_tag = asset_tag if asset_tag in assets else assets[0]
     return [_parts_figure(load_asset_parts_history(asset_tag), theme or "light")]
-
-
-# 화면② "동종 기계 대비" 박스플롯도 같은 방식으로 재색칠한다. smult-chart/
-# parts-chart와 id 타입을 나눠야 세 콜백의 Output 매칭 개수가 서로 섞이지 않는다.
-@app.callback(
-    Output({"type": "peer-chart", "index": ALL}, "figure"),
-    Input("theme-store", "data"),
-    Input("screen-tabs", "value"),
-    State("selected-asset-store", "data"),
-)
-def recolor_peer_chart(theme, _active_tab, asset_tag):
-    assets = load_asset_list()
-    asset_tag = asset_tag if asset_tag in assets else assets[0]
-    return [_peer_figure(load_asset_peer_comparison(asset_tag), theme or "light")]
-
-
-# 화면② "고장 직전 센서 변화" 차트도 같은 방식으로 재색칠한다. smult-chart/
-# parts-chart/peer-chart와 id 타입을 나눠야 네 콜백의 Output 매칭 개수가
-# 서로 섞이지 않는다.
-@app.callback(
-    Output({"type": "pre-chart", "index": ALL}, "figure"),
-    Input("theme-store", "data"),
-    Input("screen-tabs", "value"),
-    State("selected-asset-store", "data"),
-)
-def recolor_pre_chart(theme, _active_tab, asset_tag):
-    assets = load_asset_list()
-    asset_tag = asset_tag if asset_tag in assets else assets[0]
-    return [_pre_figure(load_asset_failure_onset_trend(asset_tag), theme or "light")]
 
 
 # ③ "부품군 진단" 드릴다운의 PR곡선·재발간격 차트도 같은 방식으로 재색칠한다.
