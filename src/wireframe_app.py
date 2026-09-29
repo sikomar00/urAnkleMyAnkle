@@ -46,6 +46,7 @@ if __package__ in {None, ""}:
     __package__ = "src"
 
 from .dashboard_data import (  # noqa: E402
+    CLASSIFICATION_METRIC_COLUMNS,
     export_table_csv,
     load_asset_detail_kpis,
     load_asset_failure_onset_trend,
@@ -53,6 +54,7 @@ from .dashboard_data import (  # noqa: E402
     load_asset_parts_history,
     load_asset_peer_comparison,
     load_asset_sensor_series,
+    load_current_classification_metrics,
     load_data_dictionary,
     load_data_quality_summary,
     load_data_reference_date,
@@ -1092,22 +1094,33 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE):
     seg_state = seg_state or DEFAULT_SEG
     thr_sel = seg_state.get("threshold", 0)
     thr_changed = thr_sel != DEFAULT_SEG["threshold"]
+    task_sel = seg_state.get("task", 0)
 
-    # 위험 기준선은 표의 축이 아니라 '라벨 정의'다 — 바꾸면 정답이 바뀌므로
-    # 모델을 다시 학습/교체해야 한다. 관리자가 필터로 착각하고 눌렀다가
-    # 화면 전체 수치가 갈리는 것이 원래 문제였다. 경고를 컨트롤 바로 아래에
-    # 상시 노출하고, 기본값에서 벗어나면 문구를 강조로 바꾼다.
-    warn_text = ("주의 — 위험 기준선은 필터가 아니라 학습 라벨 정의다. "
-                 f"값을 바꾸면 해당 기준선으로 학습된 모델로 교체되고 아래 모든 지표가 다시 계산된다."
-                 + (f"  현재 기본값({SEG_GROUPS['threshold'][DEFAULT_SEG['threshold']]}) 아님 "
-                    f"→ {SEG_GROUPS['threshold'][thr_sel]} 기준 모델" if thr_changed else ""))
+    if task_sel == 0:
+        # 이 과제(부품 단위 당일 고장 분류)에는 위험 기준선이 적용되지
+        # 않는다 — 설비 단위 위험도 분류 과제(별도)에서만 쓰이므로, 세그먼트
+        # 값과 무관하게 항상 이 안내를 상시 노출한다. "기본값 아님" 강조
+        # 개념 자체가 이 과제엔 의미가 없어 항상 비강조 스타일로 고정한다.
+        warn_text = ("위험 기준선(12/13/14)은 이 과제(부품 단위 당일 고장 분류)에는 "
+                     "적용되지 않는다 — 설비 단위 위험도 분류 과제(별도)에서만 쓰인다.")
+        warn_emphasis = False
+    else:
+        # 위험 기준선은 표의 축이 아니라 '라벨 정의'다 — 바꾸면 정답이 바뀌므로
+        # 모델을 다시 학습/교체해야 한다. 관리자가 필터로 착각하고 눌렀다가
+        # 화면 전체 수치가 갈리는 것이 원래 문제였다. 경고를 컨트롤 바로 아래에
+        # 상시 노출하고, 기본값에서 벗어나면 문구를 강조로 바꾼다.
+        warn_text = ("주의 — 위험 기준선은 필터가 아니라 학습 라벨 정의다. "
+                     f"값을 바꾸면 해당 기준선으로 학습된 모델로 교체되고 아래 모든 지표가 다시 계산된다."
+                     + (f"  현재 기본값({SEG_GROUPS['threshold'][DEFAULT_SEG['threshold']]}) 아님 "
+                        f"→ {SEG_GROUPS['threshold'][thr_sel]} 기준 모델" if thr_changed else ""))
+        warn_emphasis = thr_changed
     warn_line = html.Div(
         html.Span(warn_text,
                   style={"fontSize": "11px", "lineHeight": "16px",
-                         "fontWeight": "600" if thr_changed else "500",
-                         "color": INK if thr_changed else MUTED, "whiteSpace": "nowrap",
+                         "fontWeight": "600" if warn_emphasis else "500",
+                         "color": INK if warn_emphasis else MUTED, "whiteSpace": "nowrap",
                          "boxSizing": "border-box", "padding": "0 6px",
-                         "border": f"1px solid {CTRL if thr_changed else HAIR}", "borderRadius": "2px"}),
+                         "border": f"1px solid {CTRL if warn_emphasis else HAIR}", "borderRadius": "2px"}),
         style={"height": "16px", "display": "flex", "alignItems": "center", "justifyContent": "flex-end"},
     )
 
@@ -1131,24 +1144,41 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE):
 
     # 과제에 따라 행 A가 갈린다 (원래 스펙의 '③ 행A 변형'):
     #   분류 2종 → 지표 타일 6개 × 300 / 전력 회귀 → 지표 타일 4개 × 458
-    task_sel = seg_state.get("task", 0)
+    #   과제 0(현재 고장 표시 분류)만 실제 값(hist_gradient_boosting 기준),
+    #   과제 1(7일 사전 예측)은 아직 자리표시자 그대로.
+    kpi_labels = ["정확도", "정밀도", "재현율", "F1", "ROC-AUC", "평균정밀도(AP)"]
     if task_sel == 2:
         row_a = row(ROW_KPI, [tile(f"[회귀 지표 {i+1}]", w=458, sub="값 또는 빈 상태") for i in range(4)])
+    elif task_sel == 0:
+        current_metrics = load_current_classification_metrics()["hist_gradient_boosting"]
+        row_a = row(ROW_KPI, [
+            kpi_value_tile(label, f"{current_metrics[col]:.3f}")
+            for label, col in zip(kpi_labels, CLASSIFICATION_METRIC_COLUMNS)
+        ])
     else:
-        kind = "분류" if task_sel == 0 else "사전예측"
-        row_a = row(ROW_KPI, [tile(f"[{kind} 지표 {i+1}]", sub="값 또는 빈 상태") for i in range(6)])
+        row_a = row(ROW_KPI, [tile(f"[사전예측 지표 {i+1}]", sub="값 또는 빈 상태") for i in range(6)])
 
     metric_cols = [("모델", 182, "left")] + [(f"[지표 {i+1}]", 93, "right") for i in range(6)]
     model_rows = []
-    for name in ["기준 A", "기준 B", "RandomForest"]:
+    if task_sel == 0:
+        comparison_metrics = load_current_classification_metrics()
+        model_names = ["prior", "hist_gradient_boosting"]
+    else:
+        comparison_metrics = None
+        model_names = ["기준 A", "기준 B", "RandomForest"]
+    for name in model_names:
         cells = [html.Td(
             html.Div([html.Span(style={"width": "10px", "height": "10px", "border": f"1px solid {CTRL}",
                                         "boxSizing": "border-box"}),
                       html.Span(name, style={"fontSize": "13px", "color": INK})],
                      style={"display": "flex", "alignItems": "center", "gap": "8px"}),
             style={"padding": "0 8px", "borderBottom": f"1px solid {HAIR}"})]
-        cells += [html.Td(html.Div(bar(45, 8), style={"display": "flex", "justifyContent": "flex-end"}),
-                          style={"padding": "0 8px", "borderBottom": f"1px solid {HAIR}"}) for _ in range(6)]
+        if comparison_metrics is not None:
+            row_pct = [comparison_metrics[name][col] * 100 for col in CLASSIFICATION_METRIC_COLUMNS]
+        else:
+            row_pct = [45] * 6
+        cells += [html.Td(html.Div(bar(pct, 8), style={"display": "flex", "justifyContent": "flex-end"}),
+                          style={"padding": "0 8px", "borderBottom": f"1px solid {HAIR}"}) for pct in row_pct]
         model_rows.append(html.Tr(cells, style={"height": "32px"}))
     model_rows.append(html.Tr(
         html.Td("+ 레지스트리 모델 행 (가변 · 32px/행)", colSpan=7,
