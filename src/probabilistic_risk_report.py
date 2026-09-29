@@ -53,6 +53,11 @@ def render_probabilistic_risk_summary(run: ProbabilisticRiskRun) -> str:
         )
         if result.get("reasons"):
             loc_lines.extend(f"  - {reason}" for reason in result["reasons"])
+        if result.get("localization_status") == "approved_on_validation":
+            if result.get("test_reproduced") is False:
+                loc_lines.append("  - 검증 구간 승인 결과가 테스트 구간에서 재현되지 않았습니다.")
+            elif result.get("test_reproduced") is True:
+                loc_lines.append("  - 검증 구간 승인 결과가 테스트 구간에서도 재현되었습니다.")
     selected_models = ", ".join(
         f"{name}={selection.selected_model}"
         for name, selection in run.selections.items()

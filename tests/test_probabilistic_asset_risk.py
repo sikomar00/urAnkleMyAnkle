@@ -7,6 +7,7 @@ import pytest
 
 from src.industrial_data import SENSOR_COLUMNS
 from src.probabilistic_asset_risk import (
+    _build_localization_results,
     choose_model_from_selection_metrics,
     fit_calibrated_part_model,
     predict_part_probabilities,
@@ -262,3 +263,27 @@ def test_run_probabilistic_asset_risk_writes_all_required_artifacts(tmp_path):
         "우선 점검 후보",
         "참고용 위험 순위",
     }
+
+
+def test_localization_result_records_test_reproduction_separately():
+    calibration = __import__(
+        "tests.test_probabilistic_risk_evaluation",
+        fromlist=["ranking_frame"],
+    ).ranking_frame()
+    test = calibration.assign(split="test")
+    parts = pd.concat(
+        [
+            calibration.assign(model_variant="B0"),
+            calibration.assign(model_variant="A1"),
+            calibration.assign(model_variant="A2"),
+            test.assign(model_variant="B0"),
+            test.assign(model_variant="A1"),
+            test.assign(model_variant="A2"),
+        ],
+        ignore_index=True,
+    )
+
+    results = _build_localization_results(parts, bootstrap_samples=50, random_state=42)
+
+    assert "test_reproduced" in results["A1"]
+    assert "test_bootstrap_ci_lower" in results["A1"]

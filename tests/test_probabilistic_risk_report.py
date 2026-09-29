@@ -122,6 +122,16 @@ def test_report_can_describe_approved_localization_without_overclaiming():
     assert "고장 원인 확정" in report
 
 
+def test_report_states_when_validation_approval_is_not_reproduced_on_test():
+    run = fake_run(localization_status="approved_on_validation")
+    run.localization["A1"]["test_reproduced"] = False
+    run.localization["A1"]["test_bootstrap_ci_lower"] = -0.01
+
+    report = render_probabilistic_risk_summary(run)
+
+    assert "테스트 구간에서 재현되지 않았습니다" in report
+
+
 def test_probabilistic_cli_defaults_and_rejects_invalid_values():
     args = build_parser().parse_args([])
     assert args.data.name == "synthetic_industrial_machine_data.csv"
@@ -136,4 +146,3 @@ def test_probabilistic_cli_defaults_and_rejects_invalid_values():
         build_parser().parse_args(["--fpr-policies", "1.2"])
     with pytest.raises(SystemExit):
         build_parser().parse_args(["--high-risk-thresholds", "6"])
-

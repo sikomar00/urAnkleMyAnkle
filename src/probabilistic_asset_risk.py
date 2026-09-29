@@ -345,9 +345,13 @@ def _build_localization_results(
     calibration = ranking.loc[
         ranking["split"].eq("calibration") & ranking["scope_kind"].eq("overall")
     ]
+    test_ranking = ranking.loc[
+        ranking["split"].eq("test") & ranking["scope_kind"].eq("overall")
+    ]
     random_calibration = random_expectation.loc[
         random_expectation["split"].eq("calibration")
     ]
+    random_test = random_expectation.loc[random_expectation["split"].eq("test")]
     results: dict[str, dict[str, Any]] = {
         "B0": {
             "localization_status": "insufficient_evidence",
@@ -359,8 +363,14 @@ def _build_localization_results(
         part_predictions["model_variant"].eq("B0")
         & part_predictions["split"].eq("calibration")
     ]
+    baseline_test = part_predictions.loc[
+        part_predictions["model_variant"].eq("B0")
+        & part_predictions["split"].eq("test")
+    ]
     base_row = calibration.loc[calibration["model_variant"].eq("B0")].iloc[0]
     random_row = random_calibration.loc[random_calibration["model_variant"].eq("B0")].iloc[0]
+    base_test_row = test_ranking.loc[test_ranking["model_variant"].eq("B0")].iloc[0]
+    random_test_row = random_test.loc[random_test["model_variant"].eq("B0")].iloc[0]
     for variant in sorted(
         set(part_predictions["model_variant"]) - {"B0"}
     ):
@@ -387,6 +397,35 @@ def _build_localization_results(
                 "bootstrap_ci_lower": float(bootstrap["ci_lower"]),
                 "unique_top3_sets": int(row["unique_top3_sets"]),
                 **bootstrap,
+            }
+        )
+        test_model = part_predictions.loc[
+            part_predictions["model_variant"].eq(variant)
+            & part_predictions["split"].eq("test")
+        ]
+        test_row = test_ranking.loc[test_ranking["model_variant"].eq(variant)].iloc[0]
+        test_bootstrap = paired_hit_rate_bootstrap(
+            test_model,
+            baseline_test,
+            k=3,
+            samples=bootstrap_samples,
+            random_state=random_state,
+        )
+        test_reproduced = bool(
+            test_row["hit_rate_at_3"] > base_test_row["hit_rate_at_3"]
+            and test_row["hit_rate_at_3"] > random_test_row["expected_hit_rate_at_3"]
+            and test_bootstrap["ci_lower"] > 0
+            and test_row["recall_at_3"] >= base_test_row["recall_at_3"]
+        )
+        results[variant].update(
+            {
+                "test_hit_rate_at_3": float(test_row["hit_rate_at_3"]),
+                "test_baseline_hit_rate_at_3": float(base_test_row["hit_rate_at_3"]),
+                "test_recall_at_3": float(test_row["recall_at_3"]),
+                "test_baseline_recall_at_3": float(base_test_row["recall_at_3"]),
+                "test_bootstrap_ci_lower": float(test_bootstrap["ci_lower"]),
+                "test_bootstrap_ci_upper": float(test_bootstrap["ci_upper"]),
+                "test_reproduced": test_reproduced,
             }
         )
     return results
