@@ -49,6 +49,7 @@ from .dashboard_data import (  # noqa: E402
     CLASSIFICATION_METRIC_COLUMNS,
     export_table_csv,
     load_asset_detail_kpis,
+    load_asset_failure_heatmap,
     load_asset_failure_onset_trend,
     load_asset_family_diagnosis,
     load_asset_list,
@@ -65,6 +66,8 @@ from .dashboard_data import (  # noqa: E402
     load_family_recurrence_intervals,
     load_priority_table,
     load_screen1_kpis,
+    load_screen1_machine_status,
+    load_screen1_power_by_machine,
     load_screen5_kpis,
     load_source_info,
     load_table_page,
@@ -660,6 +663,41 @@ def kpi_value_tile(label, value_text, w=300, h=96, tid=None):
     )
 
 
+def _spark_figure(values, theme):
+    """화면 ① "기계 상태" 타일의 미니 스파크라인(축·격자·여백 없는 라인)."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    fig = go.Figure(go.Scatter(y=values, mode="lines", hoverinfo="skip",
+                                line=dict(color=colors["ink2"], width=1.4)))
+    fig.update_xaxes(visible=False)
+    fig.update_yaxes(visible=False)
+    fig.update_layout(
+        height=32, margin=dict(l=0, r=0, t=2, b=2), showlegend=False,
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+    )
+    return fig
+
+
+def _heatmap_figure(heat, theme):
+    """화면 ① "고장 표시 히트맵" — 자산 × 월 그레인, 셀 = 그 달 고장 표시된
+    부품-일 행 수. period는 이미 오름차순 CSV 순서라 그대로 pivot한다."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    pivot = heat.pivot(index="asset_tag", columns="period", values="failed_part_count")
+    fig = go.Figure(go.Heatmap(
+        z=pivot.to_numpy(), x=pivot.columns.tolist(), y=pivot.index.tolist(),
+        colorscale=[[0, colors["card"]], [1, colors["ink"]]],
+        hovertemplate="%{y} · %{x}<br>%{z}건<extra></extra>",
+        colorbar=dict(title=dict(text="건수", font=dict(size=10)), tickfont=dict(size=10)),
+    ))
+    fig.update_xaxes(tickfont=dict(size=10), color=colors["muted"])
+    fig.update_yaxes(tickfont=dict(size=11), color=colors["muted"], autorange="reversed")
+    fig.update_layout(
+        height=300, margin=dict(l=8, r=8, t=8, b=8),
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+        font=dict(size=11, color=colors["muted"]),
+    )
+    return fig
+
+
 def _trend_figure(df, theme):
     """화면 ⑤ "고장·위험 추세" 카드용 이중 y축 라인 차트. 새 색상 토큰 없이
     FIGURE_COLORS(THEME_CSS 값의 사본)만 써서 그레이스케일로 그린다."""
@@ -956,13 +994,32 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
                 priority_table(prio_cols, priority_records, 32, head_h=32, sort_col=sort_idx),
                 right=note(f"대상 = 엔티티 무관 (현재 기계 행만) · 헤더 고정 · 행 클릭 → ② · {sort_hint}"))
 
-    def machine_tile():
+    def machine_tile(status_row):
+        grade = status_row["current_grade"]
+        emphasize = grade in ("위험", "경계")
+        badge = html.Span(
+            grade,
+            style={"height": "18px", "boxSizing": "border-box", "padding": "0 6px",
+                   "border": f"1px solid {CTRL if emphasize else HAIR}", "borderRadius": "2px",
+                   "fontSize": "11px", "lineHeight": "16px",
+                   "fontWeight": "600" if emphasize else "500",
+                   "color": INK if emphasize else MUTED, "display": "inline-flex",
+                   "alignItems": "center", "whiteSpace": "nowrap"},
+        )
         return html.Div(
-            [html.Div([slot("기계 태그", 96, 22), slot("종류", 96, 18)],
+            [html.Div([html.Span(status_row["asset_tag"], style={"fontFamily": MONO, "fontSize": "13px",
+                                                                   "color": INK, "whiteSpace": "nowrap"}),
+                       html.Span(status_row["machine_type"], style={**MICRO_11, "whiteSpace": "nowrap",
+                                                                     "overflow": "hidden", "textOverflow": "ellipsis"})],
                       style={"width": "96px", "flexShrink": "0", "display": "flex",
-                             "flexDirection": "column", "gap": "4px"}),
-             slot("스파크라인", "가변", 32),
-             html.Div([slot("현재값", 88, 22), slot("상태 배지", 88, 18)],
+                             "flexDirection": "column", "gap": "4px", "overflow": "hidden"}),
+             dcc.Graph(id={"type": "spark-chart", "index": status_row["asset_tag"]},
+                       figure=_spark_figure(status_row["sparkline"], "light"),
+                       config={"displayModeBar": False, "responsive": True},
+                       style={"flexGrow": "1", "minWidth": "0", "height": "32px"}),
+             html.Div([html.Span(f"{status_row['risk_score']:,.0f}",
+                                  style={"fontFamily": MONO, "fontSize": "16px", "fontWeight": "600", "color": INK}),
+                       badge],
                       style={"width": "88px", "flexShrink": "0", "display": "flex",
                              "flexDirection": "column", "gap": "4px"})],
             style={"width": "367px", "height": "72px", "flexShrink": "0", "boxSizing": "border-box",
@@ -970,50 +1027,37 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
                    "background": CARD, "padding": "10px 12px", "display": "flex", "alignItems": "center",
                    "gap": "8px"},
         )
-    tiles_grid = html.Div([machine_tile() for _ in range(10)],
+    machine_status_rows = load_screen1_machine_status()
+    tiles_grid = html.Div([machine_tile(r) for r in machine_status_rows],
                            style={"display": "grid", "gridTemplateColumns": "repeat(2, minmax(0, 1fr))",
                                   "gridTemplateRows": "repeat(5, 72px)", "columnGap": "8px", "rowGap": "8px",
                                   "width": "742px", "height": "392px"})
-    status = card("기계 상태", 774, ROW_MAIN, tiles_grid, right=note("타일 367 × 72 · 2열 × 5행 · 간격 8"))
+    status = card("기계 상태", 774, ROW_MAIN, tiles_grid,
+                  right=note("스파크라인 · 값 = 등급가중 고장점수 최근 30일 · 타일 367 × 72"))
     row_b = row(ROW_MAIN, [prio, status])
 
-    ylabels = html.Div([slot(f"기계 {i+1}", 112, 25) for i in range(10)],
-                        style={"width": "112px", "flexShrink": "0", "display": "flex", "flexDirection": "column"})
-    heatgrid = html.Div(
-        [html.Div(style={"height": "25px", "boxSizing": "border-box", "borderBottom": f"1px dashed {HAIR}"})
-         for _ in range(10)],
-        style={"flexGrow": "1", "minWidth": "0", "boxSizing": "border-box", "border": f"1px dashed {CTRL}",
-               "background": SUNK, "position": "relative"},
-    )
-    legend = html.Div(
-        [html.Div([html.Div(style={"width": "14px", "height": "14px", "border": f"1px solid {CTRL}",
-                                    "boxSizing": "border-box"}),
-                   html.Span(f"구간 {i+1}", style=MICRO_11)],
-                  style={"display": "flex", "alignItems": "center", "gap": "6px"})
-         for i in range(5)],
-        style={"width": "96px", "flexShrink": "0", "display": "flex", "flexDirection": "column", "gap": "6px"},
-    )
     heat_body = html.Div(
-        [hstack([ylabels, heatgrid,
-                 html.Div([html.Span("범례 (부품 수)", style=LABEL_12), legend], style={"width": "96px",
-                           "flexShrink": "0", "display": "flex", "flexDirection": "column", "gap": "6px"})],
-                8, {"height": "250px"}),
-         hstack([html.Div(style={"width": "112px"}), slot("x축 · 날짜", "가변", 22)], 8, {"height": "22px"})],
+        dcc.Graph(id={"type": "heatmap-chart", "index": "screen1"},
+                  figure=_heatmap_figure(load_asset_failure_heatmap(), "light"),
+                  config={"displayModeBar": False, "responsive": True},
+                  style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
+        style={"height": "100%", "display": "flex", "flexDirection": "column"},
     )
     heat = card("고장 표시 히트맵", 1248, ROW_SUB, heat_body,
-                right=note("셀 = 그날 고장 표시된 부품 수 · 5구간"))
+                right=note("셀 = 그 달 고장 표시된 부품-일 행 수 합계 · 자산 × 월"))
 
+    power_rows = load_screen1_power_by_machine()
+    max_power = max((r["avg_power_kw"] for r in power_rows), default=1.0) or 1.0
     prows = html.Div(
-        [html.Div([html.Div(bar(70, 6), style={"width": "88px", "flexShrink": "0"}),
-                   slot("막대 (두께 ≤ 24)" if i == 0 else "", "가변", 16),
-                   html.Div(bar(70, 6), style={"width": "48px", "flexShrink": "0", "display": "flex",
-                                                "justifyContent": "flex-end"})],
+        [html.Div([html.Span(r["asset_tag"], style={"fontFamily": MONO, "fontSize": "12px", "color": INK,
+                                                      "width": "88px", "flexShrink": "0"}),
+                   html.Div(bar(r["avg_power_kw"] / max_power * 100, 6), style={"flexGrow": "1"}),
+                   html.Span(f"{r['avg_power_kw']:,.2f}",
+                             style={**NUM_12, "width": "56px", "flexShrink": "0", "textAlign": "right"})],
                   style={"height": "25px", "display": "flex", "alignItems": "center", "gap": "8px"})
-         for i in range(10)],
+         for r in power_rows],
     )
-    power_body = html.Div([prows,
-                            hstack([html.Div(style={"width": "96px"}), slot("x축 (kW)", "가변", 22)], 0,
-                                   {"height": "22px"})])
+    power_body = html.Div([prows], style={"display": "flex", "flexDirection": "column"})
     power = card("기계별 평균 소비 전력 (kW)", 616, ROW_SUB, power_body, right=note("10개 · 내림차순"))
     row_c = row(ROW_SUB, [heat, power])
 
@@ -2069,6 +2113,30 @@ def apply_theme(theme):
 )
 def recolor_trend_chart(theme, _active_tab):
     return [_trend_figure(load_failure_trend(), theme or "light")]
+
+
+# 화면① "고장 표시 히트맵" 차트도 같은 방식으로 재색칠한다 — trend-chart와
+# id 타입을 나눠야 두 콜백의 Output 매칭 개수가 서로 섞이지 않는다.
+@app.callback(
+    Output({"type": "heatmap-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+)
+def recolor_heatmap_chart(theme, _active_tab):
+    return [_heatmap_figure(load_asset_failure_heatmap(), theme or "light")]
+
+
+# 화면① "기계 상태" 타일 10개의 스파크라인도 같은 방식으로 재색칠한다.
+# load_screen1_machine_status()가 매번 asset_tag 오름차순으로 반환하므로,
+# 이 순서가 tiles_grid가 실제로 그린 spark-chart 컴포넌트 순서와 항상 같다.
+@app.callback(
+    Output({"type": "spark-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+)
+def recolor_spark_charts(theme, _active_tab):
+    rows = load_screen1_machine_status()
+    return [_spark_figure(r["sparkline"], theme or "light") for r in rows]
 
 
 # 화면② 스몰 멀티플도 같은 방식으로 재색칠한다. trend-chart와 id 타입을 나눠
