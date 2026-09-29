@@ -50,6 +50,7 @@ from .dashboard_data import (  # noqa: E402
     export_table_csv,
     load_asset_detail_kpis,
     load_asset_failure_onset_trend,
+    load_asset_family_diagnosis,
     load_asset_list,
     load_asset_parts_history,
     load_asset_peer_comparison,
@@ -267,7 +268,7 @@ NO_DATA_MARK = "데이터 미연결"
 # 화면 탭을 옮겼다 돌아와도 선택이 유지되도록 seg-store에 모아둔다.
 # ------------------------------------------------------------
 SEG_GROUPS = {
-    "task": ["현재 고장 표시 분류", "7일 사전 예측", "다음 관측일 전력"],
+    "task": ["현재 고장 표시 분류", "부품군 진단", "단독 부품 이상 탐지"],
     "threshold": ["12", "13", "14"],
     "dataset": ["원자료", "기계·일 집계", "부품 출고", "모델 입력 피처"],
 }
@@ -1090,11 +1091,13 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
 # 화면 ③ 모델·예측 — 툴바 32 / 행 96 / 460 / 272 (마지막 행이 남는 높이 흡수)
 # ============================================================
 
-def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE):
+def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
     seg_state = seg_state or DEFAULT_SEG
     thr_sel = seg_state.get("threshold", 0)
     thr_changed = thr_sel != DEFAULT_SEG["threshold"]
     task_sel = seg_state.get("task", 0)
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
 
     if task_sel == 0:
         # 이 과제(부품 단위 당일 고장 분류)에는 위험 기준선이 적용되지
@@ -1143,12 +1146,13 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE):
     )
 
     # 과제에 따라 행 A가 갈린다 (원래 스펙의 '③ 행A 변형'):
-    #   분류 2종 → 지표 타일 6개 × 300 / 전력 회귀 → 지표 타일 4개 × 458
-    #   과제 0(현재 고장 표시 분류)만 실제 값(hist_gradient_boosting 기준),
-    #   과제 1(7일 사전 예측)은 아직 자리표시자 그대로.
+    #   과제 0(현재 고장 표시 분류)은 실제 값(hist_gradient_boosting 기준) 타일 6개.
+    #   과제 1(부품군 진단)은 KPI 타일 행 자체를 만들지 않는다 — mcomp 카드
+    #   자리에 부품군별 표가 대신 들어간다.
+    #   과제 2(단독 부품 이상 탐지)는 아직 자리표시자 그대로(타일 4개 × 458).
     kpi_labels = ["정확도", "정밀도", "재현율", "F1", "ROC-AUC", "평균정밀도(AP)"]
     if task_sel == 2:
-        row_a = row(ROW_KPI, [tile(f"[회귀 지표 {i+1}]", w=458, sub="값 또는 빈 상태") for i in range(4)])
+        row_a = row(ROW_KPI, [tile(f"[지표 {i+1}]", w=458, sub="값 또는 빈 상태") for i in range(4)])
     elif task_sel == 0:
         current_metrics = load_current_classification_metrics()["hist_gradient_boosting"]
         row_a = row(ROW_KPI, [
@@ -1156,77 +1160,125 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE):
             for label, col in zip(kpi_labels, CLASSIFICATION_METRIC_COLUMNS)
         ])
     else:
-        row_a = row(ROW_KPI, [tile(f"[사전예측 지표 {i+1}]", sub="값 또는 빈 상태") for i in range(6)])
+        row_a = html.Div()
 
-    metric_cols = [("모델", 182, "left")] + [(f"[지표 {i+1}]", 93, "right") for i in range(6)]
-    model_rows = []
-    if task_sel == 0:
-        comparison_metrics = load_current_classification_metrics()
-        model_names = ["prior", "hist_gradient_boosting"]
+    if task_sel == 1:
+        # 부품군 진단 — mcomp 카드 자리에 선택 자산의 부품군 9종별 표를 넣는다
+        # (기존 '모델 비교' 표와는 열 구성 자체가 달라 별도로 만든다).
+        family_rows = load_asset_family_diagnosis(asset_tag)
+        family_cols = [
+            ("부품군", 130, "left"), ("모델", 150, "left"), ("표본 수", 64, "right"),
+            ("양성률(%)", 80, "right"), ("정밀도", 82, "right"), ("재현율", 82, "right"),
+            ("AP", 72, "right"), ("ROC-AUC", 82, "right"),
+        ]
+        def family_cell(content, align="left"):
+            # boxSizing 없이는 padding이 지정한 width 위에 더해져 8열이 카드
+            # 폭(742px)을 넘기고 overflow:hidden에 잘린다(기존 '모델 비교'
+            # 표에도 있던 문제이나, 그 표는 이번 범위 밖이라 손대지 않는다).
+            return html.Td(content, style={"width": "auto", "padding": "0 8px", "textAlign": align,
+                                            "boxSizing": "border-box",
+                                            "borderBottom": f"1px solid {HAIR}"})
+        family_body_rows = [
+            html.Tr([
+                family_cell(html.Span(fr["part_family"], style={"fontSize": "13px", "color": INK})),
+                family_cell(html.Span(fr["model"], style={"fontSize": "13px", "color": INK})),
+                family_cell(str(fr["support"]), align="right"),
+                family_cell(f"{fr['positive_rate'] * 100:.1f}%", align="right"),
+                family_cell(f"{fr['precision']:.3f}", align="right"),
+                family_cell(f"{fr['recall']:.3f}", align="right"),
+                family_cell(f"{fr['average_precision']:.3f}", align="right"),
+                family_cell(f"{fr['roc_auc']:.3f}", align="right"),
+            ], style={"height": "32px"})
+            for fr in family_rows
+        ]
+        family_thead = html.Tr([html.Th(l, style={"width": f"{w}px", "padding": "0 8px", "textAlign": a,
+                                                    "boxSizing": "border-box",
+                                                    **LABEL_12, "whiteSpace": "nowrap",
+                                                    "borderBottom": f"1px solid {CTRL}"})
+                                 for l, w, a in family_cols], style={"height": "32px"})
+        family_table = html.Table([html.Thead(family_thead), html.Tbody(family_body_rows)],
+                                   style={"width": "742px", "tableLayout": "fixed", "borderCollapse": "collapse"})
+        mcomp_body = html.Div([family_table])
+        mcomp = card("부품군 진단", 774, ROW_MAIN, mcomp_body, right=note("행 = 부품군 · 열 = 지표"))
     else:
-        comparison_metrics = None
-        model_names = ["기준 A", "기준 B", "RandomForest"]
-    for name in model_names:
-        cells = [html.Td(
-            html.Div([html.Span(style={"width": "10px", "height": "10px", "border": f"1px solid {CTRL}",
-                                        "boxSizing": "border-box"}),
-                      html.Span(name, style={"fontSize": "13px", "color": INK})],
-                     style={"display": "flex", "alignItems": "center", "gap": "8px"}),
-            style={"padding": "0 8px", "borderBottom": f"1px solid {HAIR}"})]
-        if comparison_metrics is not None:
-            row_pct = [comparison_metrics[name][col] * 100 for col in CLASSIFICATION_METRIC_COLUMNS]
+        metric_cols = [("모델", 182, "left")] + [(f"[지표 {i+1}]", 93, "right") for i in range(6)]
+        model_rows = []
+        if task_sel == 0:
+            comparison_metrics = load_current_classification_metrics()
+            model_names = ["prior", "hist_gradient_boosting"]
         else:
-            row_pct = [45] * 6
-        cells += [html.Td(html.Div(bar(pct, 8), style={"display": "flex", "justifyContent": "flex-end"}),
-                          style={"padding": "0 8px", "borderBottom": f"1px solid {HAIR}"}) for pct in row_pct]
-        model_rows.append(html.Tr(cells, style={"height": "32px"}))
-    model_rows.append(html.Tr(
-        html.Td("+ 레지스트리 모델 행 (가변 · 32px/행)", colSpan=7,
-                style={"padding": "0 8px", "border": f"1px dashed {CTRL}", "background": SUNK, **LABEL_12}),
-        style={"height": "32px"}))
-    mthead = html.Tr([html.Th(l, style={"width": f"{w}px", "padding": "0 8px", "textAlign": a,
-                                         **LABEL_12, "whiteSpace": "nowrap", "borderBottom": f"1px solid {CTRL}"})
-                       for l, w, a in metric_cols], style={"height": "32px"})
-    mtable = html.Table([html.Thead(mthead), html.Tbody(model_rows)],
-                         style={"width": "740px", "tableLayout": "fixed", "borderCollapse": "collapse"})
-    mcomp_body = html.Div([mtable, html.Div(style={"flexGrow": "1"}),
-                           note("가시 한도: 헤더 32 + 모델 10행 × 32 = 352 / 392"),
-                           note("기계 종류 → 필터바 · 위험 기준선 → 툴바 (표의 축 아님)")])
-    mcomp = card("모델 비교", 774, ROW_MAIN, mcomp_body, right=note("행 = 모델 (레지스트리) · 열 = 지표"))
+            comparison_metrics = None
+            model_names = ["기준 A", "기준 B", "RandomForest"]
+        for name in model_names:
+            cells = [html.Td(
+                html.Div([html.Span(style={"width": "10px", "height": "10px", "border": f"1px solid {CTRL}",
+                                            "boxSizing": "border-box"}),
+                          html.Span(name, style={"fontSize": "13px", "color": INK})],
+                         style={"display": "flex", "alignItems": "center", "gap": "8px"}),
+                style={"padding": "0 8px", "borderBottom": f"1px solid {HAIR}"})]
+            if comparison_metrics is not None:
+                row_pct = [comparison_metrics[name][col] * 100 for col in CLASSIFICATION_METRIC_COLUMNS]
+            else:
+                row_pct = [45] * 6
+            cells += [html.Td(html.Div(bar(pct, 8), style={"display": "flex", "justifyContent": "flex-end"}),
+                              style={"padding": "0 8px", "borderBottom": f"1px solid {HAIR}"}) for pct in row_pct]
+            model_rows.append(html.Tr(cells, style={"height": "32px"}))
+        model_rows.append(html.Tr(
+            html.Td("+ 레지스트리 모델 행 (가변 · 32px/행)", colSpan=7,
+                    style={"padding": "0 8px", "border": f"1px dashed {CTRL}", "background": SUNK, **LABEL_12}),
+            style={"height": "32px"}))
+        mthead = html.Tr([html.Th(l, style={"width": f"{w}px", "padding": "0 8px", "textAlign": a,
+                                             **LABEL_12, "whiteSpace": "nowrap", "borderBottom": f"1px solid {CTRL}"})
+                           for l, w, a in metric_cols], style={"height": "32px"})
+        mtable = html.Table([html.Thead(mthead), html.Tbody(model_rows)],
+                             style={"width": "740px", "tableLayout": "fixed", "borderCollapse": "collapse"})
+        mcomp_body = html.Div([mtable, html.Div(style={"flexGrow": "1"}),
+                               note("가시 한도: 헤더 32 + 모델 10행 × 32 = 352 / 392"),
+                               note("기계 종류 → 필터바 · 위험 기준선 → 툴바 (표의 축 아님)")])
+        mcomp = card("모델 비교", 774, ROW_MAIN, mcomp_body, right=note("행 = 모델 (레지스트리) · 열 = 지표"))
 
-    pr_body = html.Div([slot("범례 · 모델 n + 무작위 기준선", 584, 20),
-                        hstack([slot("y축 · 정밀도", 40, 342), slot("PR 곡선 영역", "가변", 342)], 0),
-                        hstack([html.Div(style={"width": "40px"}), slot("x축 · 재현율", "가변", 22)], 0)])
+    if task_sel == 1:
+        pr_body = empty_state("이 과제에는 해당 없음", "부품군 진단 과제에서는 표시하지 않음", 584, 392)
+    else:
+        pr_body = html.Div([slot("범례 · 모델 n + 무작위 기준선", 584, 20),
+                            hstack([slot("y축 · 정밀도", 40, 342), slot("PR 곡선 영역", "가변", 342)], 0),
+                            hstack([html.Div(style={"width": "40px"}), slot("x축 · 재현율", "가변", 22)], 0)])
     prc = card("PR 곡선", 616, ROW_MAIN, pr_body, right=note("모델 수만큼 + 무작위 기준선"))
 
     def cell(t):
         return slot(t, 169, 160)
-    cm_body = html.Div([
-        hstack([html.Div(style={"width": "72px"}),
-                html.Div("예측 고장 표시 있음", style={"width": "169px", "textAlign": "center", **LABEL_12}),
-                html.Div("예측 고장 표시 없음", style={"width": "169px", "textAlign": "center", **LABEL_12})],
-               8, {"height": "24px", "alignItems": "center"}),
-        hstack([html.Div("실제 있음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
-                cell("실제 있음 · 예측 있음"), cell("실제 있음 · 예측 없음")], 8, {"height": "160px"}),
-        hstack([html.Div("실제 없음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
-                cell("실제 없음 · 예측 있음"), cell("실제 없음 · 예측 없음")], 8, {"height": "160px"}),
-        html.Div([html.Span("판정 임계값", style={**LABEL_12, "whiteSpace": "nowrap"}),
-                  slot("값 · 하단 슬라이더와 연동", 220, 24)],
-                 style={"height": "32px", "display": "flex", "alignItems": "center", "gap": "8px"}),
-    ])
+    if task_sel == 1:
+        cm_body = empty_state("이 과제에는 해당 없음", "부품군 진단 과제에서는 표시하지 않음", 426, 392)
+    else:
+        cm_body = html.Div([
+            hstack([html.Div(style={"width": "72px"}),
+                    html.Div("예측 고장 표시 있음", style={"width": "169px", "textAlign": "center", **LABEL_12}),
+                    html.Div("예측 고장 표시 없음", style={"width": "169px", "textAlign": "center", **LABEL_12})],
+                   8, {"height": "24px", "alignItems": "center"}),
+            hstack([html.Div("실제 있음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
+                    cell("실제 있음 · 예측 있음"), cell("실제 있음 · 예측 없음")], 8, {"height": "160px"}),
+            hstack([html.Div("실제 없음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
+                    cell("실제 없음 · 예측 있음"), cell("실제 없음 · 예측 없음")], 8, {"height": "160px"}),
+            html.Div([html.Span("판정 임계값", style={**LABEL_12, "whiteSpace": "nowrap"}),
+                      slot("값 · 하단 슬라이더와 연동", 220, 24)],
+                     style={"height": "32px", "display": "flex", "alignItems": "center", "gap": "8px"}),
+        ])
     cmx = card("혼동행렬", 458, ROW_MAIN, cm_body, right=note("2 × 2"))
     row_b = row(ROW_MAIN, [mcomp, prc, cmx])
 
-    frows = html.Div(
-        [html.Div([html.Div(bar(70, 5), style={"width": "160px", "flexShrink": "0"}),
-                   html.Div(style={"flexGrow": "1", "height": "11px", "boxSizing": "border-box",
-                                    "border": f"1px dashed {CTRL}", "background": SUNK}),
-                   html.Div(bar(80, 5), style={"width": "48px", "flexShrink": "0"})],
-                  style={"height": "15px", "display": "flex", "alignItems": "center", "gap": "8px",
-                         "flexShrink": "0"})
-         for _ in range(12)],
-    )
-    feat = card("주요 영향 변수 상위 12", 774, 252, frows, right=note("12행 × 15 · 직접 값 라벨"))
+    if task_sel == 1:
+        feat_body = empty_state("이 과제에는 해당 없음", "부품군 진단 과제에서는 표시하지 않음", 742, 184)
+    else:
+        feat_body = html.Div(
+            [html.Div([html.Div(bar(70, 5), style={"width": "160px", "flexShrink": "0"}),
+                       html.Div(style={"flexGrow": "1", "height": "11px", "boxSizing": "border-box",
+                                        "border": f"1px dashed {CTRL}", "background": SUNK}),
+                       html.Div(bar(80, 5), style={"width": "48px", "flexShrink": "0"})],
+                      style={"height": "15px", "display": "flex", "alignItems": "center", "gap": "8px",
+                             "flexShrink": "0"})
+             for _ in range(12)],
+        )
+    feat = card("주요 영향 변수 상위 12", 774, 252, feat_body, right=note("12행 × 15 · 직접 값 라벨"))
 
     slider = html.Div(
         [html.Label("판정 임계값 (즉시 재계산)", htmlFor="thr-slider", style={**LABEL_12, "whiteSpace": "nowrap"}),
@@ -1234,17 +1286,18 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE):
                     tooltip={"placement": "bottom"})],
         style={"display": "flex", "alignItems": "center", "gap": "8px", "width": "260px"},
     )
-    thr_body = html.Div([hstack([slot("y축", 40, 162), slot("위험도 분포 히스토그램 + 임계값 세로선", "가변", 162)], 0),
-                         hstack([html.Div(style={"width": "40px"}), slot("x축 · 위험도", "가변", 22)], 0)])
+    if task_sel == 1:
+        thr_body = empty_state("이 과제에는 해당 없음", "부품군 진단 과제에서는 표시하지 않음", 584, 184)
+    else:
+        thr_body = html.Div([hstack([slot("y축", 40, 162), slot("위험도 분포 히스토그램 + 임계값 세로선", "가변", 162)], 0),
+                             hstack([html.Div(style={"width": "40px"}), slot("x축 · 위험도", "가변", 22)], 0)])
     thr = card("판정 임계값 조정", 616, 252, thr_body, right=slider)
 
-    # 과제 세그먼트가 실제로 동작하므로 이 카드도 실제로 갈린다
-    # (원래 카드 문구가 "7일 사전 예측 과제에서만 활성"이었는데, 선택이
-    #  고정이라 영원히 빈 상태였다).
-    if task_sel == 1:
-        lead_body = html.Div([slot("선행 경보 일수 히스토그램", 426, 162), slot("x축 · 선행 일수", 426, 22)])
-    else:
-        lead_body = empty_state("이 과제에는 해당 없음", "7일 사전 예측 과제에서만 활성", 426, 184)
+    # 선행 경보 지표는 아직 어떤 과제에도 연결되지 않았다(과거에는 "7일
+    # 사전 예측" 과제에서만 조건부로 활성화했으나, 그 과제 자체가 "부품군
+    # 진단"으로 바뀌면서 대상이 없어졌다).
+    lead_body = empty_state("이 과제에는 해당 없음",
+                             "선행 경보 지표가 아직 어느 과제에도 연결되지 않음", 426, 184)
     lead = card("선행 경보 일수 분포", 458, 252, lead_body)
     row_c = row(252, [feat, thr, lead])
 
@@ -1826,6 +1879,8 @@ def render_screen(active, seg_state, audience, prio_sort, selected_asset):
     if active == "1":
         kwargs["prio_sort"] = prio_sort or DEFAULT_PRIO_SORT
     if active == "2":
+        kwargs["asset_tag"] = selected_asset
+    if active == "3":
         kwargs["asset_tag"] = selected_asset
     return SCREEN_BUILDERS[active](**kwargs)
 

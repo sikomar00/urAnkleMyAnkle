@@ -39,6 +39,14 @@ CLASSIFICATION_METRIC_COLUMNS = [
     "accuracy", "precision", "recall", "f1", "roc_auc", "average_precision",
 ]
 
+# 화면 ③ "부품군 진단" 과제의 자산별 부품군(9종) 이상탐지 지표 원본.
+DEFAULT_FAMILY_METRICS_PATH = (
+    PROJECT_ROOT / "outputs" / "family_current" / "metrics.csv"
+)
+FAMILY_DIAGNOSIS_METRIC_COLUMNS = [
+    "support", "positive_rate", "precision", "recall", "average_precision", "roc_auc",
+]
+
 # 화면 ③ 세그먼트 컨트롤의 위험 기준선(12/13/14) 중 기본값과 동일하게 고정한다.
 # 세그먼트와의 연동은 이번 작업 범위 밖이다.
 HIGH_RISK_THRESHOLD = 12
@@ -439,6 +447,51 @@ def load_asset_failure_onset_trend(asset_tag: str) -> dict:
         "dates": [d.strftime("%Y-%m-%d") for d in window[DATE_COLUMN]],
         "temp_bearing_degC": window["temp_bearing_degC"].tolist(),
     }
+
+
+@lru_cache(maxsize=1)
+def _family_metrics_raw() -> pd.DataFrame:
+    path = DEFAULT_FAMILY_METRICS_PATH
+    if not path.exists():
+        raise FileNotFoundError(
+            "부품군 진단 metrics.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            "python -m src.current_family_diagnosis "
+            "--data dataVerification/synthetic_industrial_machine_data.csv"
+        )
+    return pd.read_csv(path)
+
+
+def load_asset_family_diagnosis(asset_tag: str) -> list[dict]:
+    """화면 ③ "부품군 진단" 과제 — 선택 자산의 부품군 9종별 이상탐지 성능.
+
+    Raises:
+        ValueError: asset_tag가 데이터에 없거나, 부품군 9행이 정확히
+            나오지 않을 때.
+    """
+    assets = load_asset_list()
+    if asset_tag not in assets:
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+
+    metrics = _family_metrics_raw()
+    selected = metrics.loc[
+        metrics["scope_kind"].eq("asset_tag")
+        & metrics["scope_name"].eq(asset_tag)
+        & metrics["target"].eq("affected")
+        & metrics["threshold_policy"].eq("f1")
+        & metrics["split"].eq("test")
+    ]
+    if len(selected) != 9:
+        raise ValueError(f"{asset_tag}의 부품군 진단 행이 9개가 아닙니다: {len(selected)}개")
+
+    return [
+        {
+            "part_family": r["part_family"],
+            "model": r["model"],
+            "support": int(r["support"]),
+            **{col: float(r[col]) for col in FAMILY_DIAGNOSIS_METRIC_COLUMNS if col != "support"},
+        }
+        for _, r in selected.iterrows()
+    ]
 
 
 def load_data_dictionary() -> list[dict]:
