@@ -50,6 +50,7 @@ from .dashboard_data import (  # noqa: E402
     load_asset_detail_kpis,
     load_asset_list,
     load_asset_parts_history,
+    load_asset_peer_comparison,
     load_asset_sensor_series,
     load_data_dictionary,
     load_data_quality_summary,
@@ -778,6 +779,41 @@ def _parts_figure(df, theme):
     return fig
 
 
+def _hex_to_rgba(hex_color, alpha):
+    """FIGURE_COLORS의 hex 값을 박스플롯 fillcolor용 rgba 문자열로 바꾼다 —
+    새 색상 값을 만드는 게 아니라 기존 hex를 그대로 반투명하게 쓰는 것뿐이다."""
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+def _peer_figure(comparison, theme):
+    """화면 ② "동종 기계 대비" — 선택 자산 vs 동종 나머지 1대의 베어링 온도
+    분포 박스플롯 2개. 선택 기계는 진한 테두리·채움, 동종 기계는 옅게 그려
+    어느 쪽이 선택 기계인지 시각적으로 드러낸다."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    fig = go.Figure()
+    fig.add_trace(go.Box(
+        y=comparison["asset_values"], name=f"{comparison['asset_tag']} (선택)",
+        line=dict(color=colors["ink"], width=2),
+        fillcolor=_hex_to_rgba(colors["ink"], 0.55),
+        marker_color=colors["ink"], boxpoints=False,
+    ))
+    fig.add_trace(go.Box(
+        y=comparison["peer_values"], name=f"{comparison['peer_asset_tag']} (동종)",
+        line=dict(color=colors["muted"], width=1),
+        fillcolor=_hex_to_rgba(colors["muted"], 0.12),
+        marker_color=colors["muted"], boxpoints=False,
+    ))
+    fig.update_yaxes(gridcolor=colors["hair"], tickfont=dict(size=11), color=colors["muted"])
+    fig.update_xaxes(tickfont=dict(size=11), color=colors["muted"])
+    fig.update_layout(
+        height=220, margin=dict(l=32, r=8, t=4, b=22),
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+        font=dict(size=11, color=colors["muted"]), showlegend=False,
+    )
+    return fig
+
+
 def priority_table(cols, records, row_h, head_h=32, sort_col=None):
     """table_placeholder()와 같은 헤더/셀 스타일을 쓰되, 자리표시 막대 대신
     load_priority_table()이 만든 실제 자산별 값을 채운다. table_placeholder()
@@ -1010,8 +1046,11 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
                html.Div([slot("센서 추이 · t=0 정렬", 900, 198), slot("x축 · t−7 … t", 900, 22)]),
                right=note("고장 표시 시점 t=0 · t−7 ~ t"))
     peer = card("동종 기계 대비", 932, 288,
-                html.Div([slot("같은 종류 기계 센서 분포 + 선택 기계 위치", 900, 198), slot("축 · 센서", 900, 22)]),
-                right=note("같은 종류 기계만"))
+                dcc.Graph(id={"type": "peer-chart", "index": "screen2"},
+                          figure=_peer_figure(load_asset_peer_comparison(asset_tag), "light"),
+                          config={"displayModeBar": False, "responsive": True},
+                          style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
+                right=note("동일 종류 나머지 1대 대비"))
     row_c = row(288, [pre, peer])
 
     return html.Div([strip, row_b, row_c],
@@ -1829,6 +1868,20 @@ def recolor_parts_chart(theme, _active_tab, asset_tag):
     assets = load_asset_list()
     asset_tag = asset_tag if asset_tag in assets else assets[0]
     return [_parts_figure(load_asset_parts_history(asset_tag), theme or "light")]
+
+
+# 화면② "동종 기계 대비" 박스플롯도 같은 방식으로 재색칠한다. smult-chart/
+# parts-chart와 id 타입을 나눠야 세 콜백의 Output 매칭 개수가 서로 섞이지 않는다.
+@app.callback(
+    Output({"type": "peer-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+    State("selected-asset-store", "data"),
+)
+def recolor_peer_chart(theme, _active_tab, asset_tag):
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
+    return [_peer_figure(load_asset_peer_comparison(asset_tag), theme or "light")]
 
 
 # <html>에도 같은 클래스를 얹는다. #root는 1920 고정폭이라 넓은 화면에서

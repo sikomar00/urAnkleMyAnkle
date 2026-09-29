@@ -71,3 +71,18 @@ def test_asset_parts_history_top10_and_ranking():
 def test_asset_parts_history_rejects_unknown_asset():
     with pytest.raises(ValueError):
         dd.load_asset_parts_history('AST-9999')
+
+
+def test_asset_peer_comparison_pairs_and_shape():
+    r1 = dd.load_asset_peer_comparison('AST-1041')
+    assert r1['peer_asset_tag'] == 'AST-1042'
+    assert len(r1['asset_values']) == 1095
+    assert len(r1['peer_values']) == 1095
+
+    r2 = dd.load_asset_peer_comparison('AST-2031')
+    assert r2['peer_asset_tag'] == 'AST-2017'
+
+
+def test_asset_peer_comparison_rejects_unknown_asset():
+    with pytest.raises(ValueError):
+        dd.load_asset_peer_comparison('AST-9999')
