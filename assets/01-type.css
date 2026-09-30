@@ -1,0 +1,15 @@
+/* Plantfloor 타이포 스케일. tokens.json type.groups 에서 옮긴 값이며 손으로 바꾸지 않는다. */
+
+.value-36 { font-family: var(--font-sans); font-size: 36px; line-height: 40px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: proportional-nums; }
+.value-28 { font-family: var(--font-sans); font-size: 28px; line-height: 32px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: proportional-nums; }
+.value-20 { font-family: var(--font-sans); font-size: 20px; line-height: 26px; font-weight: 600; font-variant-numeric: proportional-nums; }
+
+.title-16 { font-family: var(--font-sans); font-size: 16px; line-height: 22px; font-weight: 600; }
+.title-14 { font-family: var(--font-sans); font-size: 14px; line-height: 20px; font-weight: 600; }
+.body-14  { font-family: var(--font-sans); font-size: 14px; line-height: 20px; font-weight: 400; }
+.body-13  { font-family: var(--font-sans); font-size: 13px; line-height: 18px; font-weight: 400; }
+.label-12 { font-family: var(--font-sans); font-size: 12px; line-height: 16px; font-weight: 500; }
+.micro-11 { font-family: var(--font-sans); font-size: 11px; line-height: 14px; font-weight: 500; letter-spacing: 0.02em; }
+
+.num-13   { font-family: var(--font-mono); font-size: 13px; line-height: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.code-12  { font-family: var(--font-mono); font-size: 12px; line-height: 16px; font-weight: 500; }

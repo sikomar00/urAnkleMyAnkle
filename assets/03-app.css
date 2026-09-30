@@ -1,0 +1,67 @@
+/* KYS-dashboard 전용 확장 — 인증·관리 UI. DESIGN.md 7절.
+   Plantfloor에 없는 것(로그인 폼, 버튼 변형, 모달, 토스트, 권한 배지)만 기존
+   토큰으로 파생시킨 것이다. 새 색을 도입하지 않는다 — 하드코딩 색 0건이 수용 기준이다.
+   02-bundle.css 다음에 로드된다. */
+
+/* ── 버튼 변형 (7.1) ─────────────────────────────────────────────── */
+/* 한 화면에 --primary 는 하나다. --danger 는 되돌릴 수 없는 조작 전용이며
+   항상 확인 모달을 거친다. 버튼 글자는 label-12, --lg 만 body-14. */
+
+.pf-btn--danger {
+  background: var(--danger-fill);
+  color: var(--ink-on-danger);
+  border-color: var(--danger-fill);
+}
+.pf-btn--ghost {              /* 취소, 뒤로 — 테두리 없는 중립 */
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-secondary);
+}
+.pf-btn--ghost:hover { background: var(--surface-hover); color: var(--ink); }
+.pf-btn--lg { height: 40px; padding: 0 var(--space-5); }   /* 로그인 제출 전용 */
+
+/* ── 폼 필드 (7.2) ───────────────────────────────────────────────── */
+/* 오류를 테두리 색만으로 표시하지 않는다 — aria-invalid 와 .pf-field__error 글자를
+   항상 같이 둔다. 라벨은 필드 위에 label-12 + ink-secondary, placeholder 로 대체하지 않는다.
+   비밀번호 강도 미터(색 그라데이션 막대)를 넣지 않는다. */
+
+.pf-field--stack { display: flex; flex-direction: column; gap: var(--space-1); align-items: stretch; }
+.pf-control--lg { height: 44px; font-size: 14px; line-height: 20px; }
+.pf-control[aria-invalid="true"] { border-color: var(--status-critical); }
+.pf-field__error { color: var(--status-critical-text); }      /* micro-11 */
+.pf-field__hint  { color: var(--ink-muted); }                 /* micro-11 */
+
+/* ── 권한 배지 (7.4) ─────────────────────────────────────────────── */
+/* 역할은 상태가 아니라 정체성이다. status-* 를 쓰지 않고 계열색을 글자에 입히지도
+   않는다. 역할별로 색을 다르게 주지 않는다 — 글자만으로 구분한다. */
+
+.pf-badge--role { background: var(--surface-sunken); border-color: var(--border-control); color: var(--ink-secondary); }
+.pf-badge--role .pf-badge__dot { display: none; }   /* 상태가 아니므로 점을 쓰지 않는다 */
+
+/* ── 알림 (7.5) ──────────────────────────────────────────────────── */
+/* 조작의 결과는 그 조작이 일어난 자리 근처에 .pf-notice 로 띄운다. 토스트는 화면을
+   떠난 뒤 결과가 나오는 경우에만 쓰고 동시에 하나만 띄운다(shadow-popover 는 화면에 하나).
+   오류 토스트는 자동으로 사라지지 않게 한다. 등장·퇴장 애니메이션을 넣지 않는다. */
+
+.pf-notice {
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--stroke-hairline) solid transparent;
+  border-radius: var(--radius-sm);
+}
+.pf-notice--critical { background: var(--status-critical-tint); border-color: var(--status-critical-border); color: var(--status-critical-text); }
+.pf-notice--warning  { background: var(--status-warning-tint);  border-color: var(--status-warning-border);  color: var(--status-warning-text); }
+.pf-notice--good     { background: var(--status-good-tint);     border-color: var(--status-good-border);     color: var(--status-good-text); }
+
+.pf-toast { background: var(--surface-raised); border: var(--stroke-hairline) solid var(--border-hairline);
+            border-radius: var(--radius-md); box-shadow: var(--shadow-popover); padding: var(--space-3) var(--space-4); }
+
+/* ── 모달 (7.6) ──────────────────────────────────────────────────── */
+/* 제목 title-16, 본문 body-14, 버튼은 우측 정렬로 [취소 = --ghost] [실행 = --primary 또는 --danger].
+   모달이 떠 있는 동안 배경 카드에 그림자를 추가하지 않는다.
+   세션 만료는 모달로 알리고 만료된 값을 흐리게 남기지 않는다 — opacity-refetch 는
+   "갱신 중"을 뜻하므로 의미가 충돌한다. */
+
+.pf-scrim { position: fixed; inset: 0; background: var(--surface-scrim); }
+.pf-modal { background: var(--surface-raised); border: var(--stroke-hairline) solid var(--border-hairline);
+            border-radius: var(--radius-lg); box-shadow: var(--shadow-popover); padding: var(--space-6); }

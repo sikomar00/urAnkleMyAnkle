@@ -1,0 +1,287 @@
+/* Plantfloor components — tokens.css 다음에 로드된다.
+   모든 값은 토큰 변수를 통해서만 들어온다. 이 파일에 하드코딩된 색은 없다.
+   Dash 앱에서는 이 파일을 assets/ 폴더에 tokens.css 다음 순서로 넣는다. */
+
+/* ── 기본 ─────────────────────────────────────────────────────────── */
+
+html, body { margin: 0; padding: 0; }
+body { background: var(--surface-page); }
+
+.pf-app {
+  background: var(--surface-page);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  min-width: var(--layout-canvas-w);
+}
+.pf-app *, .pf-app *::before, .pf-app *::after { box-sizing: border-box; }
+
+.pf-app *:focus-visible {
+  outline: var(--stroke-focus) solid var(--border-focus);
+  outline-offset: 1px;
+}
+
+.pf-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.pf-code { font-family: var(--font-mono); }
+.pf-muted { color: var(--ink-muted); }
+.pf-secondary { color: var(--ink-secondary); }
+.pf-refetching { opacity: var(--opacity-refetch); transition: none; }
+
+/* ── AppHeader ────────────────────────────────────────────────────── */
+
+.pf-header {
+  display: flex; align-items: center; gap: var(--space-4);
+  height: var(--layout-header-h);
+  padding: 0 var(--space-5);
+  background: var(--surface-card);
+  border-bottom: var(--stroke-hairline) solid var(--border-hairline);
+}
+.pf-header__brand { color: var(--ink); white-space: nowrap; }
+.pf-header__meta { color: var(--ink-muted); white-space: nowrap; }
+.pf-header__rule { width: 1px; height: 20px; background: var(--border-hairline); }
+.pf-header__spacer { flex: 1; }
+
+.pf-tabs { display: flex; align-items: stretch; height: var(--layout-header-h); gap: var(--space-1); }
+.pf-tab {
+  display: flex; align-items: center; padding: 0 var(--space-4);
+  color: var(--ink-secondary); background: none; border: 0;
+  border-bottom: var(--stroke-mark) solid transparent;
+  cursor: pointer; font-family: inherit;
+}
+.pf-tab { text-decoration: none; }
+.pf-tab:hover { background: var(--surface-hover); color: var(--ink); }
+.pf-tab[aria-selected="true"],
+.pf-tab--active { color: var(--ink); border-bottom-color: var(--accent); }
+
+.pf-chip-synthetic {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  border: var(--stroke-hairline) solid var(--border-control);
+  color: var(--ink-secondary); white-space: nowrap;
+}
+
+/* ── FilterBar ────────────────────────────────────────────────────── */
+
+.pf-filterbar {
+  display: flex; align-items: center; gap: var(--space-4);
+  height: var(--layout-filterbar-h);
+  padding: 0 var(--space-5);
+  background: var(--surface-sunken);
+  border-bottom: var(--stroke-hairline) solid var(--border-hairline);
+}
+.pf-field { display: flex; align-items: center; gap: var(--space-2); }
+.pf-field__label { color: var(--ink-secondary); white-space: nowrap; }
+.pf-control {
+  height: var(--layout-control-h);
+  padding: 0 var(--space-3);
+  background: var(--surface-card);
+  color: var(--ink);
+  border: var(--stroke-hairline) solid var(--border-control);
+  border-radius: var(--radius-sm);
+  font-family: inherit; font-size: 13px; line-height: 18px;
+}
+.pf-control:disabled { opacity: var(--opacity-disabled); }
+
+.pf-seg { display: inline-flex; border: var(--stroke-hairline) solid var(--border-control); border-radius: var(--radius-sm); overflow: hidden; }
+.pf-seg__item {
+  height: var(--layout-control-h); padding: 0 var(--space-4);
+  background: var(--surface-card); color: var(--ink-secondary);
+  border: 0; border-right: var(--stroke-hairline) solid var(--border-hairline);
+  cursor: pointer; font-family: inherit;
+}
+.pf-seg__item:last-child { border-right: 0; }
+.pf-seg__item:hover { background: var(--surface-hover); color: var(--ink); }
+.pf-seg__item[aria-pressed="true"] { background: var(--accent-subtle); color: var(--accent-text); }
+
+.pf-filterchip {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  height: 24px; padding: 0 var(--space-2);
+  background: var(--accent-subtle); color: var(--accent-text);
+  border-radius: var(--radius-pill);
+}
+.pf-btn {
+  height: var(--layout-control-h); padding: 0 var(--space-4);
+  background: var(--surface-card); color: var(--ink);
+  border: var(--stroke-hairline) solid var(--border-control);
+  border-radius: var(--radius-sm); cursor: pointer; font-family: inherit;
+}
+.pf-btn:hover { background: var(--surface-hover); }
+.pf-btn--primary { background: var(--accent-fill); color: var(--ink-on-accent); border-color: var(--accent-fill); }
+
+/* ── 그리드 ───────────────────────────────────────────────────────── */
+
+.pf-content {
+  padding: var(--layout-margin);
+  display: flex; flex-direction: column; gap: var(--layout-gutter);
+  height: calc(var(--layout-content-h) + 2 * var(--layout-margin));
+  box-sizing: border-box;
+}
+.pf-row { display: grid; grid-template-columns: repeat(12, var(--layout-col)); gap: var(--layout-gutter); }
+.pf-row--kpi { height: var(--layout-row-kpi); flex: 0 0 var(--layout-row-kpi); }
+.pf-row--main { height: var(--layout-row-main); flex: 0 0 var(--layout-row-main); }
+.pf-row--sub { height: var(--layout-row-sub); flex: 0 0 var(--layout-row-sub); }
+/* 화면당 한 행은 남은 높이를 흡수한다. 툴바(과제 토글·데이터셋 토글)가 있는 화면에서
+   행 높이 합이 928 과 어긋나는 것을 이 한 행이 받아 낸다. 두 행을 fill 로 두지 않는다. */
+.pf-row--fill { flex: 1 1 auto; min-height: 0; }
+/* 그리드 칸은 행 높이를 넘기지 않는다. 카드 안 내용이 넘치면 카드가 아니라
+   행 구성을 바꾼다 — 카드마다 작은 스크롤이 생기는 걸 여기서 막는다. */
+.pf-row > * { height: 100%; min-height: 0; min-width: 0; }
+.pf-row > * > .pf-card { height: 100%; }
+.pf-col-2 { grid-column: span 2; } .pf-col-3 { grid-column: span 3; }
+.pf-col-4 { grid-column: span 4; } .pf-col-5 { grid-column: span 5; }
+.pf-col-6 { grid-column: span 6; } .pf-col-7 { grid-column: span 7; }
+.pf-col-8 { grid-column: span 8; } .pf-col-12 { grid-column: span 12; }
+
+/* ── Card / ChartCard ─────────────────────────────────────────────── */
+
+.pf-card {
+  display: flex; flex-direction: column;
+  background: var(--surface-card);
+  border: var(--stroke-hairline) solid var(--border-hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-none);
+  padding: var(--layout-card-pad);
+  box-sizing: border-box; overflow: hidden;
+}
+.pf-card__head {
+  display: flex; align-items: baseline; gap: var(--space-2);
+  height: var(--layout-card-header-h); flex: 0 0 var(--layout-card-header-h);
+}
+.pf-card__title { color: var(--ink); }
+.pf-card__unit { color: var(--ink-muted); }
+.pf-card__actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+.pf-card__body { flex: 1; min-height: 0; position: relative; }
+.pf-card__foot { flex: 0 0 auto; padding-top: var(--space-2); color: var(--ink-muted); }
+
+/* ── KpiTile ──────────────────────────────────────────────────────── */
+
+.pf-kpi { justify-content: space-between; padding: var(--space-3) var(--space-4); }
+.pf-kpi__label { color: var(--ink-secondary); }
+.pf-kpi__value { color: var(--ink); font-variant-numeric: proportional-nums; }
+.pf-kpi__row { display: flex; align-items: baseline; gap: var(--space-2); }
+.pf-kpi__sub { color: var(--ink-muted); }
+.pf-kpi__delta--up { color: var(--status-good-text); }
+.pf-kpi__delta--down { color: var(--status-critical-text); }
+.pf-kpi__delta--flat { color: var(--ink-muted); }
+
+/* ── StatusBadge ──────────────────────────────────────────────────── */
+
+.pf-badge {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  height: 20px; padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  border: var(--stroke-hairline) solid transparent;
+  white-space: nowrap;
+}
+.pf-badge__dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; }
+.pf-badge--good     { background: var(--status-good-tint);     border-color: var(--status-good-border);     color: var(--status-good-text); }
+.pf-badge--good     .pf-badge__dot { background: var(--status-good); }
+.pf-badge--warning  { background: var(--status-warning-tint);  border-color: var(--status-warning-border);  color: var(--status-warning-text); }
+.pf-badge--warning  .pf-badge__dot { background: var(--status-warning); }
+.pf-badge--serious  { background: var(--status-serious-tint);  border-color: var(--status-serious-border);  color: var(--status-serious-text); }
+.pf-badge--serious  .pf-badge__dot { background: var(--status-serious); }
+.pf-badge--critical { background: var(--status-critical-tint); border-color: var(--status-critical-border); color: var(--status-critical-text); }
+.pf-badge--critical .pf-badge__dot { background: var(--status-critical); }
+.pf-badge--neutral  { background: var(--surface-sunken); border-color: var(--border-hairline); color: var(--ink-secondary); }
+.pf-badge--neutral  .pf-badge__dot { background: var(--chart-muted); }
+
+/* ── RiskBar ──────────────────────────────────────────────────────── */
+
+.pf-risk { display: flex; align-items: center; gap: var(--space-2); }
+.pf-risk__track {
+  display: block;                 /* inline 이면 채움의 width % 가 무시된다 */
+  flex: 1 0 auto; min-width: 72px; height: 8px;
+  background: var(--surface-sunken);
+  border: var(--stroke-hairline) solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.pf-risk__fill {
+  display: block; height: 100%;
+  background: var(--series-1);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.pf-risk__value { color: var(--ink); min-width: 34px; text-align: right; }
+
+/* ── Table (Worklist / Data / ModelCompare 공통) ──────────────────── */
+
+.pf-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.pf-table th {
+  position: sticky; top: 0; z-index: 1;
+  height: var(--layout-row-h); padding: 0 var(--space-3);
+  background: var(--surface-sunken); color: var(--ink-secondary);
+  text-align: left; white-space: nowrap;
+  border-bottom: var(--stroke-hairline) solid var(--border-hairline);
+}
+.pf-table th.pf-th--num, .pf-table td.pf-td--num { text-align: right; }
+.pf-table th[aria-sort] { color: var(--ink); cursor: pointer; }
+.pf-table th[aria-sort]::after { content: " ▾"; color: var(--ink-muted); }
+.pf-table th[aria-sort="ascending"]::after { content: " ▴"; color: var(--accent-text); }
+.pf-table th[aria-sort="descending"]::after { content: " ▾"; color: var(--accent-text); }
+.pf-table td {
+  height: var(--layout-row-h); padding: 0 var(--space-3);
+  border-bottom: var(--stroke-hairline) solid var(--border-hairline);
+  color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pf-table tbody tr:hover td { background: var(--surface-hover); }
+.pf-table tbody tr[aria-selected="true"] td { background: var(--surface-selected); }
+.pf-table tbody tr.pf-tr--flagged td { background: var(--status-critical-tint); }
+.pf-table__scroll { height: 100%; overflow-y: auto; overflow-x: auto; }
+.pf-table__rank { color: var(--ink-muted); width: 36px; }
+.pf-table__reason { color: var(--ink-secondary); }
+.pf-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: var(--space-2); vertical-align: -1px; }
+.pf-td--best { color: var(--ink); font-weight: 600; }
+
+/* ── AssetTile ────────────────────────────────────────────────────── */
+
+/* 10대 = 2열 × 5행. 행 높이를 1fr 로 두어 카드 높이 안에서 나눠 갖는다 —
+   타일에 고정 높이를 주면 카드를 넘쳐 마지막 줄이 잘린다. */
+.pf-assetgrid {
+  display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(5, 1fr);
+  gap: var(--space-2); height: 100%;
+}
+.pf-assettile {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; align-content: center;
+  gap: 2px var(--space-2); min-height: 0; overflow: hidden;
+  padding: var(--space-1) var(--space-3);
+  background: var(--surface-card);
+  border: var(--stroke-hairline) solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.pf-assettile:hover { background: var(--surface-hover); }
+.pf-assettile[aria-selected="true"] { background: var(--surface-selected); border-color: var(--accent); }
+.pf-assettile__tag { color: var(--ink); }
+.pf-assettile__type { color: var(--ink-muted); grid-column: 1; }
+.pf-assettile__spark { grid-column: 2; grid-row: 1 / span 2; display: block; width: 112px; height: 28px; }
+.pf-assettile__kw { color: var(--ink); }
+
+/* ── SensorStack ──────────────────────────────────────────────────── */
+
+.pf-sensorstack { display: flex; flex-direction: column; gap: 4px; height: 100%; }
+.pf-sensorpanel { display: grid; grid-template-columns: 116px 1fr; align-items: center; height: 55px; }
+.pf-sensorpanel__label { color: var(--ink-secondary); padding-right: var(--space-2); }
+.pf-sensorpanel__unit { color: var(--ink-muted); }
+.pf-sensorpanel__plot { height: 100%; border-top: var(--stroke-hairline) solid var(--border-hairline); }
+.pf-sensorstack__axis { height: 40px; border-top: var(--stroke-hairline) solid var(--chart-axis); }
+
+/* ── Legend ───────────────────────────────────────────────────────── */
+
+.pf-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--ink-secondary); }
+.pf-legend__item { display: inline-flex; align-items: center; gap: var(--space-1); }
+.pf-legend__key { width: 12px; height: 2px; border-radius: 1px; }
+.pf-legend__key--dot { width: 8px; height: 8px; border-radius: 50%; }
+.pf-scale { display: flex; align-items: center; gap: var(--space-1); color: var(--ink-muted); }
+.pf-scale__step { width: 20px; height: 10px; }
+
+/* ── EmptyState ───────────────────────────────────────────────────── */
+
+.pf-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-2); height: 100%;
+  padding: var(--space-10) var(--space-6);
+  color: var(--ink-muted); text-align: center;
+}
+.pf-empty__title { color: var(--ink-secondary); }
+.pf-empty--inline { padding: var(--space-6); }
