@@ -737,6 +737,7 @@ def load_asset_failure_onset_trend(asset_tag: str) -> dict:
     }
 
 
+<<<<<<< HEAD
 @lru_cache(maxsize=1)
 def _family_metrics_raw() -> pd.DataFrame:
     path = DEFAULT_FAMILY_METRICS_PATH
@@ -910,6 +911,8 @@ def load_family_recurrence_intervals(asset_tag: str, part_family: str) -> list[i
     return np.diff(start_dates).astype("timedelta64[D]").astype(int).tolist()
 
 
+=======
+>>>>>>> origin/KYS-dashboard
 def load_data_dictionary() -> list[dict]:
     """화면 ④ "데이터 사전" 22행을 CSV 컬럼 순서 그대로 반환한다."""
     raw = _load_raw()

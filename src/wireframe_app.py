@@ -29,10 +29,11 @@
 실행:
     pip install dash reportlab openpyxl
     python wireframe_app.py
-    → http://127.0.0.1:8050
+    → http://127.0.0.1:8052
 """
 
 import io
+import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -40,6 +41,7 @@ from pathlib import Path
 import plotly.graph_objects as go
 from dash import Dash, html, dcc, dash_table, Input, Output, State, ALL, MATCH, ctx, no_update
 from plotly.subplots import make_subplots
+from flask import got_request_exception, session
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -77,6 +79,13 @@ from .dashboard_data import (  # noqa: E402
     load_screen5_kpis,
     load_source_info,
     load_table_page,
+)
+from .audit_service import (  # noqa: E402
+    change_admin_password, create_audit_tables, delete_user_accounts,
+    ensure_dashboard_admin, list_user_accounts, log_failure, record_action, record_error, sync_if_csv_changed,
+)
+from .dashboard_auth import (  # noqa: E402
+    current_session_state, end_admin_session, extend_admin_session, install_auth,
 )
 
 # ============================================================
@@ -574,6 +583,36 @@ def app_header():
          ),
          html.Button("", id="theme-btn", n_clicks=0, title="테마 전환",
                      style=btn_style(w=32, extra={"padding": "0", "textAlign": "center", "fontSize": "16px"})),
+         html.Details([
+             html.Summary(html.Span("관", id="profile-display"), id="profile-menu-toggle",
+                          title="마이 프로필",
+                          style={"listStyle": "none", "width": "34px", "height": "34px",
+                                 "borderRadius": "50%", "background": INK, "color": CARD,
+                                 "display": "grid", "placeItems": "center", "cursor": "pointer",
+                                 "fontSize": "13px", "fontWeight": "700"}),
+             html.Div([
+                 html.Div(["아이디 · ", html.Span(id="profile-login-id")],
+                          style={"fontSize": "12px", "marginBottom": "6px"}),
+                 html.Div([
+                     html.Span(["남은 시간 · ", html.Span("10:00", id="session-remaining")]),
+                     html.Button(html.Img(src=SESSION_REFRESH_ICON, alt="", style={"width": "19px", "height": "19px", "display": "block"}),
+                             id="session-extend-btn", n_clicks=0,
+                             style={"border": "0", "background": "transparent", "color": "#111",
+                                    "cursor": "pointer", "padding": "0", "marginLeft": "20px"},
+                             title="로그인 시간 10분으로 초기화",
+                             **{"aria-label": "로그인 시간 10분으로 초기화"}),
+                 ], style={"fontSize": "12px", "marginBottom": "8px", "display": "flex",
+                           "alignItems": "center"}),
+                 html.Button("비밀번호 변경", id="password-open-btn", n_clicks=0,
+                             style={"display": "block", "width": "100%", "padding": "8px", "marginBottom": "5px"}),
+                 html.Button("계정 관리", id="account-manage-btn", n_clicks=0,
+                             style={"display": "none", "width": "100%", "padding": "8px", "marginBottom": "5px"}),
+                 html.Button("로그아웃", id="logout-btn", n_clicks=0,
+                             style={"display": "block", "width": "100%", "padding": "8px"}),
+             ], style={"position": "absolute", "right": "0", "top": "40px", "width": "210px",
+                       "background": CARD, "color": INK, "border": f"1px solid {HAIR}",
+                       "boxShadow": "0 8px 24px #0003", "padding": "10px", "zIndex": 100}),
+         ], style={"position": "relative", "flexShrink": "0"}),
          dcc.Download(id="report-download"),
          dcc.Download(id="table-download")],
         style={"display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "8px",
@@ -826,10 +865,6 @@ def _parts_figure(df, theme):
         font=dict(size=11, color=colors["muted"]), bargap=0.28, showlegend=False,
     )
     return fig
-
-
-
-
 
 
 def _family_pr_figure(pr_cm, theme):
@@ -2087,6 +2122,23 @@ def build_report_xlsx(filters, seg_state, audience):
 app = Dash(__name__)
 app.title = "설비 모니터링 대시보드 — 와이어프레임"
 app.index_string = INDEX_STRING
+install_auth(app.server)
+ADMIN_INPUT_STYLE = {"display": "block", "width": "100%", "boxSizing": "border-box",
+                     "marginBottom": "8px", "padding": "7px", "fontSize": "13px"}
+
+# 별도 /assets 요청을 하지 않는 내장 SVG입니다. 로그인 보호 과정에서 아이콘 파일이
+# 401로 막혀 깨진 이미지로 보이는 문제를 피하기 위해 화면 코드에 직접 포함합니다.
+SESSION_REFRESH_ICON = (
+    "data:image/svg+xml;base64,"
+    "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgd2lkdGg9"
+    "IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxMTExMTEiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tl"
+    "LWxpbmVjYXA9ImJ1dHQiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiPjxkZWZzPjxtYXJrZXIgaWQ9ImFycm93LWhlYWQi"
+    "IG1hcmtlcldpZHRoPSIxNiIgbWFya2VySGVpZ2h0PSIxNiIgcmVmWD0iMTMiIHJlZlk9IjgiIG9yaWVudD0iYXV0byIg"
+    "bWFya2VyVW5pdHM9InVzZXJTcGFjZU9uVXNlIj48cGF0aCBkPSJNMCAwIDE2IDggMCAxNloiIGZpbGw9IiMxMTExMTEi"
+    "IHN0cm9rZT0ibm9uZSIvPjwvbWFya2VyPjwvZGVmcz48cGF0aCBkPSJNNTIgMjVDNDcgMTMgMzQgOSAyNCAxNCAxNiAx"
+    "OCAxMSAyNSAxMSAzNCIgbWFya2VyLWVuZD0idXJsKCNhcnJvdy1oZWFkKSIvPjxwYXRoIGQ9Ik0xMiA0MEMxNyA1MiAz"
+    "MCA1NiA0MCA1MSA0OCA0NyA1MyA0MCA1MyAzMSIgbWFya2VyLWVuZD0idXJsKCNhcnJvdy1oZWFkKSIvPjwvc3ZnPg=="
+)
 
 app.layout = html.Div(
     [
@@ -2102,6 +2154,173 @@ app.layout = html.Div(
         # None이면 screen_3()이 정렬 후 1행(average_precision 최댓값)으로 대체한다.
         dcc.Store(id="selected-family-store", data=None),
         dcc.Store(id="theme-store", data="light", storage_type="local"),
+        dcc.Store(id="audit-sync-status"),
+        dcc.Store(id="audit-audience-event"),
+        # 서버가 발급한 만료 시각만 담는다. 비밀번호·키는 브라우저에 두지 않는다.
+        dcc.Store(id="session-state"),
+        dcc.Store(id="session-prompt-state", data={"shown": False}),
+        dcc.Store(id="account-delete-mode", data=False),
+        dcc.Store(id="account-delete-refresh", data=0),
+        dcc.Interval(id="audit-csv-interval", interval=60_000, n_intervals=0),
+        dcc.Interval(id="session-timer", interval=1_000, n_intervals=0),
+        dcc.Location(id="auth-redirect", refresh=True),
+        # 이전 콜백의 State 식별자는 유지하되 사용자 입력은 제거한다.
+        # 실제 actor_id는 audit_service가 검증된 Flask 세션에서 읽는다.
+        dcc.Input(id="actor-id-input", type="hidden", value=""),
+        # 로그아웃 확인 창과 같은 형식의 중앙 비밀번호 변경 팝업입니다.
+        html.Div(id="password-panel", children=[
+            html.Div([
+                html.H3("비밀번호 변경", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
+                html.P("현재 비밀번호를 확인한 뒤 새 비밀번호로 바꿉니다.",
+                       style={"marginBottom": "18px", "textAlign": "center"}),
+                dcc.Input(id="password-current", type="password", placeholder="현재 비밀번호", style=ADMIN_INPUT_STYLE),
+                dcc.Input(id="password-new", type="password", placeholder="새 비밀번호 (4자 이상)", style=ADMIN_INPUT_STYLE),
+                dcc.Input(id="password-confirm", type="password", placeholder="새 비밀번호 다시 입력", style=ADMIN_INPUT_STYLE),
+                html.Div([
+                    html.Button("변경", id="password-save-btn", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
+                                       "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                    html.Button("닫기", id="password-close-btn", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
+                                       "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                ], style={"display": "flex", "justifyContent": "center", "gap": "10px", "marginTop": "18px"}),
+                html.Div(id="password-result", role="status",
+                         style={"marginTop": "12px", "minHeight": "18px", "textAlign": "center", "color": "#b42318"}),
+            ], style={"width": "360px", "background": "#fff", "color": "#222", "padding": "22px",
+                      "borderRadius": "10px", "boxShadow": "0 12px 40px #0005"}),
+        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 300,
+                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
+        html.Div(id="session-expiry-modal", children=[
+            html.Div([
+                html.H3("로그인 시간 연장", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
+                html.P("로그인 시간이 곧 만료됩니다. 계속 사용하시겠습니까?",
+                       style={"marginBottom": "26px", "textAlign": "center"}),
+                html.Div([
+                    html.Button("예 (10초)", id="session-modal-extend-btn", n_clicks=0,
+                                style={"minWidth": "128px", "padding": "11px 18px", "border": "1px solid #2563eb",
+                                       "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                    html.Button("아니오", id="session-modal-logout-btn", n_clicks=0,
+                                style={"minWidth": "110px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
+                                       "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                ], style={"display": "flex", "justifyContent": "center", "gap": "10px"}),
+            ], style={"width": "360px", "background": "#fff", "color": "#222", "padding": "22px",
+                      "borderRadius": "10px", "boxShadow": "0 12px 40px #0005", "textAlign": "center"}),
+        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 300,
+                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
+        html.Div(id="logout-confirm-modal", children=[
+            html.Div([
+                html.H3("로그아웃", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
+                html.P("로그아웃하시겠습니까?", style={"marginBottom": "26px", "textAlign": "center"}),
+                html.Div([
+                    html.Button("예", id="logout-confirm-yes-btn", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
+                                       "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                    html.Button("아니오", id="logout-confirm-no-btn", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
+                                       "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                ], style={"display": "flex", "justifyContent": "center", "gap": "10px"}),
+            ], style={"width": "330px", "background": "#fff", "color": "#222", "padding": "22px",
+                      "borderRadius": "10px", "boxShadow": "0 12px 40px #0005", "textAlign": "center"}),
+        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 310,
+                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
+        html.Div(id="password-success-modal", children=[
+            html.Div([
+                html.H3("비밀번호 변경 완료", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
+                html.P("비밀번호가 변경되었습니다. 다시 로그인해 주세요.",
+                       style={"marginBottom": "26px", "textAlign": "center"}),
+                html.Button("확인", id="password-success-confirm-btn", n_clicks=0,
+                            style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
+                                   "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
+                                   "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+            ], style={"width": "360px", "background": "#fff", "color": "#222", "padding": "22px",
+                      "borderRadius": "10px", "boxShadow": "0 12px 40px #0005", "textAlign": "center"}),
+        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 320,
+                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
+        # ADMIN 역할에서만 열 수 있는 일반 계정 목록입니다. 이름은 서버에서만 복호화합니다.
+        html.Div(id="account-management-modal", children=[
+            html.Div([
+                html.Div([
+                    html.H3("계정 관리", style={"margin": 0, "textAlign": "left"}),
+                    html.Button("계정 삭제", id="account-delete-mode-btn", n_clicks=0,
+                                style={"padding": "7px 11px", "border": "1px solid #b42318",
+                                       "borderRadius": "6px", "background": "#fff", "color": "#b42318",
+                                       "fontWeight": "700", "cursor": "pointer"}),
+                ], style={"display": "flex", "alignItems": "center", "justifyContent": "space-between",
+                          "marginBottom": "18px"}),
+                html.Div(id="account-list-body"),
+                html.Div(id="account-delete-header", children=[
+                    html.Span("아이디", style={"fontWeight": "700"}),
+                    html.Span("이름", style={"fontWeight": "700"}),
+                    html.Span("접속 상태", style={"fontWeight": "700", "textAlign": "right"}),
+                    html.Span("선택", style={"fontWeight": "700", "textAlign": "right"}),
+                ], style={"display": "none", "gridTemplateColumns": "1fr 1fr 90px 38px",
+                          "gap": "8px", "padding": "8px 4px", "borderBottom": "1px solid #d7dde3"}),
+                dcc.Checklist(id="account-delete-selection", options=[], value=[],
+                              style={"display": "none"},
+                              inputStyle={"marginLeft": "8px", "cursor": "pointer"},
+                              labelStyle={"display": "flex", "flexDirection": "row-reverse", "width": "100%",
+                                          "alignItems": "center", "padding": "10px 4px",
+                                          "borderBottom": "1px solid #eef0f2", "cursor": "pointer"}),
+                html.Div(id="account-delete-feedback", role="status",
+                         style={"minHeight": "18px", "fontSize": "13px", "color": "#b42318",
+                                "textAlign": "center", "marginTop": "12px"}),
+                html.Div([
+                    html.Button("닫기", id="account-management-close-btn", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
+                                       "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                    html.Button("확인", id="account-delete-confirm-btn", n_clicks=0,
+                                style={"display": "none", "minWidth": "120px", "padding": "11px 18px",
+                                       "border": "1px solid #2563eb", "borderRadius": "6px",
+                                       "background": "#2563eb", "color": "#fff", "fontSize": "15px",
+                                       "fontWeight": "700", "cursor": "pointer", "marginLeft": "auto"}),
+                ], style={"display": "flex", "justifyContent": "center", "marginTop": "20px"}),
+            ], style={"width": "520px", "maxWidth": "calc(100vw - 32px)", "background": "#fff", "color": "#222",
+                      "padding": "22px", "borderRadius": "10px", "boxShadow": "0 12px 40px #0005"}),
+        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 330,
+                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
+        html.Div(id="account-delete-confirm-modal", children=[
+            html.Div([
+                html.H3("계정 삭제", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
+                html.P(id="account-delete-confirm-message",
+                       style={"marginBottom": "26px", "textAlign": "center"}),
+                html.Div([
+                    html.Button("예", id="account-delete-yes-btn", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
+                                       "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                    html.Button("아니오", id="account-delete-no-btn", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
+                                       "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                ], style={"display": "flex", "justifyContent": "center", "gap": "10px"}),
+            ], style={"width": "380px", "maxWidth": "calc(100vw - 32px)", "background": "#fff",
+                      "color": "#222", "padding": "22px", "borderRadius": "10px",
+                      "boxShadow": "0 12px 40px #0005"}),
+        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 340,
+                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
+        # 일반 계정이 PDF·Excel을 누르면 파일 생성 없이 이 안내만 보여 준다.
+        html.Div(id="export-access-modal", children=[
+            html.Div([
+                html.H3("접근 권한", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
+                html.P("접근 권한이 필요합니다.",
+                       style={"marginBottom": "26px", "textAlign": "center"}),
+                html.Div([
+                    html.Button("확인", id="export-access-modal-close", n_clicks=0,
+                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
+                                       "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
+                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
+                ], style={"display": "flex", "justifyContent": "center"}),
+            ], style={"width": "330px", "background": "#fff", "color": "#222", "padding": "22px",
+                      "borderRadius": "10px", "boxShadow": "0 12px 40px #0005", "textAlign": "center"}),
+        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 340,
+                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
         app_header(),
         filter_bar(),
         html.Main(
@@ -2116,6 +2335,7 @@ app.layout = html.Div(
 )
 
 
+
 # ------------------------------------------------------------
 # 화면 렌더 — 탭 / 세그먼트 상태 / 보고서 대상이 바뀌면 다시 그린다
 # ------------------------------------------------------------
@@ -2126,8 +2346,12 @@ app.layout = html.Div(
     Input("prio-sort-store", "data"),
     Input("selected-asset-store", "data"),
     Input("selected-family-store", "data"),
+    State("actor-id-input", "value"),
 )
-def render_screen(active, seg_state, prio_sort, selected_asset, selected_family):
+def render_screen(active, seg_state, prio_sort, selected_asset, selected_family, actor_id):
+    if ctx.triggered_id == "screen-tabs":
+        record_action("ACT_TAB_OPEN", "화면 이동", actor_id=actor_id,
+                      target_type="tab", target_id=active)
     kwargs = {"seg_state": seg_state, "audience": DEFAULT_AUDIENCE}
     if active == "1":
         kwargs["prio_sort"] = prio_sort or DEFAULT_PRIO_SORT
@@ -2136,7 +2360,12 @@ def render_screen(active, seg_state, prio_sort, selected_asset, selected_family)
     if active == "3":
         kwargs["asset_tag"] = selected_asset
         kwargs["family"] = selected_family
-    return SCREEN_BUILDERS[active](**kwargs)
+    try:
+        return SCREEN_BUILDERS[active](**kwargs)
+    except Exception as exc:
+        log_failure("ACT_SCREEN_RENDER", "화면 조회", exc, actor_id=actor_id,
+                    source="wireframe_app.render_screen", target_id=active)
+        return html.Div("화면을 불러오지 못했습니다. 오류 로그를 확인해 주세요.")
 
 
 # ②의 "‹ 이전 기계"/"다음 기계 ›" — 알파벳순으로 순환 이동한다. nav_btn()이
@@ -2145,9 +2374,10 @@ def render_screen(active, seg_state, prio_sort, selected_asset, selected_family)
     Output("selected-asset-store", "data"),
     Input({"type": "machine-nav-btn", "index": ALL}, "n_clicks"),
     State("selected-asset-store", "data"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def cycle_selected_asset(_clicks, current_asset):
+def cycle_selected_asset(_clicks, current_asset, actor_id):
     triggered = ctx.triggered_id
     if not triggered:
         return no_update
@@ -2165,7 +2395,10 @@ def cycle_selected_asset(_clicks, current_asset):
         idx = (idx - 1) % len(assets)
     else:
         return no_update
-    return assets[idx]
+    chosen = assets[idx]
+    record_action("ACT_ASSET_NAVIGATE", "설비 상세 이동", actor_id=actor_id,
+                  target_type="asset", target_id=chosen)
+    return chosen
 
 
 # ③ "부품군 진단" 표의 행 클릭 — family-row는 task_sel==1일 때만 DOM에
@@ -2217,10 +2450,14 @@ def recompute_threshold_metrics(slider_values, seg_state):
     Output("theme-store", "data"),
     Input("theme-btn", "n_clicks"),
     State("theme-store", "data"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def toggle_theme(_n, current):
-    return "light" if (current or "light") == "dark" else "dark"
+def toggle_theme(_n, current, actor_id):
+    new_theme = "light" if (current or "light") == "dark" else "dark"
+    record_action("ACT_THEME_CHANGE", "테마 전환", actor_id=actor_id,
+                  target_type="theme", target_id=new_theme)
+    return new_theme
 
 
 @app.callback(
@@ -2361,6 +2598,80 @@ def recolor_partfail_pr_chart(theme, _active_tab):
     return [_family_pr_figure(pr_cm, theme or "light")]
 
 
+# 화면⑤ "고장·위험 추세" 차트 전용 재색칠 — render_screen과 무관한 별도
+# 콜백이라 테마 전환이 화면①~④의 render_screen 재실행(및 그로 인한 화면④
+# 표의 page_current/sort_by 리셋)을 유발하지 않는다. 패턴매칭 id라 화면⑤가
+# DOM에 없으면(다른 화면을 보는 중) Dash가 이 콜백을 호출하지 않는다 —
+# KPI_FAILRATE_ID와 동일 원리. screen-tabs도 Input으로 받아, 이미 다크
+# 테마인 상태에서 화면⑤에 처음 탭 이동할 때도(테마 자체는 안 바뀌었으므로
+# theme-store만으로는 못 잡는 경우) 곧바로 올바른 색으로 그린다.
+@app.callback(
+    Output({"type": "trend-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+)
+def recolor_trend_chart(theme, _active_tab):
+    return [_trend_figure(load_failure_trend(), theme or "light")]
+
+
+# 화면② 스몰 멀티플도 같은 방식으로 재색칠한다. trend-chart와 id 타입을 나눠
+# 둬야 두 콜백의 Output 매칭 개수가 서로 섞이지 않는다. 기계 전환은 이미
+# render_screen이 화면②를 다시 그리므로 selected-asset-store는 State로만 읽는다.
+@app.callback(
+    Output({"type": "smult-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+    State("selected-asset-store", "data"),
+)
+def recolor_smult_chart(theme, _active_tab, asset_tag):
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
+    return [_smult_figure(load_asset_sensor_series(asset_tag), theme or "light")]
+
+
+# 화면② "부품 출고 이력" 막대차트도 같은 방식으로 재색칠한다. smult-chart와
+# id 타입을 나눠야 두 콜백의 Output 매칭 개수가 서로 섞이지 않는다.
+@app.callback(
+    Output({"type": "parts-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+    State("selected-asset-store", "data"),
+)
+def recolor_parts_chart(theme, _active_tab, asset_tag):
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
+    return [_parts_figure(load_asset_parts_history(asset_tag), theme or "light")]
+
+
+# 화면② "동종 기계 대비" 박스플롯도 같은 방식으로 재색칠한다. smult-chart/
+# parts-chart와 id 타입을 나눠야 세 콜백의 Output 매칭 개수가 서로 섞이지 않는다.
+@app.callback(
+    Output({"type": "peer-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+    State("selected-asset-store", "data"),
+)
+def recolor_peer_chart(theme, _active_tab, asset_tag):
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
+    return [_peer_figure(load_asset_peer_comparison(asset_tag), theme or "light")]
+
+
+# 화면② "고장 직전 센서 변화" 차트도 같은 방식으로 재색칠한다. smult-chart/
+# parts-chart/peer-chart와 id 타입을 나눠야 네 콜백의 Output 매칭 개수가
+# 서로 섞이지 않는다.
+@app.callback(
+    Output({"type": "pre-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+    State("selected-asset-store", "data"),
+)
+def recolor_pre_chart(theme, _active_tab, asset_tag):
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
+    return [_pre_figure(load_asset_failure_onset_trend(asset_tag), theme or "light")]
+
+
 # <html>에도 같은 클래스를 얹는다. #root는 1920 고정폭이라 넓은 화면에서
 # 좌우 여백(body)이 남는데, 변수가 html에 있어야 그 여백까지 테마를 따라간다.
 app.clientside_callback(
@@ -2386,9 +2697,10 @@ app.clientside_callback(
     Input({"type": "period-btn", "index": ALL}, "n_clicks"),
     Input("reset-btn", "n_clicks"),
     State("filter-store", "data"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def write_filters(plant, machine_type, machine, _period_clicks, _reset_clicks, current):
+def write_filters(plant, machine_type, machine, _period_clicks, _reset_clicks, current, actor_id):
     trigger = ctx.triggered_id
     new = dict(current or DEFAULT_FILTERS)
     dd_reset = (no_update, no_update, no_update)
@@ -2403,6 +2715,9 @@ def write_filters(plant, machine_type, machine, _period_clicks, _reset_clicks, c
         new["machine_type"] = machine_type
         new["machine"] = machine
 
+    if trigger == "reset-btn" or (isinstance(trigger, dict) and trigger.get("type") == "period-btn") or trigger in ("plant-dd", "machine-type-dd", "machine-dd"):
+        record_action("ACT_FILTER_CHANGE", "조회 조건 변경", actor_id=actor_id,
+                      target_type="filter", target_id=str(trigger)[:100], detail=new)
     return new, *dd_reset
 
 
@@ -2434,9 +2749,10 @@ def render_filters(data):
     Output("seg-store", "data"),
     Input({"type": "seg-btn", "group": ALL, "index": ALL}, "n_clicks"),
     State("seg-store", "data"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def write_seg(_clicks, current):
+def write_seg(_clicks, current, actor_id):
     # 화면이 다시 그려지면 버튼이 n_clicks=0으로 재생성되며 이 콜백이 한 번
     # 더 불린다 — 값이 0인 호출은 무시한다(무한 루프 방지).
     trig = ctx.triggered[0] if ctx.triggered else None
@@ -2447,6 +2763,8 @@ def write_seg(_clicks, current):
         return no_update
     new = dict(current or DEFAULT_SEG)
     new[tid["group"]] = tid["index"]
+    record_action("ACT_SEGMENT_CHANGE", "분석 선택", actor_id=actor_id,
+                  target_type=str(tid["group"]), target_id=str(tid["index"]))
     return new
 
 
@@ -2456,14 +2774,18 @@ def write_seg(_clicks, current):
 @app.callback(
     Output("action-echo", "children"),
     Input({"type": "ghost-btn", "index": ALL}, "n_clicks"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def echo_action(_clicks):
+def echo_action(_clicks, actor_id):
     trig = ctx.triggered[0] if ctx.triggered else None
     if not trig or not trig.get("value"):
         return no_update
     tid = ctx.triggered_id
     label = tid["index"] if isinstance(tid, dict) else str(tid)
+    record_action("ACT_UNAVAILABLE", "미구현 기능 클릭", actor_id=actor_id,
+                  target_type="button", target_id=str(label), status="BLOCKED",
+                  block_reason="아직 구현되지 않은 기능")
     return f"'{label}' 클릭됨 — 동작 미구현 ({NO_DATA_MARK})"
 
 
@@ -2477,9 +2799,10 @@ def echo_action(_clicks):
     Output("action-echo", "children", allow_duplicate=True),
     Input({"type": "kpi-drill", "index": ALL}, "n_clicks"),
     State("prio-sort-store", "data"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def drill_failrate_to_priority(n_clicks_list, current):
+def drill_failrate_to_priority(n_clicks_list, current, actor_id):
     # ALL 패턴이라 리스트로 온다 — ①이 화면에 없을 땐 빈 리스트, 있을 땐 [n].
     # 화면 재렌더로 타일이 다시 만들어질 때의 n_clicks=0도 함께 무시한다.
     if not n_clicks_list or not any(n_clicks_list):
@@ -2489,6 +2812,8 @@ def drill_failrate_to_priority(n_clicks_list, current):
     msg = ("'종합 고장율' 클릭 → 점검 우선순위를 기준선 초과 기준으로 정렬"
            if new_sort_by == "threshold" else
            "'종합 고장율' 다시 클릭 → 점검 우선순위를 등급가중 고장점수 기준으로 복귀")
+    record_action("ACT_PRIORITY_SORT", "점검 우선순위 정렬", actor_id=actor_id,
+                  target_type="priority", target_id=new_sort_by)
     return {"sort_by": new_sort_by, "direction": current.get("direction", "desc")}, msg
 
 
@@ -2499,13 +2824,16 @@ def drill_failrate_to_priority(n_clicks_list, current):
     Output("prio-sort-store", "data", allow_duplicate=True),
     Input({"type": "prio-dir-btn", "index": ALL}, "n_clicks"),
     State("prio-sort-store", "data"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def toggle_priority_direction(n_clicks_list, current):
+def toggle_priority_direction(n_clicks_list, current, actor_id):
     if not n_clicks_list or not any(n_clicks_list):
         return no_update
     current = current or DEFAULT_PRIO_SORT
     new_direction = "asc" if current.get("direction", "desc") == "desc" else "desc"
+    record_action("ACT_PRIORITY_SORT", "점검 우선순위 정렬(방향)", actor_id=actor_id,
+                  target_type="priority", target_id=new_direction)
     return {"sort_by": current.get("sort_by", "grade"), "direction": new_direction}
 
 
@@ -2515,13 +2843,32 @@ def toggle_priority_direction(n_clicks_list, current):
 @app.callback(
     Output("report-download", "data"),
     Output("action-echo", "children", allow_duplicate=True),
+    Output("export-access-modal", "style"),
     Input("export-dd", "value"),
+    Input("export-access-modal-close", "n_clicks"),
     State("filter-store", "data"),
     State("seg-store", "data"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def export_report(export_value, filters, seg_state):
+def export_report(export_value, _close, filters, seg_state, actor_id):
+    if ctx.triggered_id == "export-access-modal-close":
+        return no_update, no_update, {"display": "none"}
+
     fmt, audience = (export_value or f"pdf:{DEFAULT_AUDIENCE}").split(":")
+    export_format = "pdf" if fmt == "pdf" else "excel"
+    # 드롭다운 선택만으로는 부족하다 — 파일을 만드는 직전에 서버 세션의
+    # 역할을 다시 확인한다. 일반 사용자가 요청을 직접 바꾸더라도 PDF·Excel은
+    # 받을 수 없다.
+    if str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
+        record_action("ACT_EXPORT_ACCESS_BLOCKED", "파일 내보내기 접근 차단", actor_id=actor_id,
+                      target_type="export", target_id=export_format, status="BLOCKED",
+                      block_reason="관리자 역할이 필요합니다.")
+        return no_update, "파일 내보내기는 관리자 계정만 사용할 수 있습니다.", {
+            "display": "flex", "position": "fixed", "inset": 0, "zIndex": 340,
+            "background": "#0006", "alignItems": "center", "justifyContent": "center",
+        }
+
     aud = REPORT_AUDIENCES[audience]
     stamp = datetime.now().strftime("%Y%m%d-%H%M")
     base = f"설비모니터링_보고서_{audience}_{stamp}"
@@ -2533,9 +2880,15 @@ def export_report(export_value, filters, seg_state):
                 build_report_xlsx(filters, seg_state, audience), f"{base}.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except Exception as exc:  # noqa: BLE001 — 실패 이유를 화면에 그대로 보여준다
-        return no_update, f"내보내기 실패 — {type(exc).__name__}: {exc}"
+        log_failure("ACT_REPORT_EXPORT", "보고서 내보내기", exc, actor_id=actor_id,
+                    source="wireframe_app.export_report", target_id=ctx.triggered_id)
+        return no_update, f"내보내기 실패 — {type(exc).__name__}", {"display": "none"}
+    record_action("ACT_REPORT_EXPORT", "보고서 내보내기", actor_id=actor_id,
+                  target_type="export", target_id=export_format,
+                  detail={"audience": audience, "format": export_format})
     return (dcc.send_bytes(lambda b: b.write(payload), name, type=mime),
-            f"{aud['label']} 보고서 내보냄 — {name} (섹션 {len(aud['sections'])}개 · 값은 {NO_DATA_MARK})")
+            f"{aud['label']} 보고서 내보냄 — {name} (섹션 {len(aud['sections'])}개 · 값은 {NO_DATA_MARK})",
+            {"display": "none"})
 
 
 # ------------------------------------------------------------
@@ -2552,15 +2905,25 @@ def export_report(export_value, filters, seg_state):
     Output({"type": "dtable-footer", "index": MATCH}, "children"),
     Input({"type": "dtable", "index": MATCH}, "page_current"),
     Input({"type": "dtable", "index": MATCH}, "sort_by"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def update_dtable_page(page_current, sort_by):
+def update_dtable_page(page_current, sort_by, actor_id):
     dataset_key = ctx.triggered_id["index"]
     sort_col = sort_by[0]["column_id"] if sort_by else None
     sort_dir = sort_by[0]["direction"] if sort_by else "asc"
     triggered_prop = ctx.triggered[0]["prop_id"].rsplit(".", 1)[-1] if ctx.triggered else None
     page = 0 if triggered_prop == "sort_by" else (page_current or 0)
-    result = load_table_page(dataset_key, sort_col, sort_dir, page)
+    try:
+        result = load_table_page(dataset_key, sort_col, sort_dir, page)
+    except Exception as exc:
+        log_failure("ACT_DATA_QUERY", "데이터 표 조회", exc, actor_id=actor_id,
+                    source="wireframe_app.update_dtable_page", target_id=dataset_key)
+        raise
+    if triggered_prop in ("sort_by", "page_current") and ctx.triggered[0].get("value") is not None:
+        record_action("ACT_DATA_QUERY", "데이터 표 조회", actor_id=actor_id,
+                      target_type="dataset", target_id=dataset_key,
+                      detail={"page": page, "sort_column": sort_col, "sort_direction": sort_dir})
     footer_text = _dtable_footer_text(result["total_rows"], result["page"], 16)
     return result["data"], result["page_count"], result["page"], footer_text
 
@@ -2568,9 +2931,10 @@ def update_dtable_page(page_current, sort_by):
 @app.callback(
     Output("table-download", "data"),
     Input({"type": "csv-export-btn", "index": ALL}, "n_clicks"),
+    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def export_dtable_csv(_clicks):
+def export_dtable_csv(_clicks, actor_id):
     # 화면이 다시 그려지면 버튼이 n_clicks=0으로 재생성되며 이 콜백이 한 번
     # 더 불린다 — write_seg와 동일하게 값이 0인 호출은 무시한다.
     trig = ctx.triggered[0] if ctx.triggered else None
@@ -2578,14 +2942,344 @@ def export_dtable_csv(_clicks):
         return no_update
     dataset_key = ctx.triggered_id["index"]
     if dataset_key not in ("raw", "daily"):
+        record_action("ACT_CSV_EXPORT", "CSV 다운로드", actor_id=actor_id,
+                      target_type="dataset", target_id=dataset_key, status="BLOCKED",
+                      block_reason="지원하지 않는 데이터셋")
         return no_update
     try:
         csv_bytes, filename = export_table_csv(dataset_key)
-    except Exception:  # noqa: BLE001 — 다운로드만 조용히 건너뛴다
+    except Exception as exc:
+        log_failure("ACT_CSV_EXPORT", "CSV 다운로드", exc, actor_id=actor_id,
+                    source="wireframe_app.export_dtable_csv", target_id=dataset_key)
         return no_update
+    record_action("ACT_CSV_EXPORT", "CSV 다운로드", actor_id=actor_id,
+                  target_type="dataset", target_id=dataset_key, detail={"filename": filename})
     return dcc.send_bytes(lambda buf: buf.write(csv_bytes), filename, type="text/csv")
 
 
+@app.callback(Output("password-panel", "style"), Input("password-open-btn", "n_clicks"),
+              Input("password-close-btn", "n_clicks"), State("password-panel", "style"),
+              prevent_initial_call=True)
+def toggle_password_panel(_open, _close, style):
+    updated = dict(style or {})
+    updated["display"] = "none" if ctx.triggered_id == "password-close-btn" else "flex"
+    return updated
+
+
+@app.callback(Output("profile-display", "children"), Output("profile-login-id", "children"),
+              Output("session-state", "data"), Output("account-manage-btn", "style"),
+              Input("screen-tabs", "value"))
+def display_profile(_active_tab):
+    login_id = str(session.get("admin_id", "관리자"))
+    role = str(session.get("role", "UNKNOWN")).upper()
+    account_button = {"display": "block", "width": "100%", "padding": "8px", "marginBottom": "5px"}
+    if role != "ADMIN":
+        account_button["display"] = "none"
+    return login_id[:2].upper(), login_id, current_session_state(), account_button
+
+
+@app.callback(Output("account-management-modal", "style"), Output("account-list-body", "children"),
+              Input("account-manage-btn", "n_clicks"), Input("account-management-close-btn", "n_clicks"),
+              Input("account-delete-refresh", "data"),
+              prevent_initial_call=True)
+def toggle_account_management(open_clicks, close_clicks, refresh):
+    """일반 계정 목록은 ADMIN 역할의 서버 세션에서만 복호화해 보여 준다."""
+    if not (open_clicks or close_clicks or refresh):
+        return no_update, no_update
+    if ctx.triggered_id == "account-management-close-btn":
+        return {"display": "none"}, no_update
+    if str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
+        return {"display": "none"}, no_update
+    rows = list_user_accounts()
+    record_action("ACT_ACCOUNT_LIST_VIEW", "일반 계정 목록 조회", target_type="account", target_id="USER")
+    if not rows:
+        return ({"display": "flex", "position": "fixed", "inset": 0, "zIndex": 330,
+                 "background": "#0006", "alignItems": "center", "justifyContent": "center"},
+                html.P("생성된 일반 계정이 없습니다.", style={"textAlign": "center", "margin": "12px 0"}))
+    header = html.Div([
+        html.Span("아이디", style={"fontWeight": "700"}),
+        html.Span("이름", style={"fontWeight": "700"}),
+        html.Span("접속 상태", style={"fontWeight": "700", "textAlign": "right"}),
+    ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 90px", "gap": "12px",
+              "padding": "8px 4px", "borderBottom": "1px solid #d7dde3"})
+    items = [header]
+    for row in rows:
+        online_badge = html.Span(
+            "● 접속 중" if row["is_online"] else "○ 미접속",
+            style={"color": "#15803d" if row["is_online"] else "#6b7280", "fontSize": "12px",
+                   "fontWeight": "700", "textAlign": "right",
+                   "textShadow": "0 0 7px #86efac" if row["is_online"] else "none"},
+        )
+        items.append(html.Div([
+            html.Span(row["login_id"]), html.Span(row["name"]), online_badge,
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 90px", "gap": "12px",
+                  "padding": "10px 4px", "borderBottom": "1px solid #eef0f2"}))
+    return ({"display": "flex", "position": "fixed", "inset": 0, "zIndex": 330,
+             "background": "#0006", "alignItems": "center", "justifyContent": "center"}, items)
+
+
+@app.callback(Output("account-delete-selection", "options"),
+              Input("account-manage-btn", "n_clicks"), Input("account-delete-refresh", "data"),
+              prevent_initial_call=True)
+def load_account_delete_options(open_clicks, refresh):
+    """선택 행 전체를 눌러 체크할 수 있게 일반 계정만 표시한다."""
+    if not (open_clicks or refresh) or str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
+        return []
+    options = []
+    for row in list_user_accounts():
+        online = bool(row["is_online"])
+        label = html.Div([
+            html.Span(row["login_id"]),
+            html.Span(row["name"]),
+            html.Span("● 접속 중" if online else "○ 미접속",
+                      style={"color": "#15803d" if online else "#6b7280", "fontSize": "12px",
+                             "fontWeight": "700", "textAlign": "right"}),
+        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 90px", "gap": "8px",
+                  "alignItems": "center", "width": "100%"})
+        options.append({"label": label, "value": row["login_id"]})
+    return options
+
+
+@app.callback(Output("account-delete-mode", "data"), Output("account-delete-selection", "value"),
+              Input("account-manage-btn", "n_clicks"),
+              Input("account-management-close-btn", "n_clicks"),
+              Input("account-delete-mode-btn", "n_clicks"),
+              Input("account-delete-refresh", "data"),
+              State("account-delete-mode", "data"), prevent_initial_call=True)
+def toggle_account_delete_mode(_open, _close, _mode_click, _refresh, current_mode):
+    if ctx.triggered_id == "account-delete-mode-btn":
+        if str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
+            return False, []
+        return not bool(current_mode), []
+    return False, []
+
+
+@app.callback(Output("account-list-body", "style"), Output("account-delete-header", "style"),
+              Output("account-delete-selection", "style"),
+              Output("account-delete-confirm-btn", "style"),
+              Output("account-delete-mode-btn", "children"),
+              Input("account-delete-mode", "data"))
+def show_account_delete_mode(enabled):
+    confirm_style = {"display": "inline-block" if enabled else "none", "minWidth": "120px",
+                     "padding": "11px 18px", "border": "1px solid #2563eb", "borderRadius": "6px",
+                     "background": "#2563eb", "color": "#fff", "fontSize": "15px", "fontWeight": "700",
+                     "cursor": "pointer", "marginLeft": "auto"}
+    header_style = {"display": "grid" if enabled else "none",
+                    "gridTemplateColumns": "1fr 1fr 90px 38px", "gap": "8px",
+                    "padding": "8px 4px", "borderBottom": "1px solid #d7dde3"}
+    return ({"display": "none" if enabled else "block"}, header_style,
+            {"display": "block" if enabled else "none"}, confirm_style,
+            "선택 취소" if enabled else "계정 삭제")
+
+
+@app.callback(Output("account-delete-confirm-modal", "style"),
+              Output("account-delete-confirm-message", "children"),
+              Output("account-delete-refresh", "data"),
+              Output("account-delete-feedback", "children"),
+              Input("account-delete-confirm-btn", "n_clicks"),
+              Input("account-delete-no-btn", "n_clicks"),
+              Input("account-delete-yes-btn", "n_clicks"),
+              Input("account-manage-btn", "n_clicks"),
+              Input("account-management-close-btn", "n_clicks"),
+              State("account-delete-selection", "value"),
+              State("account-delete-refresh", "data"), prevent_initial_call=True)
+def confirm_account_delete(_confirm, _no, _yes, _open, _close, selected, refresh):
+    triggered = ctx.triggered_id
+    hidden = {"display": "none"}
+    if triggered in {"account-manage-btn", "account-management-close-btn", "account-delete-no-btn"}:
+        session.pop("pending_account_delete", None)
+        return hidden, "", no_update, ""
+    if str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
+        session.pop("pending_account_delete", None)
+        record_action("ACT_ACCOUNT_DELETE_BLOCKED", "일반 계정 삭제 차단", target_type="account",
+                      status="BLOCKED", block_reason="관리자 권한 필요")
+        return hidden, "", no_update, "접근 권한이 필요합니다."
+    selected = list(dict.fromkeys(selected or []))
+    if triggered == "account-delete-confirm-btn":
+        if not selected:
+            return hidden, "", no_update, "삭제할 계정을 선택해 주세요."
+        session["pending_account_delete"] = selected
+        return ({"display": "flex", "position": "fixed", "inset": 0, "zIndex": 340,
+                 "background": "#0006", "alignItems": "center", "justifyContent": "center"},
+                f"선택한 일반 계정 {len(selected)}개를 정말로 삭제하시겠습니까?",
+                no_update, "")
+    if triggered != "account-delete-yes-btn":
+        return no_update, no_update, no_update, no_update
+    pending = session.pop("pending_account_delete", None)
+    if not pending:
+        return hidden, "", no_update, "삭제 확인을 다시 진행해 주세요."
+    try:
+        deleted = delete_user_accounts(pending, actor_id=str(session.get("admin_id", "")))
+    except (PermissionError, ValueError) as exc:
+        record_action("ACT_ACCOUNT_DELETE_BLOCKED", "일반 계정 삭제 차단", target_type="account",
+                      status="BLOCKED", block_reason=type(exc).__name__)
+        return hidden, "", no_update, "계정 목록이 변경되었습니다. 다시 선택해 주세요."
+    except Exception as exc:
+        log_failure("ACT_ACCOUNT_DELETE", "일반 계정 삭제", exc,
+                    actor_id=str(session.get("admin_id", "")),
+                    source="wireframe_app.confirm_account_delete")
+        return hidden, "", no_update, "계정 삭제 중 오류가 발생했습니다."
+    return hidden, "", int(refresh or 0) + 1, f"일반 계정 {deleted}개를 삭제했습니다."
+
+
+# 브라우저는 초 단위 카운트다운만 표시한다. 실제 로그인 허용·차단은
+# dashboard_auth.py의 Flask before_request가 서버 시각으로 다시 판단한다.
+app.clientside_callback(
+    """function(_tick, sessionState, promptState) {
+        const hidden = {display: 'none'};
+        if (!sessionState || !sessionState.expires_at_ms) {
+            return [window.dash_clientside.no_update, hidden,
+                    window.dash_clientside.no_update, window.dash_clientside.no_update,
+                    window.dash_clientside.no_update];
+        }
+        const remaining = Math.max(0, Math.ceil((sessionState.expires_at_ms - Date.now()) / 1000));
+        const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
+        const seconds = String(remaining % 60).padStart(2, '0');
+        const label = minutes + ':' + seconds;
+        if (remaining === 0) {
+            window.location.assign('/login');
+            return [label, hidden, {shown: true}, '/login', '예 (0초)'];
+        }
+        const shown = Boolean(promptState && promptState.shown);
+        if (remaining <= 10) {
+            const modalStyle = shown ? window.dash_clientside.no_update :
+                {display: 'flex', position: 'fixed', inset: 0, zIndex: 300,
+                 background: '#0006', alignItems: 'center', justifyContent: 'center'};
+            return [label, modalStyle, {shown: true}, window.dash_clientside.no_update,
+                    '예 (' + remaining + '초)'];
+        }
+        return [label, window.dash_clientside.no_update,
+                window.dash_clientside.no_update, window.dash_clientside.no_update,
+                window.dash_clientside.no_update];
+    }""",
+    Output("session-remaining", "children"),
+    Output("session-expiry-modal", "style"),
+    Output("session-prompt-state", "data"),
+    Output("auth-redirect", "href", allow_duplicate=True),
+    Output("session-modal-extend-btn", "children"),
+    Input("session-timer", "n_intervals"),
+    State("session-state", "data"),
+    State("session-prompt-state", "data"),
+    prevent_initial_call=True,
+)
+
+
+@app.callback(Output("session-state", "data", allow_duplicate=True),
+              Output("session-prompt-state", "data", allow_duplicate=True),
+              Output("session-expiry-modal", "style", allow_duplicate=True),
+              Input("session-extend-btn", "n_clicks"),
+              Input("session-modal-extend-btn", "n_clicks"),
+              prevent_initial_call=True)
+def extend_login_session(profile_clicks, modal_clicks):
+    """프로필·확인 창 어느 쪽에서 눌러도 같은 서버 세션을 10분 연장한다."""
+    if not (profile_clicks or modal_clicks):
+        return no_update, no_update, no_update
+    state = extend_admin_session()
+    if state is None:
+        return no_update, no_update, no_update
+    return state, {"shown": False}, {"display": "none"}
+
+
+@app.callback(Output("logout-confirm-modal", "style"),
+              Input("logout-btn", "n_clicks"), Input("logout-confirm-no-btn", "n_clicks"),
+              prevent_initial_call=True)
+def toggle_logout_confirmation(logout_clicks, cancel_clicks):
+    """로그아웃을 누른 즉시 세션을 지우지 않고 먼저 확인을 받는다."""
+    if not (logout_clicks or cancel_clicks):
+        return no_update
+    if ctx.triggered_id == "logout-confirm-no-btn":
+        return {"display": "none"}
+    return {"display": "flex", "position": "fixed", "inset": 0, "zIndex": 310,
+            "background": "#0006", "alignItems": "center", "justifyContent": "center"}
+
+
+@app.callback(Output("audit-audience-event", "data"),
+              Input("report-audience-dd", "value"), State("actor-id-input", "value"),
+              prevent_initial_call=True)
+def log_audience_change(audience, actor_id):
+    record_action("ACT_AUDIENCE_CHANGE", "보고서 대상 선택", actor_id=actor_id,
+                  target_type="audience", target_id=audience)
+    return audience
+
+
+@app.callback(Output("audit-sync-status", "data"), Input("audit-csv-interval", "n_intervals"))
+def sync_failure_log(_ticks):
+    try:
+        return sync_if_csv_changed()
+    except Exception as exc:
+        record_error("ERR_FAILURE_SYNC", "관측 고장 저장", exc, source="wireframe_app.sync_failure_log")
+        return {"error": type(exc).__name__}
+
+
+def _log_unhandled_exception(sender, exception, **_kwargs):
+    record_error("ERR_DASH_CALLBACK", "대시보드 요청", exception,
+                 source="wireframe_app.flask_request")
+
+
+got_request_exception.connect(_log_unhandled_exception, app.server, weak=False)
+
+
+@app.callback(Output("password-result", "children"), Output("password-current", "value"),
+              Output("password-new", "value"), Output("password-confirm", "value"),
+              Output("password-success-modal", "style"),
+              Input("password-save-btn", "n_clicks"),
+              State("password-current", "value"), State("password-new", "value"),
+              State("password-confirm", "value"), prevent_initial_call=True)
+def update_admin_password(n_clicks, current, new, confirm):
+    if not n_clicks:
+        return no_update, no_update, no_update, no_update, no_update
+    admin_id = session.get("admin_id")
+    if new != confirm:
+        record_action("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", status="BLOCKED",
+                      block_reason="새 비밀번호 확인 불일치")
+        return "새 비밀번호가 일치하지 않습니다.", "", "", "", no_update
+    try:
+        changed = change_admin_password(admin_id, current or "", new or "")
+        if not changed:
+            record_action("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", status="BLOCKED",
+                          block_reason="현재 비밀번호 불일치")
+            return "현재 비밀번호가 올바르지 않습니다.", "", "", "", no_update
+        return "", "", "", "", {"display": "flex", "position": "fixed", "inset": 0, "zIndex": 320,
+                                      "background": "#0006", "alignItems": "center", "justifyContent": "center"}
+    except ValueError as exc:
+        record_action("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", status="BLOCKED",
+                      block_reason=type(exc).__name__)
+        return str(exc), "", "", "", no_update
+    except Exception as exc:
+        log_failure("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", exc, actor_id=admin_id,
+                    source="wireframe_app.update_admin_password")
+        return f"비밀번호 변경 실패: {type(exc).__name__}", "", "", "", no_update
+
+
+@app.callback(Output("auth-redirect", "href", allow_duplicate=True),
+              Input("logout-confirm-yes-btn", "n_clicks"),
+              Input("session-modal-logout-btn", "n_clicks"),
+              Input("password-success-confirm-btn", "n_clicks"), prevent_initial_call=True)
+def logout_admin(confirm_clicks, session_decline_clicks, password_confirm_clicks):
+    if not (confirm_clicks or session_decline_clicks or password_confirm_clicks):
+        return no_update
+    reason_by_button = {
+        "logout-confirm-yes-btn": "manual",
+        "session-modal-logout-btn": "session_extend_declined",
+        "password-success-confirm-btn": "password_changed",
+    }
+    reason = reason_by_button[ctx.triggered_id]
+    end_admin_session(reason)
+    return "/login"
+
+
 if __name__ == "__main__":
+    try:
+        create_audit_tables()
+        created = ensure_dashboard_admin()
+        print(f"[DB] 기본 관리자 계정: {'새로 준비됨' if created else '기존 계정 사용'}")
+        result = sync_if_csv_changed()
+        print(f"[DB] 관측 고장 로그: {result['date']} / 새로 저장 {result['created']}건")
+    except Exception as exc:
+        record_error("ERR_DB_STARTUP", "로그 DB 준비", exc, source="wireframe_app.startup")
+        print(f"[DB] 연결 또는 초기 적재 실패: {type(exc).__name__} — instance/audit_fallback.log 확인")
     # 최신 Dash(2.17+)는 app.run, 이전 버전은 app.run_server를 쓴다.
-    app.run(debug=True)
+    # 이전 실행본이 8050 포트에 남아 오래된 시간 기록을 만들 수 있어 새 포트를 사용한다.
+    # 같은 사내·가정 네트워크의 다른 기기도 접속할 수 있도록 모든 네트워크 인터페이스에서 받는다.
+    # 외부 인터넷 공개는 별도의 방화벽·공유기·HTTPS 설정이 필요하므로 여기서 자동으로 열지 않는다.
+    app.run(host=os.environ.get("DASHBOARD_HOST", "0.0.0.0"), port=8052, debug=False)
