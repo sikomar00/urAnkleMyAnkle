@@ -1,34 +1,21 @@
 """
-산업 설비 모니터링 Dash 대시보드 — 와이어프레임 스켈레톤
+산업 설비 모니터링 Dash 대시보드 — 화면 4개(① 현황 · ② 기계 상세 · ③ 모델·예측 · ④ 데이터)
 
-이 파일은 최종 대시보드가 아니라 레이아웃 뼈대다. 카드 경계 · 제목 · 치수 주석만
-있고 실제 차트 렌더링, 더미 데이터, 색상 팔레트는 없다. Plantfloor 디자인 시스템의
-그레이스케일 토큰(surface/ink/border)과 레이아웃 토큰(그리드/행 높이)만 그대로
-가져왔다. 카드 내부 자리(placeholder)를 실제 dcc.Graph, dash_table.DataTable 등으로
-바꿔 끼우면 된다.
+데이터는 합성 데이터 원본(data/raw/synthetic_industrial_machine_data.csv)과 outputs/의
+모델 결과 파일을 src/dashboard_data.py로 읽는다. 대시보드는 모델을 다시 학습하지 않는다.
 
-이번 판에서 실제로 동작하는 것 (데이터 없이도 되는 것만):
-  · 화면 탭 5개
-  · 필터바 드롭다운 3개 + 기간 프리셋 + 초기화 → localStorage에 유지
-  · 테마 전환 (라이트 ↔ 다크, 그레이스케일 그대로 · CSS 변수 교체)
-  · 세그먼티드 컨트롤 3종 — ③ 과제 / ③ 위험 기준선 / ④ 데이터셋
-      ③ 과제를 바꾸면 행 A 타일 구성(6×300 ↔ 4×458)과
-        '선행 경보 일수 분포' 카드가 실제로 갈린다
-      ③ 위험 기준선에는 "필터가 아니라 학습 라벨 정의" 경고를 상시 노출
-  · 보고서 내보내기 — 대상(독자)별로 섹션 구성이 다른 PDF / Excel 생성
-  · 나머지 버튼은 클릭되며, 무엇이 미구현인지 하단 action-echo에 표시
-
-아직 안 되는 것 (데이터 연결이 선행돼야 하는 것):
-  · 필터가 실제로 행을 걸러내지 않는다 (선택값만 잡힌다)
-  · 기간 프리셋이 "지난 7일" 같은 실제 날짜 범위가 아니다 — 타임스탬프
-    컬럼이 붙어야 PERIOD_PRESETS를 timedelta로 바꿀 수 있다
-  · 보고서의 값 칸은 전부 "데이터 미연결"이다 (가짜 숫자를 넣지 않는다)
-  · ③ 행 B(모델 비교·PR 곡선·혼동행렬)는 분류 과제 기준 고정 —
-    전력 회귀 과제용 변형은 아직 없다
+동작:
+  · 필터바 — 공장 · 기계 종류 · 기계 · 기간(최근 30일/90일/1년/전체, 데이터 최신일 포함).
+    화면별 적용 범위가 다르고, 적용되지 않는 화면에서는 해당 컨트롤을 비활성화한다.
+  · ② 기계 상세 — 필터의 기계를 보여 준다. 기계가 전체면 점검 우선순위 1위 기계.
+  · ③ 과제 · 위험 기준선 선택, 판정 임계값 슬라이더(저장된 예측 확률 재이진화)
+  · ④ 데이터 조회 — 서버 측 정렬·페이지, 필터 적용 CSV 내보내기
+  · 테마 전환(라이트 ↔ 다크), 보고서 내보내기(PDF · Excel — 독자별 섹션 골격)
+  · 운영 모드는 로그인·역할·감사 로그(MySQL)를 쓴다. 데모 모드는 DB·로그인 없이 읽기 전용.
 
 실행:
-    pip install dash reportlab openpyxl
-    python wireframe_app.py
+    python -m src.wireframe_app           # 운영 모드 (.env의 MACHINE_DATABASE_URL 필요)
+    python -m src.wireframe_app --demo    # 데모 모드 (DASHBOARD_MODE=demo와 같다)
     → http://127.0.0.1:8052
 """
 
@@ -50,6 +37,8 @@ if __package__ in {None, ""}:
 from .dashboard_data import (  # noqa: E402
     CLASSIFICATION_METRIC_COLUMNS,
     export_table_csv,
+    filter_assets,
+    load_asset_catalog,
     load_asset_detail_kpis,
     load_asset_failure_heatmap,
     load_asset_family_diagnosis,
@@ -79,6 +68,7 @@ from .dashboard_data import (  # noqa: E402
     load_screen5_kpis,
     load_source_info,
     load_table_page,
+    period_start,
 )
 from .audit_service import (  # noqa: E402
     change_admin_password, create_audit_tables, delete_user_accounts,
@@ -166,6 +156,9 @@ THEME_CSS = """
 #screen-tabs { flex-wrap:nowrap !important; }
 #screen-tabs .tab { flex:0 0 auto !important; width:auto !important; }
 
+/* 현재 화면에 적용되지 않는 필터 컨트롤 */
+#period-btn-group button:disabled { opacity:0.4; cursor:not-allowed; }
+
 /* 캔버스가 1920 고정폭이라 넓은 화면에서는 좌우 여백이 생긴다 —
    다크에서 그 여백이 흰색으로 남지 않도록 body에도 같은 배경을 준다. */
 html, body { margin:0; background:var(--pf-page); }
@@ -233,11 +226,34 @@ PLANT_OPTIONS = ["CHN-02", "DHR-03", "PUN-01"]
 MACHINE_TYPE_OPTIONS = ["Belt Conveyor", "CNC Lathe", "EOT Crane",
                         "Hydraulic Press", "Screw Compressor"]
 MACHINE_OPTIONS = load_asset_list()
-PERIOD_PRESETS = ["프리셋 1", "프리셋 2", "프리셋 3", "전체"]
+# (라벨, 데이터 최신일을 포함한 일수). None = 전체 기간.
+PERIOD_PRESETS = [("최근 30일", 30), ("최근 90일", 90), ("최근 1년", 365), ("전체", None)]
 
 DEFAULT_FILTERS = {
     "plant": None, "machine_type": None, "machine": None, "period_index": 3,
 }
+
+
+def _period_index(filters):
+    pi = (filters or DEFAULT_FILTERS).get("period_index", DEFAULT_FILTERS["period_index"])
+    return pi if isinstance(pi, int) and 0 <= pi < len(PERIOD_PRESETS) else DEFAULT_FILTERS["period_index"]
+
+
+def _filter_scope(filters):
+    """filter-store 값 → (대상 기계 태그 목록, 기간 시작일 또는 None)."""
+    f = filters or DEFAULT_FILTERS
+    assets = filter_assets(f.get("plant"), f.get("machine_type"), f.get("machine"))
+    return assets, period_start(PERIOD_PRESETS[_period_index(f)][1])
+
+
+def _focus_asset(filters, machine_only=False):
+    """② 기계 상세·③ 부품군 진단이 보여 줄 기계 — 필터의 기계, 전체면 점검 우선순위 1위.
+    machine_only=True면 공장·기계 종류 필터를 보지 않는다(③은 그 필터를 적용하지 않는다)."""
+    f = filters or DEFAULT_FILTERS
+    if machine_only:
+        f = {"machine": f.get("machine")}
+    assets, _ = _filter_scope(f)
+    return load_priority_table("grade", "desc", assets=assets or None)[0]["asset_tag"]
 
 # ------------------------------------------------------------
 # 보고서 대상(독자)별 산출물 구성
@@ -309,11 +325,11 @@ NO_DATA_MARK = "데이터 미연결"
 SEG_GROUPS = {
     "task": ["현재 고장 표시 분류", "부품군 진단", "부품 고장 탐지"],
     "threshold": ["12", "13", "14"],
-    "dataset": ["원자료", "기계·일 집계", "부품 출고", "모델 입력 피처"],
+    "dataset": ["원자료", "기계·일 집계"],
 }
 DEFAULT_SEG = {"task": 0, "threshold": 0, "dataset": 0}
 
-# ① 화면의 "점검 우선순위" 표 정렬 축. KPI "종합 고장율" 타일을 클릭하면
+# ① 화면의 "점검 우선순위" 표 정렬 축. KPI "위험 기준선 초과 비율" 타일을 클릭하면
 # "grade"(등급가중 고장점수, 기본) → "threshold"(기준선 초과)로 바뀐다.
 DEFAULT_PRIO_SORT = {"sort_by": "grade", "direction": "desc"}
 
@@ -325,11 +341,6 @@ KPI_FAILRATE_ID = {"type": "kpi-drill", "index": "failrate"}
 # 공용 프리미티브
 # ============================================================
 
-def dim(w, h):
-    """카드/타일 우측 상단 치수 주석."""
-    return html.Span(f"{w} × {h}", style=NUM_12)
-
-
 def note(text, style=None):
     """작은 보조 설명(micro-11)."""
     s = dict(MICRO_11)
@@ -339,19 +350,17 @@ def note(text, style=None):
 
 
 def slot(label, w, h, sub=None):
-    """아직 채워지지 않은 영역 — 점선 테두리 + 라벨 + 치수."""
+    """아직 채워지지 않은 영역 — 점선 테두리 + 라벨."""
     width_style = {"width": f"{w}px"} if isinstance(w, (int, float)) else {"flexGrow": "1", "minWidth": "0"}
-    w_txt = w if isinstance(w, (int, float)) else "가변"
     if h < 34:
         return html.Div(
-            note(f"{label} · {w_txt}×{h}"),
+            note(label),
             style={**width_style, "height": f"{h}px", "flexShrink": "0", "boxSizing": "border-box",
                    "border": f"1px dashed {CTRL}", "background": SUNK, "display": "flex",
                    "alignItems": "center", "justifyContent": "center", "padding": "0 6px",
                    "overflow": "hidden"},
         )
-    children = [html.Span(label, style={**LABEL_12, "textAlign": "center"}),
-                html.Span(f"{w_txt} × {h}", style=NUM_12)]
+    children = [html.Span(label, style={**LABEL_12, "textAlign": "center"})]
     if sub:
         children.append(html.Span(sub, style={**MICRO_11, "textAlign": "center"}))
     return html.Div(
@@ -366,7 +375,6 @@ def slot(label, w, h, sub=None):
 def card(title, w, h, body, right=None):
     """카드 = 1px 테두리 + 라운드, 그림자 없음. 제목 줄 36px 고정."""
     header_right = [right] if right else []
-    header_right.append(dim(w, h))
     return html.Section(
         [
             html.Div(
@@ -416,7 +424,7 @@ def tile(label, w=300, h=96, sub="값 · value-28", tid=None):
     kwargs = {"id": tid, "n_clicks": 0} if tid else {}
     return html.Div(
         [
-            html.Div([html.Span(label, style=LABEL_12), dim(w, h)],
+            html.Div([html.Span(label, style=LABEL_12)],
                       style={"height": "16px", "display": "flex", "justifyContent": "space-between", "gap": "8px"}),
             slot(sub, 168, 32),
         ],
@@ -470,16 +478,13 @@ def seg(group, label_text, options, sel=0):
 
 
 def filter_dropdown(dd_id, label, options, w):
-    """실제로 선택 가능한 dcc.Dropdown. react-select 내부 스타일이라 와이어프레임
-    토큰과 100% 같은 룩은 아니다 — 테두리색/글꼴만 최대한 맞췄다."""
+    """필터바 드롭다운. 값은 filter-store(storage_type="local")가 원본이고,
+    첫 렌더에 write_filters가 저장된 값을 드롭다운에 되돌려 놓는다."""
     return html.Div(
         [html.Span(label, style={**LABEL_12, "whiteSpace": "nowrap"}),
          dcc.Dropdown(
              id=dd_id, options=[{"label": o, "value": o} for o in options],
              value=None, placeholder="전체", clearable=True,
-             # 새로고침·재접속 후에도 마지막 선택이 남는다. filter-store도
-             # storage_type="local"이라 둘이 같은 값을 들고 복원된다.
-             persistence=True, persistence_type="local",
              style={"width": f"{w}px", "fontFamily": "inherit", "fontSize": "13px"},
          )],
         style={"display": "flex", "alignItems": "center", "gap": "6px"},
@@ -487,11 +492,11 @@ def filter_dropdown(dd_id, label, options, w):
 
 
 def period_toggle():
-    """기간 프리셋 — 실제로 클릭되고 선택 상태가 바뀌는 버튼 4개."""
+    """기간 버튼 4개 — 데이터 최신일을 포함한 최근 N일 또는 전체 기간."""
     buttons = [
         html.Button(label, id={"type": "period-btn", "index": i}, n_clicks=0,
                     style=period_btn_style(i == DEFAULT_FILTERS["period_index"]))
-        for i, label in enumerate(PERIOD_PRESETS)
+        for i, (label, _days) in enumerate(PERIOD_PRESETS)
     ]
     return html.Div(
         [html.Span("기간", style={**LABEL_12, "whiteSpace": "nowrap"}),
@@ -543,11 +548,9 @@ def table_placeholder(cols, nrows, row_h, head_h=32, first_idx=False, sort_col=N
 def empty_state(title, reason, w, h):
     """확정되지 않은 값은 0/—이 아니라 이유가 적힌 빈 상태로 표시한다."""
     return html.Div(
-        [note("EmptyState"),
-         html.Span(title, style={"margin": "0", "fontSize": "14px", "lineHeight": "20px",
+        [html.Span(title, style={"margin": "0", "fontSize": "14px", "lineHeight": "20px",
                                   "fontWeight": "600", "color": INK}),
-         html.Span(reason, style={"fontSize": "13px", "lineHeight": "18px", "color": INK2, "textAlign": "center"}),
-         html.Span(f"{w} × {h}", style=NUM_12)],
+         html.Span(reason, style={"fontSize": "13px", "lineHeight": "18px", "color": INK2, "textAlign": "center"})],
         style={"width": f"{w}px", "height": f"{h}px", "boxSizing": "border-box",
                "border": f"1px dashed {CTRL}", "borderRadius": "4px", "display": "flex",
                "flexDirection": "column", "alignItems": "center", "justifyContent": "center",
@@ -572,8 +575,7 @@ def app_header():
                     style={"fontSize": "16px", "fontWeight": "600", "color": INK, "whiteSpace": "nowrap"}),
          html.Div([html.Span("데이터 기준일", style=LABEL_12),
                    html.Span(load_data_reference_date(), style=NUM_12)],
-                  style={"display": "flex", "alignItems": "center", "gap": "6px"}),
-         note("1920 × 56")],
+                  style={"display": "flex", "alignItems": "center", "gap": "6px"})],
         style={"display": "flex", "alignItems": "center", "gap": "12px", "minWidth": "0"},
     )
     center = dcc.Tabs(
@@ -659,39 +661,33 @@ def app_header():
 
 
 def filter_bar():
-    """공장 / 기계 종류 / 기계 / 기간 프리셋 / 기간 직접지정 / 초기화 · 우측 현재 필터 상태 echo.
-    dcc.Store(id="filter-store")가 화면 전환과 무관하게 값을 들고 있어 스펙의
-    "화면 이동 시 상태 유지"를 충족한다. 실제 슬라이스 행 수는 데이터가 붙어야
-    나오므로, 지금은 선택된 필터 조합을 그대로 보여주는 것으로 상호작용만 증명한다."""
+    """공장 / 기계 종류 / 기계 / 기간 / 초기화 · 우측 현재 필터 상태와 적용 범위 안내.
+    dcc.Store(id="filter-store")가 화면 전환과 무관하게 값을 들고 있어 화면을
+    옮겨도 선택이 유지된다."""
     return html.Div(
         [filter_dropdown("plant-dd", "공장", PLANT_OPTIONS, 140),
          filter_dropdown("machine-type-dd", "기계 종류", MACHINE_TYPE_OPTIONS, 140),
          filter_dropdown("machine-dd", "기계", MACHINE_OPTIONS, 180),
          period_toggle(),
-         html.Div([html.Span("직접 지정", style={**LABEL_12, "whiteSpace": "nowrap"}),
-                   slot("시작일 – 종료일", 130, 32)],
-                  style={"display": "flex", "alignItems": "center", "gap": "6px", "flexShrink": "0"}),
          html.Button("초기화", id="reset-btn", n_clicks=0,
                      style={"height": "32px", "boxSizing": "border-box", "padding": "0 12px",
                             "border": f"1px solid {HAIR}", "borderRadius": "2px", "background": "transparent",
                             "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "500", "color": INK2,
                             "cursor": "pointer", "whiteSpace": "nowrap", "flexShrink": "0"}),
          html.Div(style={"flexGrow": "1"}),
-         # storage_type="local" 이므로 새로고침·재접속 후에도 마지막 선택이 남는다.
-         note("1920 × 56", {"whiteSpace": "nowrap", "flexShrink": "0"}),
+         html.Span(id="filter-scope-note", style={**MICRO_11, "whiteSpace": "nowrap", "flexShrink": "0"}),
          html.Div([html.Span("현재 필터", style={**LABEL_12, "whiteSpace": "nowrap"}),
                    html.Span(id="filter-echo", style={**NUM_12, "whiteSpace": "nowrap"})],
                   style={"display": "flex", "alignItems": "center", "gap": "6px", "flexShrink": "0"}),
-         html.Span("선택값은 localStorage에 유지됨", id="action-echo",
+         html.Span("", id="action-echo",
                    style={**MICRO_11, "width": "208px", "textAlign": "right", "flexShrink": "0",
                           "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis"})],
         style={"width": f"{CANVAS_W}px", "height": f"{FILTERBAR_H}px", "boxSizing": "border-box",
                "padding": f"0 {MARGIN}px", "background": CARD, "borderBottom": f"1px solid {HAIR}",
                "display": "flex", "alignItems": "center", "gap": "10px", "fontFamily": SANS, "color": INK,
                # overflow:hidden을 쓰면 자식(드롭다운 팝업 메뉴)까지 clip돼서
-               # 목록이 잘리거나 다른 카드 밑에 깔린 것처럼 보인다. 가로 폭은
-               # 이미 자식 폭 실측으로 1920px에 맞춰뒀으니(각 자식 flexShrink:0)
-               # overflow는 넣지 않고 줄바꿈만 막는다.
+               # 목록이 잘리거나 다른 카드 밑에 깔린 것처럼 보인다. overflow는
+               # 넣지 않고 줄바꿈만 막는다.
                "flexWrap": "nowrap",
                # app_header()와 같은 이유 — 설치된 Dash 버전이 옛 방식(z-index
                # 없는 position:absolute) 드롭다운을 쓸 경우를 대비해 필터바
@@ -704,11 +700,8 @@ def filter_bar():
 # 화면 ① 현황 — 행 96 / 460 / 340
 # ============================================================
 
-def kpi_value_tile(label, value_text, w=300, h=96, tid=None):
-    """tile()과 같은 치수·토큰을 쓰지만, slot()의 'w×h' 주석 대신 실제 값
-    문자열을 그대로 보여준다. tile()/slot()은 화면 ③·④에서도 쓰는 공용
-    와이어프레임 자리표시자라 여기서는 건드리지 않고, 화면 ①에서만 쓰는
-    이 함수로 실제 값 표시를 대신한다."""
+def kpi_value_tile(label, value_text, w=300, h=96, tid=None, scope=None):
+    """KPI 값 타일. scope는 라벨 오른쪽의 집계 범위 안내(예: "기준일", "선택 기간")."""
     style = {"width": f"{w}px", "height": f"{h}px", "flexShrink": "0", "boxSizing": "border-box",
              "background": CARD, "outline": f"1px solid {CTRL if tid else HAIR}", "outlineOffset": "-1px",
              "borderRadius": "4px", "padding": "16px", "display": "flex",
@@ -716,7 +709,7 @@ def kpi_value_tile(label, value_text, w=300, h=96, tid=None):
              "cursor": "pointer" if tid else "default"}
     kwargs = {"id": tid, "n_clicks": 0} if tid else {}
     return html.Div(
-        [html.Div([html.Span(label, style=LABEL_12), dim(w, h)],
+        [html.Div([html.Span(label, style=LABEL_12)] + ([note(scope)] if scope else []),
                    style={"height": "16px", "display": "flex", "justifyContent": "space-between", "gap": "8px"}),
          html.Div(html.Span(value_text, style={"fontFamily": MONO, "fontSize": "22px",
                                                  "fontWeight": "600", "color": INK}),
@@ -957,14 +950,14 @@ def priority_table(cols, records, row_h, head_h=32, sort_col=None):
     )
 
 
-def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
-    # 절충안: 6타일 중 "위험 기준선 초과 기계 (대)" 한 자리만 종합 고장율(%)로
+def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=None, start=None):
+    # 절충안: 6타일 중 "위험 기준선 초과 기계 (대)" 한 자리만 위험 기준선 초과 비율(%)로
     # 바꾼다. 그 지표는 원래 절대 건수(분자)만 보여줘서 "전체 대비 얼마나
     # 심각한가"를 암산해야 했는데, 비율로 바꾸면 그 계산이 필요 없어진다.
     # 나머지 5개(관측 기계·고장 표시 기계·일·전력·온도·부품 금액)는 그대로 —
     # 전부 원자료 수준 지표라 "지금 뭐가 몇 대냐"에 즉답하는 역할을 유지한다.
     #
-    # 정의(확정): 종합 고장율(%) = 위험 기준선 초과 기계 수 ÷ 전체 관측 기계 수 × 100
+    # 정의(확정): 위험 기준선 초과 비율(%) = 위험 기준선 초과 기계 수 ÷ 전체 관측 기계 수 × 100
     # — ③에서 고른 위험 기준선(등급가중 고장점수 12/13/14)을 그대로 물려받는다.
     #
     # 이 값은 "전체 중 몇 %가 위험선을 넘었나"라는 집계 하나뿐이라, 그것만으로는
@@ -976,16 +969,18 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
     # 일반 문자열 id로 Input을 걸면 그 화면들에서 "ID not found in layout"
     # 콘솔 경고가 뜬다 — 패턴 매칭 id({"type":...})를 쓰면 Dash가 "지금 이
     # id를 가진 컴포넌트가 0개일 수 있다"를 정상 상태로 취급해 경고가 안 뜬다.
-    kpis = load_screen1_kpis()
+    kpis = load_screen1_kpis(assets, start)
     # "최고 베어링 온도"·"부품 출고 금액(누적)"은 삭제한다 — 남은 4개가 같은
     # 458px 폭(4×458 + 3×16 = 1880)으로 행 전체를 균등 분배한다.
+    # 네 번째 값은 (label, value, 클릭 id, 집계 범위 안내).
     kpi_specs = [
-        ("관측 기계 (대)", f"{kpis['observed_machines']:,}", None),
-        ("고장 표시 기계·일", f"{kpis['failure_machine_days']:,}", None),
-        ("종합 고장율 (%)", f"{kpis['failure_rate_pct']:.1f}%", KPI_FAILRATE_ID),
-        ("평균 소비 전력 (kW)", f"{kpis['avg_power_kw']:,.2f}", None),
+        ("관측 기계 (대)", f"{kpis['observed_machines']:,}", None, None),
+        ("고장 표시 기계·일", f"{kpis['failure_machine_days']:,}", None, "선택 기간"),
+        ("위험 기준선 초과 비율 (%)", f"{kpis['failure_rate_pct']:.1f}", KPI_FAILRATE_ID, "기준일"),
+        ("평균 소비 전력 (kW)", f"{kpis['avg_power_kw']:,.2f}", None, "기준일"),
     ]
-    row_a = row(ROW_KPI, [kpi_value_tile(label, value_text, w=458, tid=tid) for label, value_text, tid in kpi_specs])
+    row_a = row(ROW_KPI, [kpi_value_tile(label, value_text, w=458, tid=tid, scope=scope)
+                          for label, value_text, tid, scope in kpi_specs])
 
     prio_cols = [("순위", 48, "right"), ("대상", 200, "left"), ("종류", 110, "left"), ("공장", 100, "left"),
                  ("등급가중 고장점수", 150, "right"), ("기준선 초과", 110, "center"),
@@ -993,14 +988,14 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
     sort_by = prio_sort.get("sort_by", "grade")
     direction = prio_sort.get("direction", "desc")
     sort_idx = 5 if sort_by == "threshold" else 4
-    sort_hint = ("정렬: 기준선 초과 (KPI '종합 고장율' 클릭으로 이동함)" if sort_by == "threshold"
+    sort_hint = ("정렬: 기준선 초과" if sort_by == "threshold"
                  else "정렬: 등급가중 고장점수 (기본)") + (" · 오름차순" if direction == "asc" else " · 내림차순")
-    priority_records = load_priority_table(sort_by, direction)
+    priority_records = load_priority_table(sort_by, direction, assets=assets)
     dir_btn = html.Button("▲ 오름차순" if direction == "asc" else "▼ 내림차순",
                            id={"type": "prio-dir-btn", "index": "screen1"}, n_clicks=0, style=btn_style(w=96))
     prio = card("점검 우선순위", 1090, ROW_MAIN,
                 priority_table(prio_cols, priority_records, 32, head_h=32, sort_col=sort_idx),
-                right=html.Div([note(f"대상 = 엔티티 무관 (현재 기계 행만) · 헤더 고정 · 행 클릭 → ② · {sort_hint}"),
+                right=html.Div([note(f"기준일 스냅샷 · 기간 미적용 · {sort_hint}"),
                                  dir_btn],
                                 style={"display": "flex", "alignItems": "center", "gap": "8px"}))
 
@@ -1037,18 +1032,18 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
                    "background": CARD, "padding": "10px 12px", "display": "flex", "alignItems": "center",
                    "gap": "8px"},
         )
-    machine_status_rows = load_screen1_machine_status()
+    machine_status_rows = load_screen1_machine_status(assets)
     tiles_grid = html.Div([machine_tile(r) for r in machine_status_rows],
                            style={"display": "grid", "gridTemplateColumns": "repeat(2, minmax(0, 1fr))",
                                   "gridTemplateRows": "repeat(5, 72px)", "columnGap": "8px", "rowGap": "8px",
                                   "width": "742px", "height": "392px"})
     status = card("기계 상태", 774, ROW_MAIN, tiles_grid,
-                  right=note("스파크라인 · 값 = 등급가중 고장점수 최근 30일 · 타일 367 × 72"))
+                  right=note("스파크라인 = 등급가중 고장점수 최근 30일 · 기간 미적용"))
     row_b = row(ROW_MAIN, [prio, status])
 
     heat_body = html.Div(
         dcc.Graph(id={"type": "heatmap-chart", "index": "screen1"},
-                  figure=_heatmap_figure(load_asset_failure_heatmap(), "light"),
+                  figure=_heatmap_figure(load_asset_failure_heatmap(assets, start), "light"),
                   config={"displayModeBar": False, "responsive": True},
                   style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
         style={"height": "100%", "display": "flex", "flexDirection": "column"},
@@ -1056,7 +1051,7 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
     heat = card("고장 표시 히트맵", 1248, ROW_SUB, heat_body,
                 right=note("셀 = 그 달 고장 표시된 부품-일 행 수 합계 · 자산 × 월"))
 
-    power_rows = load_screen1_power_by_machine()
+    power_rows = load_screen1_power_by_machine(assets, start)
     max_power = max((r["avg_power_kw"] for r in power_rows), default=1.0) or 1.0
     prows = html.Div(
         [html.Div([html.Span(r["asset_tag"], style={"fontFamily": MONO, "fontSize": "12px", "color": INK,
@@ -1068,7 +1063,7 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
          for r in power_rows],
     )
     power_body = html.Div([prows], style={"display": "flex", "flexDirection": "column"})
-    power = card("기계별 평균 소비 전력 (kW)", 616, ROW_SUB, power_body, right=note("10개 · 내림차순"))
+    power = card("기계별 평균 소비 전력 (kW)", 616, ROW_SUB, power_body, right=note(f"{len(power_rows)}개 · 내림차순 · 선택 기간 평균"))
     row_c = row(ROW_SUB, [heat, power])
 
     return html.Div([row_a, row_b, row_c],
@@ -1079,7 +1074,7 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
 # 화면 ② 기계 상세 — 행 88 / 520 / 288
 # ============================================================
 
-def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
+def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=None):
     def value_box(text, w, h=26, mono=False):
         """slot()의 점선 테두리/치수 주석 대신 실제 값을 그대로 보여준다 —
         strip 전용, screen_2() 안에서만 쓰인다."""
@@ -1105,7 +1100,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
 
     assets = load_asset_list()
     asset_tag = asset_tag if asset_tag in assets else assets[0]
-    detail = load_asset_detail_kpis(asset_tag)
+    detail = load_asset_detail_kpis(asset_tag, start)
 
     strip = html.Section(
         [nav_btn("‹ 이전 기계", "prev"),
@@ -1118,8 +1113,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
          metric("위험도", 120, f"{detail['risk_score']:,.0f}"),
          metric("최근 고장 표시일", 140, detail["last_failure_date"] or "—"),
          metric("고장 표시 일수 (일)", 140, f"{detail['failure_days_count']:,}"),
-         metric("평균 소비 전력 (kW)", 140, f"{detail['avg_power_30d_kw']:,.2f}"),
-         dim(1880, 88)],
+         metric("평균 소비 전력 (kW)", 140, f"{detail['avg_power_kw']:,.2f}")],
         style={"width": "1880px", "height": "88px", "boxSizing": "border-box", "background": CARD,
                "outline": f"1px solid {HAIR}", "outlineOffset": "-1px", "borderRadius": "4px",
                "padding": "16px", "display": "flex", "alignItems": "center", "gap": "16px"},
@@ -1131,16 +1125,14 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
         [html.Div(label, style={"height": f"{SMULT_PANEL_H}px", "flexShrink": "0",
                                  "display": "flex", "alignItems": "center", **LABEL_12})
          for label, _ in SMULT_SENSORS]
-        + [html.Div(note("8 × 48 + 7 × 4 + 40 = 452"),
-                    style={"height": f"{SMULT_AXIS_H}px", "flexShrink": "0", "display": "flex",
-                           "alignItems": "center"})],
+        + [html.Div(style={"height": f"{SMULT_AXIS_H}px", "flexShrink": "0"})],
         style={"width": "160px", "flexShrink": "0", "display": "flex", "flexDirection": "column",
                "gap": f"{SMULT_GAP}px"},
     )
     sm_body = hstack(
         [sensor_labels,
          dcc.Graph(id={"type": "smult-chart", "index": "screen2"},
-                   figure=_smult_figure(load_asset_sensor_series(asset_tag), "light"),
+                   figure=_smult_figure(load_asset_sensor_series(asset_tag, start), "light"),
                    config={"displayModeBar": False, "responsive": True},
                    style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"})],
         8, style={"height": f"{SMULT_BODY_H}px"},
@@ -1155,11 +1147,15 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
     # 없다 — 대시보드는 모델을 재실행하지 않는다는 공통 제약과 충돌해 새로
     # 만들지 않았다(별도 오프라인 클러스터링 스크립트가 먼저 필요).
     # "부품 출고 이력"만 남아 오른쪽 칸(616 × 520)을 그대로 채운다.
-    parts = card("부품 출고 이력", 616, 520,
-                 dcc.Graph(id={"type": "parts-chart", "index": "screen2"},
-                           figure=_parts_figure(load_asset_parts_history(asset_tag), "light"),
-                           config={"displayModeBar": False, "responsive": True},
-                           style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}))
+    parts_history = load_asset_parts_history(asset_tag, start)
+    if parts_history.empty:
+        parts_body = empty_state("기간 내 부품 출고 없음", "선택한 기간에 이 기계의 부품 출고 금액이 0이다", 584, 452)
+    else:
+        parts_body = dcc.Graph(id={"type": "parts-chart", "index": "screen2"},
+                               figure=_parts_figure(parts_history, "light"),
+                               config={"displayModeBar": False, "responsive": True},
+                               style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"})
+    parts = card("부품 출고 이력", 616, 520, parts_body)
     row_b = row(520, [smult, parts])
 
     return html.Div([strip, row_b],
@@ -1345,18 +1341,11 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
 
     toolbar = html.Div(
         [html.Div([seg("task", "과제", SEG_GROUPS["task"], sel=seg_state.get("task", 0)),
-                   html.Div([note("툴바 1880 × 32"),
-                             seg("threshold", "위험 기준선 (등급가중 고장점수)",
-                                 SEG_GROUPS["threshold"], sel=thr_sel)],
-                            style={"display": "flex", "alignItems": "center", "gap": "12px"})],
+                   seg("threshold", "위험 기준선 (등급가중 고장점수)", SEG_GROUPS["threshold"], sel=thr_sel)],
                   style={"height": "32px", "display": "flex", "alignItems": "center",
                          "justifyContent": "space-between", "gap": "16px"}),
-         warn_line,
-         html.Div([html.Span([k, html.Span(" [ ]", style={"fontFamily": MONO})], style={"whiteSpace": "nowrap"})
-                   for k in ["그레인", "모집단", "평가 구간", "제외 규칙", "기준선 조건"]] +
-                  [note("· 메타 줄 16")],
-                  style={"height": "16px", "display": "flex", "alignItems": "center", "gap": "16px", **LABEL_12})],
-        style={"width": "1880px", "height": "72px", "display": "flex", "flexDirection": "column",
+         warn_line],
+        style={"width": "1880px", "height": "52px", "display": "flex", "flexDirection": "column",
                "gap": "4px", "flexShrink": "0"},
     )
 
@@ -1500,7 +1489,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
                   html.Span(f"{pr_cm['cutoff']:.3f}", style=NUM_12)],
                  style={"height": "32px", "display": "flex", "alignItems": "center", "gap": "8px"}),
     ])
-    cmx = card("혼동행렬", 458, ROW_MAIN, cm_body, right=note("2 × 2"))
+    cmx = card("혼동행렬", 458, ROW_MAIN, cm_body)
     row_b = row(ROW_MAIN, [mcomp, prc, cmx])
 
     if task_sel == 1:
@@ -1608,8 +1597,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
 # 화면 ④ 데이터 — 툴바 32 / 524 / 340
 # ============================================================
 
-# SEG_GROUPS["dataset"] 인덱스 → dashboard_data의 dataset 키. 2(부품 출고)·
-# 3(모델 입력 피처)은 아직 연결되지 않아 매핑하지 않는다.
+# SEG_GROUPS["dataset"] 인덱스 → dashboard_data의 dataset 키.
 DATASET_KEY_BY_SEG_INDEX = {0: "raw", 1: "daily"}
 
 
@@ -1623,74 +1611,63 @@ def _dtable_footer_text(total_rows, page, page_size=16):
     return f"{total_rows:,}행 중 {start:,}–{end:,}행 표시"
 
 
-def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE):
+def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None):
     seg_state = seg_state or DEFAULT_SEG
     dataset_index = seg_state.get("dataset", 0)
-    dataset_key = DATASET_KEY_BY_SEG_INDEX.get(dataset_index)
+    # 예전에 저장된 선택(없어진 데이터셋 인덱스)은 원자료로 되돌린다.
+    if dataset_index not in DATASET_KEY_BY_SEG_INDEX:
+        dataset_index = 0
+    dataset_key = DATASET_KEY_BY_SEG_INDEX[dataset_index]
 
-    def csv_export_button(key, disabled):
-        style = btn_style(extra={"opacity": "0.4", "cursor": "not-allowed"} if disabled else None)
-        return html.Button(
-            "CSV 내보내기", id={"type": "csv-export-btn", "index": key or "unavailable"},
-            n_clicks=0, disabled=disabled, style=style,
-        )
-
-    if dataset_key is None:
-        dtable_body = html.Div(
-            "이 데이터셋은 아직 연결되지 않았습니다",
-            style={"height": "456px", "display": "flex", "alignItems": "center",
-                   "justifyContent": "center", **LABEL_12},
-        )
-        csv_btn = csv_export_button(None, disabled=True)
-    else:
-        page0 = load_table_page(dataset_key, None, "asc", 0)
-        columns_prop = [{"name": c["label"], "id": c["id"]} for c in page0["columns"]]
-        right_align_ids = [c["id"] for c in page0["columns"] if c["align"] == "right"]
-        table = dash_table.DataTable(
-            id={"type": "dtable", "index": dataset_key},
-            columns=columns_prop,
-            data=page0["data"],
-            page_action="custom", page_current=0, page_count=page0["page_count"], page_size=16,
-            sort_action="custom", sort_mode="single", sort_by=[],
-            filter_action="none",
-            # fixed_columns(앞 2열 고정)를 시도했으나 헤더 셀이 어긋나(빈 헤더가
-            # 섞여 나옴) 포기하고 가로 스크롤만 남긴다(사용자 승인 — 이 문제에
-            # 시간을 더 쓰지 않음).
-            style_table={"overflowX": "auto", "width": "1840px"},
-            style_header={"backgroundColor": CARD, "fontFamily": SANS, "fontSize": "12px",
-                          "fontWeight": "500", "color": INK2, "borderBottom": f"1px solid {CTRL}",
-                          "height": "32px", "minHeight": "32px", "maxHeight": "32px"},
-            style_cell={"backgroundColor": CARD, "border": "none", "borderBottom": f"1px solid {HAIR}",
-                        "padding": "0 8px", "height": "24px", "minHeight": "24px", "maxHeight": "24px",
-                        "lineHeight": "16px", "fontFamily": SANS, "fontSize": "12px", "textAlign": "left"},
-            style_data={"backgroundColor": CARD},
-            style_cell_conditional=[
-                {"if": {"column_id": cid}, "textAlign": "right", "fontFamily": MONO}
-                for cid in right_align_ids
-            ],
-            # 내장 페이저 padding·여백을 줄여 카드 높이(524px) 예산에 맞춘다
-            # (정정 #2 — 행 높이·page_size는 그대로 두고 페이저만 압축).
-            css=[
-                {"selector": ".previous-next-container", "rule": "padding:2px 0; margin:0;"},
-                {"selector": ".previous-next-container button", "rule": "padding:2px 4px; margin:0 2px;"},
-                {"selector": ".page-number, .current-page-container",
-                 "rule": f"font-family:{MONO}; font-size:11px; color:{INK2}; margin:0 2px;"},
-                # 진단으로 특정한 진짜 원인: dash_table 기본 번들 스타일시트의
-                # ".dash-spreadsheet-inner tr { height:30px; min-height:30px; }"가
-                # style_cell의 24px 지정을 무시하고 행 높이를 30px로 고정한다
-                # (.dash-cell-value/-container 문제가 아님). 같은 선택자로
-                # 이 표에만 재정의한다.
-                {"selector": ".dash-spreadsheet-inner tr",
-                 "rule": "height:24px; min-height:24px;"},
-            ],
-        )
-        footer = html.Div(
-            html.Span(_dtable_footer_text(page0["total_rows"], 0, 16),
-                      id={"type": "dtable-footer", "index": dataset_key}, style=LABEL_12),
-            style={"height": "20px", "display": "flex", "alignItems": "center"},
-        )
-        dtable_body = html.Div([table, footer])
-        csv_btn = csv_export_button(dataset_key, disabled=False)
+    page0 = load_table_page(dataset_key, None, "asc", 0, assets=assets, start=start)
+    columns_prop = [{"name": c["label"], "id": c["id"]} for c in page0["columns"]]
+    right_align_ids = [c["id"] for c in page0["columns"] if c["align"] == "right"]
+    table = dash_table.DataTable(
+        id={"type": "dtable", "index": dataset_key},
+        columns=columns_prop,
+        data=page0["data"],
+        page_action="custom", page_current=0, page_count=page0["page_count"], page_size=16,
+        sort_action="custom", sort_mode="single", sort_by=[],
+        filter_action="none",
+        # fixed_columns(앞 2열 고정)를 시도했으나 헤더 셀이 어긋나(빈 헤더가
+        # 섞여 나옴) 포기하고 가로 스크롤만 남긴다(사용자 승인 — 이 문제에
+        # 시간을 더 쓰지 않음).
+        style_table={"overflowX": "auto", "width": "1840px"},
+        style_header={"backgroundColor": CARD, "fontFamily": SANS, "fontSize": "12px",
+                      "fontWeight": "500", "color": INK2, "borderBottom": f"1px solid {CTRL}",
+                      "height": "32px", "minHeight": "32px", "maxHeight": "32px"},
+        style_cell={"backgroundColor": CARD, "border": "none", "borderBottom": f"1px solid {HAIR}",
+                    "padding": "0 8px", "height": "24px", "minHeight": "24px", "maxHeight": "24px",
+                    "lineHeight": "16px", "fontFamily": SANS, "fontSize": "12px", "textAlign": "left"},
+        style_data={"backgroundColor": CARD},
+        style_cell_conditional=[
+            {"if": {"column_id": cid}, "textAlign": "right", "fontFamily": MONO}
+            for cid in right_align_ids
+        ],
+        # 내장 페이저 padding·여백을 줄여 카드 높이(524px) 예산에 맞춘다
+        # (정정 #2 — 행 높이·page_size는 그대로 두고 페이저만 압축).
+        css=[
+            {"selector": ".previous-next-container", "rule": "padding:2px 0; margin:0;"},
+            {"selector": ".previous-next-container button", "rule": "padding:2px 4px; margin:0 2px;"},
+            {"selector": ".page-number, .current-page-container",
+             "rule": f"font-family:{MONO}; font-size:11px; color:{INK2}; margin:0 2px;"},
+            # 진단으로 특정한 진짜 원인: dash_table 기본 번들 스타일시트의
+            # ".dash-spreadsheet-inner tr { height:30px; min-height:30px; }"가
+            # style_cell의 24px 지정을 무시하고 행 높이를 30px로 고정한다
+            # (.dash-cell-value/-container 문제가 아님). 같은 선택자로
+            # 이 표에만 재정의한다.
+            {"selector": ".dash-spreadsheet-inner tr",
+             "rule": "height:24px; min-height:24px;"},
+        ],
+    )
+    footer = html.Div(
+        html.Span(_dtable_footer_text(page0["total_rows"], 0, 16),
+                  id={"type": "dtable-footer", "index": dataset_key}, style=LABEL_12),
+        style={"height": "20px", "display": "flex", "alignItems": "center"},
+    )
+    dtable_body = html.Div([table, footer])
+    csv_btn = html.Button("CSV 내보내기", id={"type": "csv-export-btn", "index": dataset_key},
+                          n_clicks=0, style=btn_style())
 
     toolbar = html.Div(
         [seg("dataset", "데이터셋", SEG_GROUPS["dataset"], sel=dataset_index),
@@ -1700,7 +1677,7 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE):
     )
 
     dtable = card(f"데이터 조회 · {SEG_GROUPS['dataset'][dataset_index]}", 1880, 524, dtable_body,
-                  right=note("헤더 고정 · 서버 측 정렬·페이지네이션"))
+                  right=note("공장·기계 종류·기계·기간 필터 적용"))
 
     dict_cols = [("컬럼명", 130, "left"), ("타입", 64, "left"), ("단위", 56, "left"),
                  ("결측률 (%)", 72, "right"), ("설명", 120, "left")]
@@ -1743,7 +1720,7 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE):
     dict_rows = load_data_dictionary()
     ddict = card("데이터 사전 (22열)", 932, ROW_SUB,
                  hstack([dict_half(dict_rows[:11]), dict_half(dict_rows[11:])], 16),
-                 right=note("11행 × 2단 · 행 22"))
+                 right=note("데이터셋 전체 기준 · 필터 미적용"))
 
     def info_box(text, w, h=94):
         """slot()의 점선 테두리 대신 실제 문장을 보여준다 — screen_4 전용."""
@@ -1771,7 +1748,7 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE):
         info_box(f"센서값 반복: 기계×날짜 {q['group_count']:,}개 그룹, 그룹당 부품 행 {q['rows_per_group']:,}개에 "
                  f"센서값 동일 반복", 213),
     ]
-    qual = card("품질 요약", 932, 162, hstack(quality_tiles, 16))
+    qual = card("품질 요약", 932, 162, hstack(quality_tiles, 16), right=note("데이터셋 전체 기준 · 필터 미적용"))
 
     s = load_source_info()
     source_lines = "\n".join([s["source_name"], f"{s['row_count']:,}행 × {s['col_count']}열",
@@ -1933,7 +1910,6 @@ def _report_context(filters, seg_state, audience):
     filters = filters or DEFAULT_FILTERS
     seg_state = seg_state or DEFAULT_SEG
     aud = REPORT_AUDIENCES.get(audience, REPORT_AUDIENCES[DEFAULT_AUDIENCE])
-    pi = filters.get("period_index", DEFAULT_FILTERS["period_index"])
     return {
         "aud": aud,
         "generated": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -1946,7 +1922,7 @@ def _report_context(filters, seg_state, audience):
             ("공장", filters.get("plant") or "전체"),
             ("기계 종류", filters.get("machine_type") or "전체"),
             ("기계", filters.get("machine") or "전체"),
-            ("기간", PERIOD_PRESETS[pi] if 0 <= pi < len(PERIOD_PRESETS) else "전체"),
+            ("기간", PERIOD_PRESETS[_period_index(filters)][0]),
             ("모델 과제", SEG_GROUPS["task"][seg_state.get("task", 0)]),
             ("위험 기준선", SEG_GROUPS["threshold"][seg_state.get("threshold", 0)]),
             ("제외 섹션", aud["excludes"]),
@@ -2138,7 +2114,7 @@ def build_report_xlsx(filters, seg_state, audience):
 # ============================================================
 
 app = Dash(__name__)
-app.title = "설비 모니터링 대시보드 — 와이어프레임"
+app.title = "설비 모니터링 대시보드"
 app.index_string = INDEX_STRING
 if not DEMO_MODE:
     install_auth(app.server)
@@ -2166,9 +2142,6 @@ app.layout = html.Div(
         dcc.Store(id="filter-store", data=DEFAULT_FILTERS, storage_type="local"),
         dcc.Store(id="seg-store", data=DEFAULT_SEG, storage_type="local"),
         dcc.Store(id="prio-sort-store", data=DEFAULT_PRIO_SORT),
-        # ②의 "‹ 이전 기계"/"다음 기계 ›"가 바꾸는, 현재 상세를 보고 있는 기계.
-        # prio-sort-store와 동일하게 세션 메모리(storage_type 미지정)로 둔다.
-        dcc.Store(id="selected-asset-store", data=load_asset_list()[0]),
         # ③ "부품군 진단" 표 행 클릭이 바꾸는, 현재 드릴다운 중인 부품군.
         # None이면 screen_3()이 정렬 후 1행(average_precision 최댓값)으로 대체한다.
         dcc.Store(id="selected-family-store", data=None),
@@ -2363,22 +2336,27 @@ app.layout = html.Div(
     Input("screen-tabs", "value"),
     Input("seg-store", "data"),
     Input("prio-sort-store", "data"),
-    Input("selected-asset-store", "data"),
+    Input("filter-store", "data"),
     Input("selected-family-store", "data"),
     State("actor-id-input", "value"),
 )
-def render_screen(active, seg_state, prio_sort, selected_asset, selected_family, actor_id):
+def render_screen(active, seg_state, prio_sort, filters, selected_family, actor_id):
     if ctx.triggered_id == "screen-tabs":
         record_action("ACT_TAB_OPEN", "화면 이동", actor_id=actor_id,
                       target_type="tab", target_id=active)
+    assets, start = _filter_scope(filters)
+    if active in ("1", "2", "4") and not assets:
+        return empty_state("조건에 맞는 기계 없음",
+                           "선택한 공장·기계 종류·기계 조합에 해당하는 기계가 없다", 1880, 400)
     kwargs = {"seg_state": seg_state, "audience": DEFAULT_AUDIENCE}
     if active == "1":
-        kwargs["prio_sort"] = prio_sort or DEFAULT_PRIO_SORT
+        kwargs.update(prio_sort=prio_sort or DEFAULT_PRIO_SORT, assets=assets, start=start)
     if active == "2":
-        kwargs["asset_tag"] = selected_asset
+        kwargs.update(asset_tag=_focus_asset(filters), start=start)
     if active == "3":
-        kwargs["asset_tag"] = selected_asset
-        kwargs["family"] = selected_family
+        kwargs.update(asset_tag=_focus_asset(filters, machine_only=True), family=selected_family)
+    if active == "4":
+        kwargs.update(assets=assets, start=start)
     try:
         return SCREEN_BUILDERS[active](**kwargs)
     except Exception as exc:
@@ -2387,16 +2365,17 @@ def render_screen(active, seg_state, prio_sort, selected_asset, selected_family,
         return html.Div("화면을 불러오지 못했습니다. 오류 로그를 확인해 주세요.")
 
 
-# ②의 "‹ 이전 기계"/"다음 기계 ›" — 알파벳순으로 순환 이동한다. nav_btn()이
-# 공용 ghost-btn과 다른 id 타입을 쓰므로 echo_action과 겹치지 않는다.
+# ②의 "‹ 이전 기계"/"다음 기계 ›" — 공장·기계 종류 필터 안에서 알파벳순으로
+# 순환하고, 고른 기계를 필터의 기계 값으로 쓴다(write_filters가 이어서 저장).
+# nav_btn()이 공용 ghost-btn과 다른 id 타입을 쓰므로 echo_action과 겹치지 않는다.
 @app.callback(
-    Output("selected-asset-store", "data"),
+    Output("machine-dd", "value", allow_duplicate=True),
     Input({"type": "machine-nav-btn", "index": ALL}, "n_clicks"),
-    State("selected-asset-store", "data"),
+    State("filter-store", "data"),
     State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def cycle_selected_asset(_clicks, current_asset, actor_id):
+def cycle_selected_asset(_clicks, filters, actor_id):
     triggered = ctx.triggered_id
     if not triggered:
         return no_update
@@ -2406,7 +2385,9 @@ def cycle_selected_asset(_clicks, current_asset, actor_id):
     # n_clicks가 실제로 올라간 경우에만 이동한다.
     if not ctx.triggered[0]["value"]:
         return no_update
-    assets = load_asset_list()
+    f = filters or DEFAULT_FILTERS
+    assets = filter_assets(f.get("plant"), f.get("machine_type"))
+    current_asset = _focus_asset(f)
     idx = assets.index(current_asset) if current_asset in assets else 0
     if triggered["index"] == "next":
         idx = (idx + 1) % len(assets)
@@ -2510,9 +2491,11 @@ def recolor_trend_chart(theme, _active_tab):
     Output({"type": "heatmap-chart", "index": ALL}, "figure"),
     Input("theme-store", "data"),
     Input("screen-tabs", "value"),
+    State("filter-store", "data"),
 )
-def recolor_heatmap_chart(theme, _active_tab):
-    return [_heatmap_figure(load_asset_failure_heatmap(), theme or "light")]
+def recolor_heatmap_chart(theme, _active_tab, filters):
+    assets, start = _filter_scope(filters)
+    return [_heatmap_figure(load_asset_failure_heatmap(assets, start), theme or "light")]
 
 
 # 화면① "기계 상태" 타일 10개의 스파크라인도 같은 방식으로 재색칠한다.
@@ -2522,25 +2505,26 @@ def recolor_heatmap_chart(theme, _active_tab):
     Output({"type": "spark-chart", "index": ALL}, "figure"),
     Input("theme-store", "data"),
     Input("screen-tabs", "value"),
+    State("filter-store", "data"),
 )
-def recolor_spark_charts(theme, _active_tab):
-    rows = load_screen1_machine_status()
+def recolor_spark_charts(theme, _active_tab, filters):
+    assets, _ = _filter_scope(filters)
+    rows = load_screen1_machine_status(assets)
     return [_spark_figure(r["sparkline"], theme or "light") for r in rows]
 
 
 # 화면② 스몰 멀티플도 같은 방식으로 재색칠한다. trend-chart와 id 타입을 나눠
-# 둬야 두 콜백의 Output 매칭 개수가 서로 섞이지 않는다. 기계 전환은 이미
-# render_screen이 화면②를 다시 그리므로 selected-asset-store는 State로만 읽는다.
+# 둬야 두 콜백의 Output 매칭 개수가 서로 섞이지 않는다. 기계·기간 전환은 이미
+# render_screen이 화면②를 다시 그리므로 filter-store는 State로만 읽는다.
 @app.callback(
     Output({"type": "smult-chart", "index": ALL}, "figure"),
     Input("theme-store", "data"),
     Input("screen-tabs", "value"),
-    State("selected-asset-store", "data"),
+    State("filter-store", "data"),
 )
-def recolor_smult_chart(theme, _active_tab, asset_tag):
-    assets = load_asset_list()
-    asset_tag = asset_tag if asset_tag in assets else assets[0]
-    return [_smult_figure(load_asset_sensor_series(asset_tag), theme or "light")]
+def recolor_smult_chart(theme, _active_tab, filters):
+    _, start = _filter_scope(filters)
+    return [_smult_figure(load_asset_sensor_series(_focus_asset(filters), start), theme or "light")]
 
 
 # 화면② "부품 출고 이력" 막대차트도 같은 방식으로 재색칠한다. smult-chart와
@@ -2549,12 +2533,11 @@ def recolor_smult_chart(theme, _active_tab, asset_tag):
     Output({"type": "parts-chart", "index": ALL}, "figure"),
     Input("theme-store", "data"),
     Input("screen-tabs", "value"),
-    State("selected-asset-store", "data"),
+    State("filter-store", "data"),
 )
-def recolor_parts_chart(theme, _active_tab, asset_tag):
-    assets = load_asset_list()
-    asset_tag = asset_tag if asset_tag in assets else assets[0]
-    return [_parts_figure(load_asset_parts_history(asset_tag), theme or "light")]
+def recolor_parts_chart(theme, _active_tab, filters):
+    _, start = _filter_scope(filters)
+    return [_parts_figure(load_asset_parts_history(_focus_asset(filters), start), theme or "light")]
 
 
 # ③ "부품군 진단" 드릴다운의 PR곡선·재발간격 차트도 같은 방식으로 재색칠한다.
@@ -2566,12 +2549,11 @@ def recolor_parts_chart(theme, _active_tab, asset_tag):
     Output({"type": "family-pr-chart", "index": ALL}, "figure"),
     Input("theme-store", "data"),
     Input("screen-tabs", "value"),
-    State("selected-asset-store", "data"),
+    State("filter-store", "data"),
     State("selected-family-store", "data"),
 )
-def recolor_family_pr_chart(theme, _active_tab, asset_tag, family):
-    assets = load_asset_list()
-    asset_tag = asset_tag if asset_tag in assets else assets[0]
+def recolor_family_pr_chart(theme, _active_tab, filters, family):
+    asset_tag = _focus_asset(filters, machine_only=True)
     valid_families = [r["part_family"] for r in load_asset_family_diagnosis(asset_tag)]
     family = family if family in valid_families else valid_families[0]
     pr_cm = load_family_pr_curve_and_confusion(asset_tag, family)
@@ -2582,12 +2564,11 @@ def recolor_family_pr_chart(theme, _active_tab, asset_tag, family):
     Output({"type": "family-recur-chart", "index": ALL}, "figure"),
     Input("theme-store", "data"),
     Input("screen-tabs", "value"),
-    State("selected-asset-store", "data"),
+    State("filter-store", "data"),
     State("selected-family-store", "data"),
 )
-def recolor_family_recur_chart(theme, _active_tab, asset_tag, family):
-    assets = load_asset_list()
-    asset_tag = asset_tag if asset_tag in assets else assets[0]
+def recolor_family_recur_chart(theme, _active_tab, filters, family):
+    asset_tag = _focus_asset(filters, machine_only=True)
     valid_families = [r["part_family"] for r in load_asset_family_diagnosis(asset_tag)]
     family = family if family in valid_families else valid_families[0]
     intervals = load_family_recurrence_intervals(asset_tag, family)
@@ -2629,7 +2610,8 @@ app.clientside_callback(
 
 
 # ------------------------------------------------------------
-# 필터 쓰기 — 드롭다운 / 기간 프리셋 / 초기화 → filter-store
+# 필터 쓰기 — 드롭다운 / 기간 / 초기화 → filter-store
+# 첫 렌더에는 저장된 필터(localStorage)를 드롭다운에 되돌려 놓는다.
 # ------------------------------------------------------------
 @app.callback(
     Output("filter-store", "data"),
@@ -2643,27 +2625,78 @@ app.clientside_callback(
     Input("reset-btn", "n_clicks"),
     State("filter-store", "data"),
     State("actor-id-input", "value"),
-    prevent_initial_call=True,
 )
 def write_filters(plant, machine_type, machine, _period_clicks, _reset_clicks, current, actor_id):
     trigger = ctx.triggered_id
-    new = dict(current or DEFAULT_FILTERS)
-    dd_reset = (no_update, no_update, no_update)
+    current = current or DEFAULT_FILTERS
+    new = dict(current)
+    dd_values = (no_update, no_update, no_update)
 
+    # 첫 렌더에 no_update를 돌려주면 filter-store만 입력으로 받는 콜백
+    # (render_filters·sync_filter_options)의 첫 호출을 Dash가 건너뛴다 — 값을 그대로 다시 쓴다.
+    if trigger is None:
+        return new, new.get("plant"), new.get("machine_type"), new.get("machine")
     if trigger == "reset-btn":
         new = dict(DEFAULT_FILTERS)
-        dd_reset = (None, None, None)
+        dd_values = (None, None, None)
     elif isinstance(trigger, dict) and trigger.get("type") == "period-btn":
         new["period_index"] = trigger["index"]
     else:
-        new["plant"] = plant
-        new["machine_type"] = machine_type
-        new["machine"] = machine
+        new.update(plant=plant, machine_type=machine_type, machine=machine)
+        # 공장·기계 종류를 바꿔 선택한 기계가 범위를 벗어나면 기계 선택을 푼다.
+        if machine and machine not in filter_assets(plant, machine_type):
+            new["machine"] = None
+            dd_values = (no_update, no_update, None)
 
-    if trigger == "reset-btn" or (isinstance(trigger, dict) and trigger.get("type") == "period-btn") or trigger in ("plant-dd", "machine-type-dd", "machine-dd"):
-        record_action("ACT_FILTER_CHANGE", "조회 조건 변경", actor_id=actor_id,
-                      target_type="filter", target_id=str(trigger)[:100], detail=new)
-    return new, *dd_reset
+    if new == current:
+        return no_update, *dd_values
+    record_action("ACT_FILTER_CHANGE", "조회 조건 변경", actor_id=actor_id,
+                  target_type="filter", target_id=str(trigger)[:100], detail=new)
+    return new, *dd_values
+
+
+# 공장·기계 종류가 서로의 선택지를, 둘이 함께 기계 선택지를 좁힌다 —
+# 해당 기계가 없는 조합은 고를 수 없다.
+@app.callback(
+    Output("plant-dd", "options"),
+    Output("machine-type-dd", "options"),
+    Output("machine-dd", "options"),
+    Input("filter-store", "data"),
+)
+def sync_filter_options(data):
+    f = data or DEFAULT_FILTERS
+    catalog = load_asset_catalog()
+    by_type = catalog[catalog["machine_type"].eq(f["machine_type"])] if f.get("machine_type") else catalog
+    by_plant = catalog[catalog["plant_code"].eq(f["plant"])] if f.get("plant") else catalog
+
+    def options(values):
+        return [{"label": v, "value": v} for v in values]
+
+    return (options(sorted(by_type["plant_code"].unique())),
+            options(sorted(by_plant["machine_type"].unique())),
+            options(filter_assets(f.get("plant"), f.get("machine_type"))))
+
+
+# 화면③ 모델 지표는 고정 평가 구간 전체 결과라 공장·기계 종류·기간 필터를
+# 적용하지 않는다 — 해당 컨트롤을 끄고 이유를 적는다. 기계 필터는 부품군
+# 진단 과제에서만 쓴다.
+@app.callback(
+    Output("plant-dd", "disabled"),
+    Output("machine-type-dd", "disabled"),
+    Output("machine-dd", "disabled"),
+    Output({"type": "period-btn", "index": ALL}, "disabled"),
+    Output("filter-scope-note", "children"),
+    Input("screen-tabs", "value"),
+    Input("seg-store", "data"),
+)
+def apply_filter_scope(active, seg_state):
+    period_count = len(PERIOD_PRESETS)
+    if active != "3":
+        return False, False, False, [False] * period_count, ""
+    family_task = (seg_state or DEFAULT_SEG).get("task", 0) == 1
+    note_text = ("모델 지표는 고정 평가 구간 전체 결과라 공장·기계 종류·기간 필터 미적용"
+                 + ("" if family_task else " · 기계 필터는 부품군 진단 과제에만 적용"))
+    return True, True, not family_task, [True] * period_count, note_text
 
 
 # ------------------------------------------------------------
@@ -2677,12 +2710,13 @@ def write_filters(plant, machine_type, machine, _period_clicks, _reset_clicks, c
 )
 def render_filters(data):
     data = data or DEFAULT_FILTERS
-    pi = data.get("period_index", DEFAULT_FILTERS["period_index"])
-    if not 0 <= pi < len(PERIOD_PRESETS):
-        pi = DEFAULT_FILTERS["period_index"]
+    pi = _period_index(data)
     styles = [period_btn_style(i == pi) for i in range(len(PERIOD_PRESETS))]
+    label, days = PERIOD_PRESETS[pi]
+    start = period_start(days)
+    period_text = label if start is None else f"{label} {start:%Y-%m-%d}~{load_data_reference_date()}"
     echo = (f"공장={data.get('plant') or '전체'} · 종류={data.get('machine_type') or '전체'} · "
-            f"기계={data.get('machine') or '전체'} · 기간={PERIOD_PRESETS[pi]}")
+            f"기계={data.get('machine') or '전체'} · 기간={period_text}")
     return styles, echo
 
 
@@ -2735,7 +2769,7 @@ def echo_action(_clicks, actor_id):
 
 
 # ------------------------------------------------------------
-# ① KPI "종합 고장율" 드릴다운 — 클릭할 때마다 "점검 우선순위" 표 정렬을
+# ① KPI "위험 기준선 초과 비율" 드릴다운 — 클릭할 때마다 "점검 우선순위" 표 정렬을
 # 등급가중 고장점수 ↔ 기준선 초과 사이로 토글한다. 화면을 새로 만들지 않고
 # 이미 있는 표를 재사용해 원인(어느 공장·기계·부품)까지 이어지게 한다.
 # ------------------------------------------------------------
@@ -2754,9 +2788,9 @@ def drill_failrate_to_priority(n_clicks_list, current, actor_id):
         return no_update, no_update
     current = current or DEFAULT_PRIO_SORT
     new_sort_by = "grade" if current.get("sort_by") == "threshold" else "threshold"
-    msg = ("'종합 고장율' 클릭 → 점검 우선순위를 기준선 초과 기준으로 정렬"
+    msg = ("'위험 기준선 초과 비율' 클릭 → 점검 우선순위를 기준선 초과 기준으로 정렬"
            if new_sort_by == "threshold" else
-           "'종합 고장율' 다시 클릭 → 점검 우선순위를 등급가중 고장점수 기준으로 복귀")
+           "'위험 기준선 초과 비율' 다시 클릭 → 점검 우선순위를 등급가중 고장점수 기준으로 복귀")
     new_state = {"sort_by": new_sort_by, "direction": current.get("direction", "desc")}
     record_action("ACT_PRIORITY_SORT", "점검 우선순위 정렬", actor_id=actor_id,
                   target_type="priority", target_id=f"{new_sort_by}:{new_state['direction']}")
@@ -2847,17 +2881,19 @@ def export_report(_run, _close, export_value, filters, seg_state, actor_id):
     Output({"type": "dtable-footer", "index": MATCH}, "children"),
     Input({"type": "dtable", "index": MATCH}, "page_current"),
     Input({"type": "dtable", "index": MATCH}, "sort_by"),
+    State("filter-store", "data"),
     State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def update_dtable_page(page_current, sort_by, actor_id):
+def update_dtable_page(page_current, sort_by, filters, actor_id):
     dataset_key = ctx.triggered_id["index"]
     sort_col = sort_by[0]["column_id"] if sort_by else None
     sort_dir = sort_by[0]["direction"] if sort_by else "asc"
     triggered_prop = ctx.triggered[0]["prop_id"].rsplit(".", 1)[-1] if ctx.triggered else None
     page = 0 if triggered_prop == "sort_by" else (page_current or 0)
     try:
-        result = load_table_page(dataset_key, sort_col, sort_dir, page)
+        assets, start = _filter_scope(filters)
+        result = load_table_page(dataset_key, sort_col, sort_dir, page, assets=assets, start=start)
     except Exception as exc:
         log_failure("ACT_DATA_QUERY", "데이터 표 조회", exc, actor_id=actor_id,
                     source="wireframe_app.update_dtable_page", target_id=dataset_key)
@@ -2873,10 +2909,11 @@ def update_dtable_page(page_current, sort_by, actor_id):
 @app.callback(
     Output("table-download", "data"),
     Input({"type": "csv-export-btn", "index": ALL}, "n_clicks"),
+    State("filter-store", "data"),
     State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def export_dtable_csv(_clicks, actor_id):
+def export_dtable_csv(_clicks, filters, actor_id):
     # 화면이 다시 그려지면 버튼이 n_clicks=0으로 재생성되며 이 콜백이 한 번
     # 더 불린다 — write_seg와 동일하게 값이 0인 호출은 무시한다.
     trig = ctx.triggered[0] if ctx.triggered else None
@@ -2889,7 +2926,8 @@ def export_dtable_csv(_clicks, actor_id):
                       block_reason="지원하지 않는 데이터셋")
         return no_update
     try:
-        csv_bytes, filename = export_table_csv(dataset_key)
+        assets, start = _filter_scope(filters)
+        csv_bytes, filename = export_table_csv(dataset_key, assets=assets, start=start)
     except Exception as exc:
         log_failure("ACT_CSV_EXPORT", "CSV 다운로드", exc, actor_id=actor_id,
                     source="wireframe_app.export_dtable_csv", target_id=dataset_key)

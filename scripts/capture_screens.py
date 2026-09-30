@@ -2,7 +2,7 @@
 
     python -m scripts.capture_screens [--out docs/images] [--port 8073]
 
-필요: pip install playwright && playwright install chromium
+필요: pip install -r requirements-dev.txt && playwright install chromium
 점검: 화면별 innerText의 금지 패턴 건수, 문서 가로 스크롤(scrollWidth > clientWidth) 여부,
       서버 로그의 DB 접속 오류·401·503.
 """

@@ -126,19 +126,61 @@ def _daily() -> pd.DataFrame:
     return add_asset_severity(daily, high_risk_threshold=HIGH_RISK_THRESHOLD)
 
 
+def period_start(days: int | None) -> pd.Timestamp | None:
+    """필터바 기간 — 데이터 최신일을 포함한 최근 ``days``일의 시작일. None이면 전체 기간."""
+    if days is None:
+        return None
+    return _load_raw()[DATE_COLUMN].max() - pd.Timedelta(days=days - 1)
+
+
+@lru_cache(maxsize=1)
+def load_asset_catalog() -> pd.DataFrame:
+    """기계별 공장·기계 종류(asset_tag 오름차순) — 필터바 선택지와 필터 대상 계산용."""
+    return (
+        _load_raw()[[ASSET_COLUMN, PLANT_COLUMN, MACHINE_COLUMN]]
+        .drop_duplicates(subset=[ASSET_COLUMN])
+        .sort_values(ASSET_COLUMN)
+        .reset_index(drop=True)
+    )
+
+
+def filter_assets(plant: str | None = None, machine_type: str | None = None,
+                  machine: str | None = None) -> list[str]:
+    """필터바 공장·기계 종류·기계 조건에 맞는 기계 태그(오름차순). None은 조건 없음."""
+    catalog = load_asset_catalog()
+    for column, value in ((PLANT_COLUMN, plant), (MACHINE_COLUMN, machine_type), (ASSET_COLUMN, machine)):
+        if value:
+            catalog = catalog[catalog[column].eq(value)]
+    return catalog[ASSET_COLUMN].tolist()
+
+
+def _scoped(frame: pd.DataFrame, assets: list[str] | None = None,
+            start: pd.Timestamp | None = None) -> pd.DataFrame:
+    """``assets``(None = 전체 기계)·``start``(None = 전체 기간)로 행을 거른다."""
+    if assets is not None:
+        frame = frame[frame[ASSET_COLUMN].isin(assets)]
+    if start is not None:
+        frame = frame[frame[DATE_COLUMN] >= start]
+    return frame
+
+
 def _last_failure_date_by_asset(daily: pd.DataFrame) -> pd.Series:
     """자산별 failure_points > 0인 가장 최근 날짜 (전체 기간 내)."""
     failed_days = daily[daily["failure_points"] > 0]
     return failed_days.groupby(ASSET_COLUMN)[DATE_COLUMN].max()
 
 
-def load_screen1_kpis() -> dict:
-    """화면 ① KPI 타일 6개의 값을 계산한다 (필터 미반영, 전체 스냅샷)."""
-    raw = _load_raw()
-    daily = _daily()
+def load_screen1_kpis(assets: list[str] | None = None, start: pd.Timestamp | None = None) -> dict:
+    """화면 ① KPI 타일 값을 계산한다.
+
+    ``assets``는 모든 값에, ``start``는 고장 표시 기계·일과 부품 출고 금액에만
+    적용한다. 나머지는 데이터 최신일(기준일) 스냅샷이다.
+    """
+    raw = _scoped(_load_raw(), assets)
+    daily = _scoped(_daily(), assets)
 
     observed_machines = int(raw[ASSET_COLUMN].nunique())
-    failure_machine_days = int((daily["failure_points"] > 0).sum())
+    failure_machine_days = int((_scoped(daily, start=start)["failure_points"] > 0).sum())
 
     latest_date = daily[DATE_COLUMN].max()
     latest = daily[daily[DATE_COLUMN].eq(latest_date)]
@@ -153,7 +195,7 @@ def load_screen1_kpis() -> dict:
         "failure_rate_pct": failure_rate_pct,
         "avg_power_kw": float(latest["power_consumption_kw"].mean()),
         "max_bearing_temp": float(latest["temp_bearing_degC"].max()),
-        "parts_issue_value_inr": float(raw["issue_value_inr"].sum()),
+        "parts_issue_value_inr": float(_scoped(raw, start=start)["issue_value_inr"].sum()),
     }
 
 
@@ -421,7 +463,8 @@ def load_failure_trend() -> pd.DataFrame:
     return trend.sort_values(DATE_COLUMN).reset_index(drop=True)
 
 
-def load_priority_table(sort_by: str = "grade", direction: str = "desc") -> list[dict]:
+def load_priority_table(sort_by: str = "grade", direction: str = "desc",
+                        assets: list[str] | None = None) -> list[dict]:
     """"점검 우선순위" 표의 행 데이터를 만든다.
 
     Args:
@@ -429,9 +472,10 @@ def load_priority_table(sort_by: str = "grade", direction: str = "desc") -> list
             ``"threshold"``(기준선 초과 우선, 동률이면 고장점수 내림차순).
         direction: ``"desc"``(기본) 또는 ``"asc"`` — sort_by 기준으로 정렬한
             뒤 전체 순서를 뒤집는다. rank는 이 최종 순서 기준으로 매긴다.
+        assets: 대상 기계 태그 목록. None이면 전체 기계.
     """
-    raw = _load_raw()
-    daily = _daily()
+    raw = _scoped(_load_raw(), assets)
+    daily = _scoped(_daily(), assets)
 
     latest_date = daily[DATE_COLUMN].max()
     latest = daily[daily[DATE_COLUMN].eq(latest_date)].set_index(ASSET_COLUMN)
@@ -492,15 +536,18 @@ def load_priority_table(sort_by: str = "grade", direction: str = "desc") -> list
     return rows
 
 
-def load_screen1_machine_status() -> list[dict]:
-    """화면 ① "기계 상태" 타일 10개 — 자산별 최신 등급·등급가중 고장점수와
+def load_screen1_machine_status(assets: list[str] | None = None) -> list[dict]:
+    """화면 ① "기계 상태" 타일 — 자산별 최신 등급·등급가중 고장점수와
     최근 30일 고장점수 스파크라인. asset_tag 오름차순(기계 드롭다운과 동일 순서).
+    ``assets``가 None이면 전체 기계.
     """
     daily = _daily()
     latest_date = daily[DATE_COLUMN].max()
 
     rows = []
     for asset_tag in load_asset_list():
+        if assets is not None and asset_tag not in assets:
+            continue
         asset_daily = daily[daily[ASSET_COLUMN].eq(asset_tag)].sort_values(DATE_COLUMN)
         info = _load_raw()[_load_raw()[ASSET_COLUMN].eq(asset_tag)].iloc[0]
         latest_row = asset_daily[asset_daily[DATE_COLUMN].eq(latest_date)].iloc[0]
@@ -516,11 +563,12 @@ def load_screen1_machine_status() -> list[dict]:
     return rows
 
 
-def load_screen1_power_by_machine() -> list[dict]:
-    """화면 ① "기계별 평균 소비 전력" — 전체 기간 자산별 평균 소비전력(kW),
-    내림차순 10행.
+def load_screen1_power_by_machine(assets: list[str] | None = None,
+                                  start: pd.Timestamp | None = None) -> list[dict]:
+    """화면 ① "기계별 평균 소비 전력" — 기간(``start`` 이후, None이면 전체 기간)
+    자산별 평균 소비전력(kW), 내림차순.
     """
-    daily = _daily()
+    daily = _scoped(_daily(), assets, start)
     avg_power = daily.groupby(ASSET_COLUMN)["power_consumption_kw"].mean()
     avg_power = avg_power.sort_values(ascending=False)
     return [
@@ -529,17 +577,21 @@ def load_screen1_power_by_machine() -> list[dict]:
     ]
 
 
-def load_asset_failure_heatmap() -> pd.DataFrame:
+def load_asset_failure_heatmap(assets: list[str] | None = None,
+                               start: pd.Timestamp | None = None) -> pd.DataFrame:
     """화면 ① "고장 표시 히트맵" — 자산 × 월(YYYY-MM) 그레인, 셀 값은 그 달에
     고장 표시된 부품-일 행 수 합계(CURRENT_TARGET == 1인 원자료 행 수).
+
+    ``assets``(None = 전체 기계)와 ``start``(None = 전체 기간)로 범위를 좁힌다.
+    기간이 월 중간에서 시작하면 그 달 칸은 기간 안의 행만 센다.
 
     Returns:
         asset_tag, period("YYYY-MM"), failed_part_count 3열. 데이터가 없는
         자산×월 조합도 0으로 채워 히트맵 격자에 빈 칸이 생기지 않게 한다.
     """
-    raw = _load_raw()
+    raw = _scoped(_load_raw(), start=start)
     periods = sorted(raw[DATE_COLUMN].dt.to_period("M").astype(str).unique())
-    assets = load_asset_list()
+    assets = [a for a in load_asset_list() if assets is None or a in assets]
 
     failed = raw.loc[raw[CURRENT_TARGET].eq(1)].copy()
     failed["period"] = failed[DATE_COLUMN].dt.to_period("M").astype(str)
@@ -559,8 +611,11 @@ def load_asset_list() -> list[str]:
     return sorted(raw[ASSET_COLUMN].unique().tolist())
 
 
-def load_asset_detail_kpis(asset_tag: str) -> dict:
+def load_asset_detail_kpis(asset_tag: str, start: pd.Timestamp | None = None) -> dict:
     """화면 ② 상단 스트립의 값을 계산한다 (선택된 자산 1개 기준).
+
+    고장 표시 일수·평균 소비 전력은 기간(``start`` 이후, None이면 전체 기간)
+    기준이고, 등급·위험도·최근 고장 표시일은 기준일 스냅샷이다.
 
     Raises:
         ValueError: asset_tag가 데이터에 없을 때.
@@ -583,10 +638,7 @@ def load_asset_detail_kpis(asset_tag: str) -> dict:
         last_failure_date.strftime("%Y-%m-%d") if pd.notna(last_failure_date) else None
     )
 
-    window_start = latest_date - pd.Timedelta(days=29)
-    recent_30d = asset_daily[
-        asset_daily[DATE_COLUMN].between(window_start, latest_date, inclusive="both")
-    ]
+    period_daily = _scoped(asset_daily, start=start)
 
     return {
         "asset_tag": asset_tag,
@@ -597,13 +649,14 @@ def load_asset_detail_kpis(asset_tag: str) -> dict:
         ),
         "risk_score": float(latest_row["failure_points"]),
         "last_failure_date": last_failure_date_str,
-        "failure_days_count": int((asset_daily["failure_points"] > 0).sum()),
-        "avg_power_30d_kw": float(recent_30d["power_consumption_kw"].mean()),
+        "failure_days_count": int((period_daily["failure_points"] > 0).sum()),
+        "avg_power_kw": float(period_daily["power_consumption_kw"].mean()),
     }
 
 
-def load_asset_sensor_series(asset_tag: str) -> pd.DataFrame:
-    """화면 ② "센서 8종 스몰 멀티플" — 선택 자산의 전체 기간 센서 시계열.
+def load_asset_sensor_series(asset_tag: str, start: pd.Timestamp | None = None) -> pd.DataFrame:
+    """화면 ② "센서 8종 스몰 멀티플" — 선택 자산의 기간(``start`` 이후, None이면
+    전체 기간) 센서 시계열.
 
     Returns:
         transaction_date, 센서 8종(SENSOR_COLUMNS 순서), is_failure_day
@@ -617,8 +670,8 @@ def load_asset_sensor_series(asset_tag: str) -> pd.DataFrame:
     if asset_tag not in assets:
         raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
 
-    daily = _daily()
-    asset_daily = daily[daily[ASSET_COLUMN].eq(asset_tag)].sort_values(DATE_COLUMN)
+    daily = _scoped(_daily(), [asset_tag], start)
+    asset_daily = daily.sort_values(DATE_COLUMN)
 
     series = asset_daily[[DATE_COLUMN, *SENSOR_COLUMNS]].reset_index(drop=True)
     series["is_failure_day"] = (asset_daily["failure_points"] > 0).to_numpy()
@@ -626,12 +679,13 @@ def load_asset_sensor_series(asset_tag: str) -> pd.DataFrame:
     return series
 
 
-def load_asset_parts_history(asset_tag: str) -> pd.DataFrame:
-    """화면 ② "부품 출고 이력" — 선택 자산의 부품별 출고 금액 합계 상위 10개.
+def load_asset_parts_history(asset_tag: str, start: pd.Timestamp | None = None) -> pd.DataFrame:
+    """화면 ② "부품 출고 이력" — 선택 자산의 기간(``start`` 이후, None이면 전체
+    기간) 부품별 출고 금액 합계 상위 10개.
 
     Returns:
         part_no, part_description, total_issue_value_inr 3열, 금액 내림차순
-        상위 10행.
+        상위 10행. 기간 안에 출고 금액이 0인 부품은 넣지 않는다.
 
     Raises:
         ValueError: asset_tag가 데이터에 없을 때.
@@ -640,14 +694,14 @@ def load_asset_parts_history(asset_tag: str) -> pd.DataFrame:
     if asset_tag not in assets:
         raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
 
-    raw = _load_raw()
-    asset_raw = raw[raw[ASSET_COLUMN].eq(asset_tag)]
+    asset_raw = _scoped(_load_raw(), [asset_tag], start)
 
     totals = (
         asset_raw.groupby([PART_COLUMN, "part_description"])["issue_value_inr"]
         .sum()
         .reset_index()
         .rename(columns={"issue_value_inr": "total_issue_value_inr"})
+        .query("total_issue_value_inr > 0")
         .sort_values("total_issue_value_inr", ascending=False)
         .head(10)
         .reset_index(drop=True)
@@ -1060,7 +1114,8 @@ def _format_table_value(kind: str, value) -> str:
 
 
 def load_table_page(
-    dataset: str, sort_col: str | None, sort_dir: str, page: int, page_size: int = 16
+    dataset: str, sort_col: str | None, sort_dir: str, page: int, page_size: int = 16,
+    assets: list[str] | None = None, start: pd.Timestamp | None = None,
 ) -> dict:
     """화면 ④ "데이터 조회" 표의 한 페이지를 계산한다.
 
@@ -1069,6 +1124,7 @@ def load_table_page(
         sort_col: 정렬 기준 컬럼id, ``None``이면 정렬하지 않는다.
         sort_dir: ``"asc"`` 또는 ``"desc"``.
         page: 0부터 시작하는 페이지 번호(범위를 벗어나면 클램프한다).
+        assets, start: 필터바 대상 기계·기간 시작일. None이면 조건 없음.
 
     Returns:
         ``columns``(id/label/align), ``data``(포맷된 문자열 딕셔너리 리스트),
@@ -1080,7 +1136,7 @@ def load_table_page(
     if dataset not in _TABLE_SOURCES:
         raise ValueError(f"알 수 없는 dataset입니다: {dataset}")
     loader, columns = _TABLE_SOURCES[dataset]
-    frame = loader()
+    frame = _scoped(loader(), assets, start)
 
     if sort_col:
         sort_field = _SORT_FIELD_OVERRIDE.get(sort_col, sort_col)
@@ -1109,8 +1165,10 @@ def load_table_page(
     }
 
 
-def export_table_csv(dataset: str) -> tuple[bytes, str]:
-    """화면 ④ CSV 내보내기 — 선택한 데이터셋 전체(정렬·페이지 무관)를 만든다.
+def export_table_csv(dataset: str, assets: list[str] | None = None,
+                     start: pd.Timestamp | None = None) -> tuple[bytes, str]:
+    """화면 ④ CSV 내보내기 — 선택한 데이터셋에서 필터(``assets``·``start``)에
+    맞는 행 전체(정렬·페이지 무관)를 만든다.
 
     숫자는 반올림하지 않은 원래 값, 날짜는 YYYY-MM-DD, wo_type 빈 값은
     "작업 없음", 등급은 한글 라벨로 내보낸다. UTF-8 BOM(utf-8-sig)을 쓴다.
@@ -1121,7 +1179,7 @@ def export_table_csv(dataset: str) -> tuple[bytes, str]:
     if dataset not in _TABLE_SOURCES:
         raise ValueError(f"알 수 없는 dataset입니다: {dataset}")
     loader, columns = _TABLE_SOURCES[dataset]
-    frame = loader()
+    frame = _scoped(loader(), assets, start)
 
     export_cols = [col_id for col_id, _, _, _ in columns]
     export_frame = frame[export_cols].copy()

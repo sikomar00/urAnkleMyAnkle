@@ -334,3 +334,54 @@ def test_part_failure_at_threshold_defaults_to_selected_model():
 def test_part_failure_at_threshold_rejects_unknown_model():
     with pytest.raises(ValueError):
         dd.load_part_failure_at_threshold('not_a_model', 0.5)
+
+
+# ------------------------------------------------------------
+# 필터바(공장·기계 종류·기계·기간) 적용
+# ------------------------------------------------------------
+def test_period_start_counts_reference_day_inclusive():
+    import pandas as pd
+    assert dd.period_start(30) == pd.Timestamp('2024-12-03')
+    assert dd.period_start(None) is None
+
+
+def test_filter_assets_by_plant_type_and_machine():
+    assert dd.filter_assets(plant='CHN-02') == ['AST-2031', 'AST-3008', 'AST-3019']
+    assert dd.filter_assets(plant='CHN-02', machine_type='Belt Conveyor') == ['AST-3008', 'AST-3019']
+    assert dd.filter_assets(plant='CHN-02', machine='AST-1041') == []
+    assert dd.filter_assets() == dd.load_asset_list()
+
+
+def test_priority_table_scoped_to_plant():
+    rows = dd.load_priority_table('grade', 'desc', assets=dd.filter_assets(plant='CHN-02'))
+    assert [r['asset_tag'] for r in rows] == ['AST-2031', 'AST-3019', 'AST-3008']
+    assert [r['rank'] for r in rows] == [1, 2, 3]
+
+
+def test_sensor_series_scoped_to_last_30_days():
+    import pandas as pd
+    series = dd.load_asset_sensor_series('AST-2031', start=dd.period_start(30))
+    assert len(series) == 30
+    assert series['transaction_date'].min() == pd.Timestamp('2024-12-03')
+    assert series['transaction_date'].max() == pd.Timestamp('2025-01-01')
+
+
+def test_screen1_loaders_scoped_to_assets_and_period():
+    chn = dd.filter_assets(plant='CHN-02')
+    start = dd.period_start(30)
+    kpis = dd.load_screen1_kpis(assets=chn, start=start)
+    assert kpis['observed_machines'] == 3
+    assert kpis['failure_machine_days'] <= dd.load_screen1_kpis(assets=chn)['failure_machine_days']
+    assert [r['asset_tag'] for r in dd.load_screen1_machine_status(assets=chn)] == chn
+    assert {r['asset_tag'] for r in dd.load_screen1_power_by_machine(assets=chn, start=start)} == set(chn)
+    heat = dd.load_asset_failure_heatmap(assets=chn, start=start)
+    assert sorted(heat['asset_tag'].unique()) == chn
+    assert sorted(heat['period'].unique()) == ['2024-12', '2025-01']
+
+
+def test_table_page_and_csv_scoped_to_filters():
+    start = dd.period_start(30)
+    page = dd.load_table_page('daily', None, 'asc', 0, assets=['AST-2031'], start=start)
+    assert page['total_rows'] == 30
+    csv_bytes, _ = dd.export_table_csv('daily', assets=['AST-2031'], start=start)
+    assert csv_bytes.decode('utf-8-sig').strip().count('\n') == 30  # 헤더 + 30행
