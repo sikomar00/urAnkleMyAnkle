@@ -13,8 +13,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.metrics import confusion_matrix, precision_recall_curve
 
 from .asset_features import add_asset_severity, build_asset_daily
+from .family_features import FAMILY_NAMES, build_family_daily
 from .industrial_data import (
     ASSET_COLUMN,
     CURRENT_TARGET,
@@ -29,6 +31,44 @@ from .industrial_data import (
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_PATH = (
     PROJECT_ROOT / "data" / "raw" / "synthetic_industrial_machine_data.csv"
+)
+
+# 화면 ③ "현재 고장 표시 분류" 과제의 모델 비교 지표 원본.
+DEFAULT_CLASSIFICATION_METRICS_PATH = (
+    PROJECT_ROOT / "outputs" / "current_state" / "metrics.csv"
+)
+CLASSIFICATION_METRIC_COLUMNS = [
+    "accuracy", "precision", "recall", "f1", "roc_auc", "average_precision",
+]
+
+# 화면 ③ "현재 고장 표시 분류" 과제의 테스트 구간 원자료 예측 로그(PR곡선·혼동행렬용).
+DEFAULT_CLASSIFICATION_PREDICTIONS_PATH = (
+    PROJECT_ROOT / "outputs" / "current_state" / "test_predictions.csv"
+)
+
+# 화면 ③ "부품군 진단" 과제의 자산별 부품군(9종) 이상탐지 지표 원본.
+DEFAULT_FAMILY_METRICS_PATH = (
+    PROJECT_ROOT / "outputs" / "family_current" / "metrics.csv"
+)
+FAMILY_DIAGNOSIS_METRIC_COLUMNS = [
+    "support", "positive_rate", "precision", "recall", "average_precision", "roc_auc",
+]
+
+# 화면 ③ "부품 고장 탐지" 과제 원본. pf_within_7d(평가구간 2024-07-21~2024-12-25,
+# 부품·일 그레인, 향후 7일 내 고장 여부 이진분류)를 쓴다 — 후보(pf_next_day/
+# pf_within_3d/pf_count_7d/pf_first_day_class) 중 유일하게 두 모델 모두
+# Precision·Recall이 0이 아닌 결과를 낸다(나머지는 임계값 0.5에서 퇴화된
+# 예측이라 데모에 부적합).
+DEFAULT_PART_FAILURE_DIR = PROJECT_ROOT / "outputs" / "pf_within_7d"
+PART_FAILURE_METRIC_COLUMNS = ["average_precision", "precision", "recall", "f1"]
+
+# 화면 ③ "부품군 진단" 드릴다운(PR곡선·혼동행렬) 원본 — 일별 예측 로그.
+DEFAULT_FAMILY_TEST_PREDICTIONS_PATH = (
+    PROJECT_ROOT / "outputs" / "family_current" / "test_predictions.csv"
+)
+# 화면 ③ "부품군 진단" 드릴다운(변수중요도) 원본.
+DEFAULT_FAMILY_FEATURE_IMPORTANCE_PATH = (
+    PROJECT_ROOT / "outputs" / "family_current" / "feature_importance.csv"
 )
 
 # 화면 ③ 세그먼트 컨트롤의 위험 기준선(12/13/14) 중 기본값과 동일하게 고정한다.
@@ -129,6 +169,235 @@ def load_screen5_kpis() -> dict:
 
 
 @lru_cache(maxsize=1)
+def load_current_classification_metrics() -> dict:
+    """화면 ③ "현재 고장 표시 분류" 과제의 모델 비교 지표(prior vs
+    hist_gradient_boosting). scope_kind == "overall" 행만 사용한다.
+
+    ``load_failure_trend()``와 같은 방식으로 캐싱한다 — 테마 전환·탭 전환
+    시마다 재계산하지 않기 위함.
+
+    Raises:
+        FileNotFoundError: outputs/current_state/metrics.csv가 없을 때.
+        ValueError: overall 스코프에 필요한 모델이 없을 때.
+    """
+    path = DEFAULT_CLASSIFICATION_METRICS_PATH
+    if not path.exists():
+        raise FileNotFoundError(
+            "분류 지표 metrics.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            "python -m src.industrial_training --mode current"
+        )
+    metrics = pd.read_csv(path)
+    overall = metrics.loc[metrics["scope_kind"].eq("overall")]
+    result = {}
+    for model in ("prior", "hist_gradient_boosting"):
+        row = overall.loc[overall["model"].eq(model)]
+        if row.empty:
+            raise ValueError(f"metrics.csv에 필요한 모델이 없습니다: {model}")
+        r = row.iloc[0]
+        result[model] = {col: float(r[col]) for col in CLASSIFICATION_METRIC_COLUMNS}
+    return result
+
+
+@lru_cache(maxsize=1)
+def _current_classification_predictions_raw() -> pd.DataFrame:
+    path = DEFAULT_CLASSIFICATION_PREDICTIONS_PATH
+    if not path.exists():
+        raise FileNotFoundError(
+            "분류 예측 로그 test_predictions.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            "python -m src.industrial_training --mode current"
+        )
+    return pd.read_csv(path)
+
+
+def load_current_classification_pr_curve_and_confusion(model: str = "hist_gradient_boosting") -> dict:
+    """화면 ③ "현재 고장 표시 분류" 과제 — 선택 모델의 PR곡선 좌표와 혼동행렬
+    (scope_kind=="overall" 전체 테스트 구간 기준).
+
+    Raises:
+        ValueError: model이 prior/hist_gradient_boosting이 아닐 때.
+    """
+    if model not in ("prior", "hist_gradient_boosting"):
+        raise ValueError(f"알 수 없는 model입니다: {model}")
+
+    metrics = pd.read_csv(DEFAULT_CLASSIFICATION_METRICS_PATH)
+    overall_row = metrics.loc[metrics["scope_kind"].eq("overall") & metrics["model"].eq(model)].iloc[0]
+    cutoff = float(overall_row["threshold"])
+    confusion = {
+        "tn": int(overall_row["true_negative"]), "fp": int(overall_row["false_positive"]),
+        "fn": int(overall_row["false_negative"]), "tp": int(overall_row["true_positive"]),
+    }
+
+    preds = _current_classification_predictions_raw()
+    sub = preds.loc[
+        preds["scope_kind"].eq("overall") & preds["scope_name"].eq("all") & preds["model"].eq(model)
+    ]
+    precision, recall, _ = precision_recall_curve(sub["breakdown_flag"], sub["risk_score"])
+
+    return {
+        "model": model,
+        "precision_curve": precision.tolist(),
+        "recall_curve": recall.tolist(),
+        "cutoff": cutoff,
+        "confusion": confusion,
+    }
+
+
+@lru_cache(maxsize=1)
+def _part_failure_overall_raw() -> pd.DataFrame:
+    path = DEFAULT_PART_FAILURE_DIR / "overall_results.csv"
+    if not path.exists():
+        raise FileNotFoundError(
+            "부품 고장 탐지 overall_results.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            "python -m src.pf_within_7d"
+        )
+    return pd.read_csv(path)
+
+
+def load_part_failure_metrics() -> dict:
+    """화면 ③ "부품 고장 탐지" 과제 — 모델별(로지스틱 회귀/랜덤 포레스트)
+    AP(PR_AUC)·정밀도·재현율·F1. Accuracy는 양성률이 낮아 부풀려지므로 넣지 않는다.
+    """
+    overall = _part_failure_overall_raw()
+    result = {}
+    for _, r in overall.iterrows():
+        result[r["model"]] = {
+            "average_precision": float(r["PR_AUC"]),
+            "precision": float(r["Precision"]),
+            "recall": float(r["Recall"]),
+            "f1": float(r["F1"]),
+        }
+    return result
+
+
+def _confusion_at_threshold(actual: pd.Series, score: pd.Series, threshold: float) -> dict:
+    """화면 ③ "판정 임계값 조정" 슬라이더 — 임의 임계값에서의 혼동행렬·지표를
+    즉시 재계산한다. 학습·평가를 다시 하지 않는다 — 이미 저장된 예측 확률을
+    다시 이진화할 뿐이다."""
+    predicted = (score >= threshold).astype(int)
+    tp = int(((predicted == 1) & (actual == 1)).sum())
+    fp = int(((predicted == 1) & (actual == 0)).sum())
+    fn = int(((predicted == 0) & (actual == 1)).sum())
+    tn = int(((predicted == 0) & (actual == 0)).sum())
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    recall = tp / (tp + fn) if (tp + fn) else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+    return {
+        "precision": precision, "recall": recall, "f1": f1,
+        "predicted_alerts": tp + fp, "false_alarms": fp, "missed_failures": fn,
+        "total_rows": tp + fp + fn + tn,
+    }
+
+
+def load_current_classification_at_threshold(model: str, threshold: float) -> dict:
+    """화면 ③ "판정 임계값 조정" — "현재 고장 표시 분류" 과제, 임의 임계값에서의
+    실시간 재계산.
+
+    Raises:
+        ValueError: model이 prior/hist_gradient_boosting이 아닐 때.
+    """
+    if model not in ("prior", "hist_gradient_boosting"):
+        raise ValueError(f"알 수 없는 model입니다: {model}")
+    preds = _current_classification_predictions_raw()
+    sub = preds.loc[
+        preds["scope_kind"].eq("overall") & preds["scope_name"].eq("all") & preds["model"].eq(model)
+    ]
+    return _confusion_at_threshold(sub["breakdown_flag"], sub["risk_score"], threshold)
+
+
+def load_part_failure_at_threshold(model: str | None, threshold: float) -> dict:
+    """화면 ③ "판정 임계값 조정" — "부품 고장 탐지" 과제, 임의 임계값에서의
+    실시간 재계산. ``model``이 ``None``이면 선택 모델을 쓴다.
+
+    Raises:
+        ValueError: model이 predictions.csv에 없을 때.
+    """
+    overall = _part_failure_overall_raw()
+    model = model or load_part_failure_selected_model()
+    if model not in overall["model"].to_numpy():
+        raise ValueError(f"알 수 없는 model입니다: {model}")
+    preds = _part_failure_predictions_raw()
+    sub = preds.loc[preds["model"].eq(model)]
+    return _confusion_at_threshold(sub["target"], sub["probability"], threshold)
+
+
+def load_current_classification_actual_rate(model: str = "hist_gradient_boosting") -> float:
+    """화면 ③ "모델 해석 요약" — "현재 고장 표시 분류" 과제의 실제 고장률
+    (테스트 구간 양성 비율). AP÷실제 고장률(무작위 기준 대비 배수) 계산에 쓴다.
+
+    Raises:
+        ValueError: model이 prior/hist_gradient_boosting이 아닐 때.
+    """
+    if model not in ("prior", "hist_gradient_boosting"):
+        raise ValueError(f"알 수 없는 model입니다: {model}")
+    metrics = pd.read_csv(DEFAULT_CLASSIFICATION_METRICS_PATH)
+    row = metrics.loc[metrics["scope_kind"].eq("overall") & metrics["model"].eq(model)].iloc[0]
+    return float(row["test_positive_rate"])
+
+
+def load_part_failure_actual_rate(model: str | None = None) -> float:
+    """화면 ③ "모델 해석 요약" — "부품 고장 탐지" 과제의 실제 고장률
+    (테스트 구간 양성 비율). ``model``이 ``None``이면 선택 모델을 쓴다.
+
+    Raises:
+        ValueError: model이 overall_results.csv에 없을 때.
+    """
+    overall = _part_failure_overall_raw()
+    model = model or load_part_failure_selected_model()
+    row = overall.loc[overall["model"].eq(model)]
+    if row.empty:
+        raise ValueError(f"알 수 없는 model입니다: {model}")
+    return float(row.iloc[0]["failure_rate"])
+
+
+def load_part_failure_selected_model() -> str:
+    """"선택 여부" 열의 기준 — AP(PR_AUC)가 가장 높은 모델을 선택 모델로 삼는다."""
+    metrics = load_part_failure_metrics()
+    return max(metrics, key=lambda m: metrics[m]["average_precision"])
+
+
+@lru_cache(maxsize=1)
+def _part_failure_predictions_raw() -> pd.DataFrame:
+    path = DEFAULT_PART_FAILURE_DIR / "predictions.csv"
+    if not path.exists():
+        raise FileNotFoundError(
+            "부품 고장 탐지 predictions.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            "python -m src.pf_within_7d"
+        )
+    return pd.read_csv(path)
+
+
+def load_part_failure_pr_curve_and_confusion(model: str | None = None) -> dict:
+    """화면 ③ "부품 고장 탐지" 과제 — 선택 모델의 PR곡선 좌표와 혼동행렬.
+
+    Args:
+        model: ``None``이면 :func:`load_part_failure_selected_model`이 고른 모델.
+
+    Raises:
+        ValueError: model이 overall_results.csv에 없을 때.
+    """
+    overall = _part_failure_overall_raw()
+    model = model or load_part_failure_selected_model()
+    row = overall.loc[overall["model"].eq(model)]
+    if row.empty:
+        raise ValueError(f"알 수 없는 model입니다: {model}")
+    r = row.iloc[0]
+    cutoff = float(r["probability_cutoff"])
+    confusion = {"tn": int(r["TN"]), "fp": int(r["FP"]), "fn": int(r["FN"]), "tp": int(r["TP"])}
+
+    preds = _part_failure_predictions_raw()
+    sub = preds.loc[preds["model"].eq(model)]
+    precision, recall, _ = precision_recall_curve(sub["target"], sub["probability"])
+
+    return {
+        "model": model,
+        "precision_curve": precision.tolist(),
+        "recall_curve": recall.tolist(),
+        "cutoff": cutoff,
+        "confusion": confusion,
+    }
+
+
+@lru_cache(maxsize=1)
 def load_failure_trend() -> pd.DataFrame:
     """화면 ⑤ "고장·위험 추세" — 일자별 고장 표시 건수 · 위험 기준선 초과 비율.
 
@@ -152,12 +421,14 @@ def load_failure_trend() -> pd.DataFrame:
     return trend.sort_values(DATE_COLUMN).reset_index(drop=True)
 
 
-def load_priority_table(sort_by: str = "grade") -> list[dict]:
+def load_priority_table(sort_by: str = "grade", direction: str = "desc") -> list[dict]:
     """"점검 우선순위" 표의 행 데이터를 만든다.
 
     Args:
         sort_by: ``"grade"``(등급가중 고장점수 내림차순, 기본) 또는
             ``"threshold"``(기준선 초과 우선, 동률이면 고장점수 내림차순).
+        direction: ``"desc"``(기본) 또는 ``"asc"`` — sort_by 기준으로 정렬한
+            뒤 전체 순서를 뒤집는다. rank는 이 최종 순서 기준으로 매긴다.
     """
     raw = _load_raw()
     daily = _daily()
@@ -213,10 +484,73 @@ def load_priority_table(sort_by: str = "grade") -> list[dict]:
         rows.sort(key=lambda row: (not row["threshold_exceeded"], -row["failure_points"]))
     else:
         rows.sort(key=lambda row: -row["failure_points"])
+    if direction == "asc":
+        rows.reverse()
 
     for rank, row in enumerate(rows, start=1):
         row["rank"] = rank
     return rows
+
+
+def load_screen1_machine_status() -> list[dict]:
+    """화면 ① "기계 상태" 타일 10개 — 자산별 최신 등급·등급가중 고장점수와
+    최근 30일 고장점수 스파크라인. asset_tag 오름차순(기계 드롭다운과 동일 순서).
+    """
+    daily = _daily()
+    latest_date = daily[DATE_COLUMN].max()
+
+    rows = []
+    for asset_tag in load_asset_list():
+        asset_daily = daily[daily[ASSET_COLUMN].eq(asset_tag)].sort_values(DATE_COLUMN)
+        info = _load_raw()[_load_raw()[ASSET_COLUMN].eq(asset_tag)].iloc[0]
+        latest_row = asset_daily[asset_daily[DATE_COLUMN].eq(latest_date)].iloc[0]
+        rows.append({
+            "asset_tag": asset_tag,
+            "machine_type": info[MACHINE_COLUMN],
+            "current_grade": SEVERITY_LABELS_KO.get(
+                str(latest_row["severity_level"]), str(latest_row["severity_level"])
+            ),
+            "risk_score": float(latest_row["failure_points"]),
+            "sparkline": asset_daily.tail(30)["failure_points"].astype(float).tolist(),
+        })
+    return rows
+
+
+def load_screen1_power_by_machine() -> list[dict]:
+    """화면 ① "기계별 평균 소비 전력" — 전체 기간 자산별 평균 소비전력(kW),
+    내림차순 10행.
+    """
+    daily = _daily()
+    avg_power = daily.groupby(ASSET_COLUMN)["power_consumption_kw"].mean()
+    avg_power = avg_power.sort_values(ascending=False)
+    return [
+        {"asset_tag": asset_tag, "avg_power_kw": float(value)}
+        for asset_tag, value in avg_power.items()
+    ]
+
+
+def load_asset_failure_heatmap() -> pd.DataFrame:
+    """화면 ① "고장 표시 히트맵" — 자산 × 월(YYYY-MM) 그레인, 셀 값은 그 달에
+    고장 표시된 부품-일 행 수 합계(CURRENT_TARGET == 1인 원자료 행 수).
+
+    Returns:
+        asset_tag, period("YYYY-MM"), failed_part_count 3열. 데이터가 없는
+        자산×월 조합도 0으로 채워 히트맵 격자에 빈 칸이 생기지 않게 한다.
+    """
+    raw = _load_raw()
+    periods = sorted(raw[DATE_COLUMN].dt.to_period("M").astype(str).unique())
+    assets = load_asset_list()
+
+    failed = raw.loc[raw[CURRENT_TARGET].eq(1)].copy()
+    failed["period"] = failed[DATE_COLUMN].dt.to_period("M").astype(str)
+    counts = failed.groupby([ASSET_COLUMN, "period"])[PART_COLUMN].count()
+
+    full_index = pd.MultiIndex.from_product([assets, periods], names=[ASSET_COLUMN, "period"])
+    counts = counts.reindex(full_index, fill_value=0)
+
+    heat = counts.reset_index().rename(columns={ASSET_COLUMN: "asset_tag", PART_COLUMN: "failed_part_count"})
+    heat["failed_part_count"] = heat["failed_part_count"].astype(int)
+    return heat[["asset_tag", "period", "failed_part_count"]]
 
 
 def load_asset_list() -> list[str]:
@@ -401,6 +735,179 @@ def load_asset_failure_onset_trend(asset_tag: str) -> dict:
         "dates": [d.strftime("%Y-%m-%d") for d in window[DATE_COLUMN]],
         "temp_bearing_degC": window["temp_bearing_degC"].tolist(),
     }
+
+
+@lru_cache(maxsize=1)
+def _family_metrics_raw() -> pd.DataFrame:
+    path = DEFAULT_FAMILY_METRICS_PATH
+    if not path.exists():
+        raise FileNotFoundError(
+            "부품군 진단 metrics.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            "python -m src.current_family_diagnosis "
+            "--data dataVerification/synthetic_industrial_machine_data.csv"
+        )
+    return pd.read_csv(path)
+
+
+def load_asset_family_diagnosis(asset_tag: str) -> list[dict]:
+    """화면 ③ "부품군 진단" 과제 — 선택 자산의 부품군 9종별 이상탐지 성능.
+
+    Raises:
+        ValueError: asset_tag가 데이터에 없거나, 부품군 9행이 정확히
+            나오지 않을 때.
+    """
+    assets = load_asset_list()
+    if asset_tag not in assets:
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+
+    metrics = _family_metrics_raw()
+    selected = metrics.loc[
+        metrics["scope_kind"].eq("asset_tag")
+        & metrics["scope_name"].eq(asset_tag)
+        & metrics["target"].eq("affected")
+        & metrics["threshold_policy"].eq("f1")
+        & metrics["split"].eq("test")
+    ]
+    if len(selected) != 9:
+        raise ValueError(f"{asset_tag}의 부품군 진단 행이 9개가 아닙니다: {len(selected)}개")
+
+    selected = selected.sort_values("average_precision", ascending=False)
+    return [
+        {
+            "part_family": r["part_family"],
+            "model": r["model"],
+            "support": int(r["support"]),
+            **{col: float(r[col]) for col in FAMILY_DIAGNOSIS_METRIC_COLUMNS if col != "support"},
+        }
+        for _, r in selected.iterrows()
+    ]
+
+
+def load_family_feature_importance(part_family: str) -> list[dict]:
+    """화면 ③ "부품군 진단" 드릴다운 — 선택 부품군의 변수중요도 상위 10개
+    (target=="affected" 고정, 자산과 무관한 모델 자체 속성).
+
+    Raises:
+        ValueError: part_family가 9종에 없거나, 해당 데이터가 없을 때.
+    """
+    if part_family not in FAMILY_NAMES:
+        raise ValueError(f"알 수 없는 part_family입니다: {part_family}")
+
+    path = DEFAULT_FAMILY_FEATURE_IMPORTANCE_PATH
+    if not path.exists():
+        raise FileNotFoundError(
+            "부품군 변수중요도 feature_importance.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            "python -m src.current_family_diagnosis "
+            "--data dataVerification/synthetic_industrial_machine_data.csv"
+        )
+    importance = pd.read_csv(path)
+    selected = importance.loc[
+        importance["part_family"].eq(part_family) & importance["target"].eq("affected")
+    ]
+    if selected.empty:
+        raise ValueError(f"{part_family}의 변수중요도 데이터가 없습니다.")
+
+    top10 = selected.sort_values("importance_mean", ascending=False).head(10)
+    return [
+        {"feature": r["feature"], "importance_mean": float(r["importance_mean"])}
+        for _, r in top10.iterrows()
+    ]
+
+
+@lru_cache(maxsize=1)
+def _family_test_predictions_raw() -> pd.DataFrame:
+    path = DEFAULT_FAMILY_TEST_PREDICTIONS_PATH
+    if not path.exists():
+        raise FileNotFoundError(
+            "부품군 진단 test_predictions.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
+            "python -m src.current_family_diagnosis "
+            "--data dataVerification/synthetic_industrial_machine_data.csv"
+        )
+    return pd.read_csv(path)
+
+
+def load_family_pr_curve_and_confusion(asset_tag: str, part_family: str) -> dict:
+    """화면 ③ "부품군 진단" 드릴다운 — 선택 자산·부품군의 PR곡선 좌표와
+    혼동행렬(임계값은 metrics.csv의 probability_cutoff를 그대로 써서
+    load_asset_family_diagnosis()가 이미 보여준 precision/recall과 일치시킨다).
+
+    Raises:
+        ValueError: asset_tag/part_family가 유효하지 않거나, 필요한 행이
+            정확히 하나가 아닐 때.
+    """
+    assets = load_asset_list()
+    if asset_tag not in assets:
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+    if part_family not in FAMILY_NAMES:
+        raise ValueError(f"알 수 없는 part_family입니다: {part_family}")
+
+    metrics = _family_metrics_raw()
+    metrics_row = metrics.loc[
+        metrics["scope_kind"].eq("asset_tag")
+        & metrics["scope_name"].eq(asset_tag)
+        & metrics["part_family"].eq(part_family)
+        & metrics["target"].eq("affected")
+        & metrics["threshold_policy"].eq("f1")
+        & metrics["split"].eq("test")
+    ]
+    if len(metrics_row) != 1:
+        raise ValueError(
+            f"{asset_tag}/{part_family}의 metrics 행이 1개가 아닙니다: {len(metrics_row)}개"
+        )
+    cutoff = float(metrics_row.iloc[0]["probability_cutoff"])
+
+    preds = _family_test_predictions_raw()
+    sub = preds.loc[
+        preds["asset_tag"].eq(asset_tag)
+        & preds["part_family"].eq(part_family)
+        & preds["target"].eq("affected")
+        & preds["threshold_policy"].eq("f1")
+    ]
+    if sub.empty:
+        raise ValueError(f"{asset_tag}/{part_family}의 test_predictions 행이 없습니다.")
+
+    precision, recall, _ = precision_recall_curve(sub["actual"], sub["risk_score"])
+    predicted = (sub["risk_score"] >= cutoff).astype(int)
+    tn, fp, fn, tp = confusion_matrix(sub["actual"], predicted, labels=[0, 1]).ravel()
+
+    return {
+        "precision_curve": precision.tolist(),
+        "recall_curve": recall.tolist(),
+        "cutoff": cutoff,
+        "confusion": {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)},
+    }
+
+
+@lru_cache(maxsize=1)
+def _family_daily() -> pd.DataFrame:
+    return build_family_daily(_load_raw())
+
+
+def load_family_recurrence_intervals(asset_tag: str, part_family: str) -> list[int]:
+    """화면 ③ "부품군 진단" 드릴다운 — 선택 자산·부품군의 affected 에피소드
+    연속 시작일 사이 간격(일수). load_asset_failure_onset_trend()와 같은
+    방식으로 에피소드 시작점을 탐지한다.
+
+    Raises:
+        ValueError: asset_tag/part_family가 유효하지 않을 때.
+    """
+    assets = load_asset_list()
+    if asset_tag not in assets:
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+    if part_family not in FAMILY_NAMES:
+        raise ValueError(f"알 수 없는 part_family입니다: {part_family}")
+
+    daily = _family_daily()
+    sub = daily.loc[
+        daily[ASSET_COLUMN].eq(asset_tag) & daily["part_family"].eq(part_family)
+    ].sort_values(DATE_COLUMN)
+
+    is_affected = sub["affected"].to_numpy().astype(bool)
+    is_start = is_affected & ~np.r_[False, is_affected[:-1]]
+    start_dates = sub[DATE_COLUMN].to_numpy()[is_start]
+    if len(start_dates) < 2:
+        return []
+    return np.diff(start_dates).astype("timedelta64[D]").astype(int).tolist()
 
 
 def load_data_dictionary() -> list[dict]:

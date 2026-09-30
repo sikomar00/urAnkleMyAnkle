@@ -40,6 +40,13 @@ def _create_test_account(role: str, login_id: str) -> int:
     return audit_service.account_identity_for_session(login_id)[0]
 
 
+def test_wireframe_registers_each_callback_output_once():
+    """병합 시 같은 Dash Output 콜백이 중복 등록되면 브라우저 hydration이 실패한다."""
+    outputs = [callback["output"] for callback in app._callback_list]
+    duplicates = sorted({output for output in outputs if outputs.count(output) > 1})
+    assert duplicates == []
+
+
 def test_registers_roles_and_encrypts_personal_data(monkeypatch):
     engine = _engine(monkeypatch)
     assert audit_service.register_account(
@@ -108,11 +115,9 @@ def test_register_popup_creates_user_account(monkeypatch):
         assert account.role == "USER"
 
 
-def _export_callback_response(client, *, export_button: str, audience: str = "mgr"):
-    """PDF·Excel 버튼 콜백을 브라우저 요청과 같은 형식으로 호출한다."""
+def _export_callback_response(client, *, export_format: str, audience: str = "mgr", clicks: int = 1):
+    """통합 내보내기 선택 후 실행 버튼 콜백을 브라우저 요청과 같은 형식으로 호출한다."""
     output = next(key for key in app.callback_map if key.startswith("..report-download.data"))
-    pdf_clicks = 1 if export_button == "export-pdf-btn" else 0
-    excel_clicks = 1 if export_button == "export-xlsx-btn" else 0
     return client.post("/_dash-update-component", json={
         "output": output,
         "outputs": [
@@ -121,17 +126,16 @@ def _export_callback_response(client, *, export_button: str, audience: str = "mg
             {"id": "export-access-modal", "property": "style"},
         ],
         "inputs": [
-            {"id": "export-pdf-btn", "property": "n_clicks", "value": pdf_clicks},
-            {"id": "export-xlsx-btn", "property": "n_clicks", "value": excel_clicks},
+            {"id": "export-run-btn", "property": "n_clicks", "value": clicks},
             {"id": "export-access-modal-close", "property": "n_clicks", "value": 0},
         ],
         "state": [
-            {"id": "report-audience-dd", "property": "value", "value": audience},
+            {"id": "export-dd", "property": "value", "value": f"{export_format}:{audience}"},
             {"id": "filter-store", "property": "data", "value": {}},
             {"id": "seg-store", "property": "data", "value": {}},
             {"id": "actor-id-input", "property": "value", "value": ""},
         ],
-        "changedPropIds": [f"{export_button}.n_clicks"],
+        "changedPropIds": ["export-run-btn.n_clicks"],
     })
 
 
@@ -148,8 +152,8 @@ def test_user_cannot_export_pdf_or_excel(monkeypatch):
         browser_session["account_pk"] = account_pk
         browser_session["expires_at"] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
 
-    pdf_response = _export_callback_response(client, export_button="export-pdf-btn")
-    excel_response = _export_callback_response(client, export_button="export-xlsx-btn")
+    pdf_response = _export_callback_response(client, export_format="pdf")
+    excel_response = _export_callback_response(client, export_format="xlsx")
     assert pdf_response.status_code == 200
     assert excel_response.status_code == 200
     assert pdf_response.json["response"]["export-access-modal"]["style"]["display"] == "flex"
@@ -175,7 +179,7 @@ def test_admin_can_export_excel(monkeypatch):
         browser_session["account_pk"] = account_pk
         browser_session["expires_at"] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
 
-    response = _export_callback_response(client, export_button="export-xlsx-btn")
+    response = _export_callback_response(client, export_format="xlsx")
     assert response.status_code == 200
     payload = response.json["response"]
     assert payload["report-download"]["data"]["filename"].endswith(".xlsx")
@@ -184,6 +188,26 @@ def test_admin_can_export_excel(monkeypatch):
         log = session.scalar(select(ActionLog).where(ActionLog.event_code == "ACT_REPORT_EXPORT"))
         assert (log.actor_id, log.actor_role, log.target_type, log.target_id, log.result_status) == (
             "admin01", "ADMIN", "export", "excel", "SUCCESS")
+
+
+def test_admin_can_export_same_option_repeatedly(monkeypatch):
+    """선택값을 바꾸지 않아도 실행 버튼으로 같은 보고서를 연속 내보낼 수 있다."""
+    _engine(monkeypatch)
+    account_pk = _create_test_account("ADMIN", "admin01")
+    monkeypatch.setattr(wireframe_app, "build_report_pdf", lambda *_args: b"pdf-content")
+    client = app.server.test_client()
+    with client.session_transaction() as browser_session:
+        browser_session["admin_id"] = "admin01"
+        browser_session["role"] = "ADMIN"
+        browser_session["account_pk"] = account_pk
+        browser_session["expires_at"] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+
+    first = _export_callback_response(client, export_format="pdf", clicks=1)
+    second = _export_callback_response(client, export_format="pdf", clicks=2)
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json["response"]["report-download"]["data"]["filename"].endswith(".pdf")
+    assert second.json["response"]["report-download"]["data"]["filename"].endswith(".pdf")
 
 
 def test_export_failure_writes_action_and_error_logs(monkeypatch):
@@ -199,7 +223,7 @@ def test_export_failure_writes_action_and_error_logs(monkeypatch):
         browser_session["account_pk"] = account_pk
         browser_session["expires_at"] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
 
-    response = _export_callback_response(client, export_button="export-xlsx-btn")
+    response = _export_callback_response(client, export_format="xlsx")
     assert response.status_code == 200
     with Session(engine) as session:
         action = session.scalar(select(ActionLog).where(ActionLog.event_code == "ACT_REPORT_EXPORT"))

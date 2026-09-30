@@ -48,19 +48,34 @@ if __package__ in {None, ""}:
     __package__ = "src"
 
 from .dashboard_data import (  # noqa: E402
+    CLASSIFICATION_METRIC_COLUMNS,
     export_table_csv,
     load_asset_detail_kpis,
-    load_asset_failure_onset_trend,
+    load_asset_failure_heatmap,
+    load_asset_family_diagnosis,
     load_asset_list,
     load_asset_parts_history,
-    load_asset_peer_comparison,
     load_asset_sensor_series,
+    load_current_classification_actual_rate,
+    load_current_classification_at_threshold,
+    load_current_classification_metrics,
+    load_current_classification_pr_curve_and_confusion,
     load_data_dictionary,
     load_data_quality_summary,
     load_data_reference_date,
     load_failure_trend,
+    load_family_feature_importance,
+    load_family_pr_curve_and_confusion,
+    load_family_recurrence_intervals,
+    load_part_failure_actual_rate,
+    load_part_failure_at_threshold,
+    load_part_failure_metrics,
+    load_part_failure_pr_curve_and_confusion,
+    load_part_failure_selected_model,
     load_priority_table,
     load_screen1_kpis,
+    load_screen1_machine_status,
+    load_screen1_power_by_machine,
     load_screen5_kpis,
     load_source_info,
     load_table_page,
@@ -124,6 +139,12 @@ THEME_CSS = """
 .theme-dark .dash-dropdown-option:hover,
 .theme-dark .dash-options-list-option.selected { background:var(--pf-sunken) !important; }
 .theme-dark .dash-dropdown-trigger-icon { color:var(--pf-ink-2) !important; }
+
+/* 테마 버튼은 텍스트 없이 아이콘만 표시한다 — "누르면 될 상태"를 보여주는
+   관례(라이트에서는 다크로 바꾸는 아이콘, 다크에서는 라이트로 바꾸는
+   아이콘). 아이콘 라이브러리 의존성 없이 유니코드 글리프만 쓴다. */
+.theme-light #theme-btn::before { content: "☾"; }
+.theme-dark  #theme-btn::before { content: "☀"; }
 
 /* dcc.Tabs는 컨테이너를 100% 폭으로 잡고 탭 5개를 균등 분배(flex:1)한다.
    그대로 두면 "⑤ 보고서 요약"처럼 긴 라벨이 잘린다. 바깥 컨테이너는
@@ -209,8 +230,8 @@ DEFAULT_FILTERS = {
 # 보고서 대상(독자)별 산출물 구성
 #
 # 인증·역할 관리 시스템이 없으므로 "로그인 사용자의 직책"을 알 방법이 없다.
-# 그래서 역할을 추론하지 않고 헤더에서 직접 고르게 한다. 인증이 붙으면
-# report-audience-dd의 기본값을 세션 역할로 채우고 드롭다운을 숨기면 된다.
+# 그래서 역할을 추론하지 않고 내보내기 시점에 헤더에서 직접 고르게 한다.
+# 인증이 붙으면 export-dd의 기본값을 세션 역할로 채우면 된다.
 #
 # sections = 해당 독자의 보고서에 들어가는 섹션. 화면 ①~⑤ 중 어디서 오는지
 # 명시해 둔다 — 운영(①②)과 최종보고(⑤)의 분리가 이 표에서 실제로 갈린다.
@@ -273,7 +294,7 @@ NO_DATA_MARK = "데이터 미연결"
 # 화면 탭을 옮겼다 돌아와도 선택이 유지되도록 seg-store에 모아둔다.
 # ------------------------------------------------------------
 SEG_GROUPS = {
-    "task": ["현재 고장 표시 분류", "7일 사전 예측", "다음 관측일 전력"],
+    "task": ["현재 고장 표시 분류", "부품군 진단", "부품 고장 탐지"],
     "threshold": ["12", "13", "14"],
     "dataset": ["원자료", "기계·일 집계", "부품 출고", "모델 입력 피처"],
 }
@@ -281,7 +302,7 @@ DEFAULT_SEG = {"task": 0, "threshold": 0, "dataset": 0}
 
 # ① 화면의 "점검 우선순위" 표 정렬 축. KPI "종합 고장율" 타일을 클릭하면
 # "grade"(등급가중 고장점수, 기본) → "threshold"(기준선 초과)로 바뀐다.
-DEFAULT_PRIO_SORT = "grade"
+DEFAULT_PRIO_SORT = {"sort_by": "grade", "direction": "desc"}
 
 # ①에만 있는 타일이라 패턴 매칭 id를 쓴다 — 이유는 tile() 호출부 주석 참고.
 KPI_FAILRATE_ID = {"type": "kpi-drill", "index": "failrate"}
@@ -526,7 +547,7 @@ def empty_state(title, reason, w, h):
 # ============================================================
 
 def app_header():
-    """좌: 시스템명·기준일 / 중앙: 화면 탭 4개(dcc.Tabs) / 우: 경보·배지·토글·내보내기."""
+    """좌: 시스템명·기준일 / 중앙: 화면 탭 4개(dcc.Tabs) / 우: 내보내기·테마 토글."""
     tab_style = {"height": "56px", "boxSizing": "border-box", "padding": "0 11px", "display": "flex",
                  "alignItems": "center", "whiteSpace": "nowrap", "flexShrink": "0",
                  "fontSize": "14px", "lineHeight": "20px", "fontWeight": "500",
@@ -534,7 +555,8 @@ def app_header():
     tab_selected_style = {**tab_style, "fontWeight": "600", "color": INK, "borderBottom": f"2px solid {INK}"}
 
     left = html.Div(
-        [slot("시스템명 · title-16", 180, 28),
+        [html.Span("산업 기계 센서 기반 고장 위험 예측",
+                    style={"fontSize": "16px", "fontWeight": "600", "color": INK, "whiteSpace": "nowrap"}),
          html.Div([html.Span("데이터 기준일", style=LABEL_12),
                    html.Span(load_data_reference_date(), style=NUM_12)],
                   style={"display": "flex", "alignItems": "center", "gap": "6px"}),
@@ -547,28 +569,21 @@ def app_header():
                   for tid, label in SCREENS],
         style={"height": "56px"},
     )
+    export_options = [
+        {"label": f"{fmt_label} · {aud['label']}", "value": f"{fmt_value}:{aud_key}"}
+        for fmt_label, fmt_value in [("PDF", "pdf"), ("Excel", "xlsx")]
+        for aud_key, aud in REPORT_AUDIENCES.items()
+    ]
     right = html.Div(
-        [html.Div([html.Span("경보", style=LABEL_12), slot("카운터", 40, 24)],
-                   style={"display": "flex", "alignItems": "center", "gap": "4px", "flexShrink": "0"}),
-         html.Span("합성 데이터 · 교육용",
-                    style={"height": "24px", "boxSizing": "border-box", "padding": "0 8px",
-                           "border": f"1px solid {CTRL}", "borderRadius": "2px", "display": "inline-flex",
-                           "alignItems": "center", "fontSize": "11px", "lineHeight": "14px",
-                           "fontWeight": "500", "color": INK, "whiteSpace": "nowrap"}),
-         # 인증·역할 관리 시스템이 없으므로 보고서 대상을 여기서 직접 고른다.
-         html.Div(
-             [html.Span("대상", style={**LABEL_12, "whiteSpace": "nowrap"}),
-              dcc.Dropdown(
-                  id="report-audience-dd",
-                  options=[{"label": v["label"], "value": k} for k, v in REPORT_AUDIENCES.items()],
-                  value=DEFAULT_AUDIENCE, clearable=False,
-                  style={"width": "152px", "fontFamily": "inherit", "fontSize": "13px"},
-              )],
-             style={"display": "flex", "alignItems": "center", "gap": "4px", "flexShrink": "0"},
+        [dcc.Dropdown(
+             id="export-dd",
+             options=export_options,
+             value=f"pdf:{DEFAULT_AUDIENCE}", clearable=False,
+             style={"width": "220px", "fontFamily": "inherit", "fontSize": "13px"},
          ),
-         html.Button("PDF", id="export-pdf-btn", n_clicks=0, style=btn_style(w=52)),
-         html.Button("Excel", id="export-xlsx-btn", n_clicks=0, style=btn_style(w=60)),
-         html.Button("테마 전환", id="theme-btn", n_clicks=0, style=btn_style(w=104)),
+         html.Button("내보내기", id="export-run-btn", n_clicks=0, style=btn_style(w=72)),
+         html.Button("", id="theme-btn", n_clicks=0, title="테마 전환",
+                     style=btn_style(w=32, extra={"padding": "0", "textAlign": "center", "fontSize": "16px"})),
          html.Details([
              html.Summary(html.Span("관", id="profile-display"), id="profile-menu-toggle",
                           title="마이 프로필",
@@ -602,7 +617,7 @@ def app_header():
          dcc.Download(id="report-download"),
          dcc.Download(id="table-download")],
         style={"display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "8px",
-               # overflow:hidden을 여기 두면 "보고서 대상" 드롭다운 팝업까지
+               # overflow:hidden을 여기 두면 "내보내기" 드롭다운 팝업까지
                # 잘라버릴 수 있다(설치된 Dash 버전에 따라 팝업이 position:fixed가
                # 아니라 absolute일 수 있음) — 가로 폭은 이미 자식 실측으로
                # 맞춰뒀으니 clip 없이도 넘치지 않는다.
@@ -691,6 +706,41 @@ def kpi_value_tile(label, value_text, w=300, h=96, tid=None):
                   style={"height": "32px", "display": "flex", "alignItems": "center"})],
         style=style, **kwargs,
     )
+
+
+def _spark_figure(values, theme):
+    """화면 ① "기계 상태" 타일의 미니 스파크라인(축·격자·여백 없는 라인)."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    fig = go.Figure(go.Scatter(y=values, mode="lines", hoverinfo="skip",
+                                line=dict(color=colors["ink2"], width=1.4)))
+    fig.update_xaxes(visible=False)
+    fig.update_yaxes(visible=False)
+    fig.update_layout(
+        height=32, margin=dict(l=0, r=0, t=2, b=2), showlegend=False,
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+    )
+    return fig
+
+
+def _heatmap_figure(heat, theme):
+    """화면 ① "고장 표시 히트맵" — 자산 × 월 그레인, 셀 = 그 달 고장 표시된
+    부품-일 행 수. period는 이미 오름차순 CSV 순서라 그대로 pivot한다."""
+    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    pivot = heat.pivot(index="asset_tag", columns="period", values="failed_part_count")
+    fig = go.Figure(go.Heatmap(
+        z=pivot.to_numpy(), x=pivot.columns.tolist(), y=pivot.index.tolist(),
+        colorscale=[[0, colors["card"]], [1, colors["ink"]]],
+        hovertemplate="%{y} · %{x}<br>%{z}건<extra></extra>",
+        colorbar=dict(title=dict(text="건수", font=dict(size=10)), tickfont=dict(size=10)),
+    ))
+    fig.update_xaxes(tickfont=dict(size=10), color=colors["muted"])
+    fig.update_yaxes(tickfont=dict(size=11), color=colors["muted"], autorange="reversed")
+    fig.update_layout(
+        height=300, margin=dict(l=8, r=8, t=8, b=8),
+        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
+        font=dict(size=11, color=colors["muted"]),
+    )
+    return fig
 
 
 def _trend_figure(df, theme):
@@ -818,58 +868,33 @@ def _parts_figure(df, theme):
     return fig
 
 
-def _hex_to_rgba(hex_color, alpha):
-    """FIGURE_COLORS의 hex 값을 박스플롯 fillcolor용 rgba 문자열로 바꾼다 —
-    새 색상 값을 만드는 게 아니라 기존 hex를 그대로 반투명하게 쓰는 것뿐이다."""
-    r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
-    return f"rgba({r},{g},{b},{alpha})"
-
-
-def _peer_figure(comparison, theme):
-    """화면 ② "동종 기계 대비" — 선택 자산 vs 동종 나머지 1대의 베어링 온도
-    분포 박스플롯 2개. 선택 기계는 진한 테두리·채움, 동종 기계는 옅게 그려
-    어느 쪽이 선택 기계인지 시각적으로 드러낸다."""
+def _family_pr_figure(pr_cm, theme):
+    """화면 ③ "부품군 진단" 드릴다운 — 선택 자산·부품군의 PR곡선."""
     colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
-    fig = go.Figure()
-    fig.add_trace(go.Box(
-        y=comparison["asset_values"], name=f"{comparison['asset_tag']} (선택)",
-        line=dict(color=colors["ink"], width=2),
-        fillcolor=_hex_to_rgba(colors["ink"], 0.55),
-        marker_color=colors["ink"], boxpoints=False,
+    fig = go.Figure(go.Scatter(
+        x=pr_cm["recall_curve"], y=pr_cm["precision_curve"], mode="lines",
+        line=dict(color=colors["ink"], width=1.6),
     ))
-    fig.add_trace(go.Box(
-        y=comparison["peer_values"], name=f"{comparison['peer_asset_tag']} (동종)",
-        line=dict(color=colors["muted"], width=1),
-        fillcolor=_hex_to_rgba(colors["muted"], 0.12),
-        marker_color=colors["muted"], boxpoints=False,
-    ))
-    fig.update_yaxes(gridcolor=colors["hair"], tickfont=dict(size=11), color=colors["muted"])
-    fig.update_xaxes(tickfont=dict(size=11), color=colors["muted"])
+    fig.update_yaxes(title="정밀도", range=[0, 1.02], gridcolor=colors["hair"],
+                      tickfont=dict(size=11), color=colors["muted"])
+    fig.update_xaxes(title="재현율", range=[0, 1.02], showgrid=False,
+                      tickfont=dict(size=11), color=colors["muted"])
     fig.update_layout(
-        height=220, margin=dict(l=32, r=8, t=4, b=22),
+        height=392, margin=dict(l=48, r=16, t=8, b=40),
         paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
         font=dict(size=11, color=colors["muted"]), showlegend=False,
     )
     return fig
 
 
-def _pre_figure(trend, theme):
-    """화면 ② "고장 직전 센서 변화" — 가장 최근 위험 기준선 에피소드의
-    t-7~t 베어링 온도 추이. x축은 실제 날짜 대신 상대 위치(t-7..t)로
-    표시하고, 실제 날짜는 호버 툴팁에서만 보여준다."""
+def _family_recur_figure(intervals, theme):
+    """화면 ③ "부품군 진단" 드릴다운 — 선택 자산·부품군의 재발 간격(일) 분포."""
     colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
-    labels = [f"t{d}" if d != 0 else "t" for d in trend["relative_days"]]
-    fig = go.Figure(go.Scatter(
-        x=labels, y=trend["temp_bearing_degC"], mode="lines+markers",
-        line=dict(color=colors["ink"], width=1.6), marker=dict(size=5, color=colors["ink"]),
-        customdata=trend["dates"],
-        hovertemplate="%{x} · %{customdata}<br>%{y}°C<extra></extra>",
-    ))
-    fig.add_vline(x="t", line=dict(color=colors["muted"], width=1, dash="dash"))
-    fig.update_yaxes(gridcolor=colors["hair"], tickfont=dict(size=11), color=colors["muted"])
-    fig.update_xaxes(showgrid=False, tickfont=dict(size=11), color=colors["muted"])
+    fig = go.Figure(go.Histogram(x=intervals, marker=dict(color=colors["ink"])))
+    fig.update_yaxes(title="빈도", gridcolor=colors["hair"], tickfont=dict(size=11), color=colors["muted"])
+    fig.update_xaxes(title="간격(일)", showgrid=False, tickfont=dict(size=11), color=colors["muted"])
     fig.update_layout(
-        height=220, margin=dict(l=32, r=8, t=4, b=22),
+        height=184, margin=dict(l=40, r=8, t=4, b=32), bargap=0.08,
         paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
         font=dict(size=11, color=colors["muted"]), showlegend=False,
     )
@@ -935,34 +960,59 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
     # 콘솔 경고가 뜬다 — 패턴 매칭 id({"type":...})를 쓰면 Dash가 "지금 이
     # id를 가진 컴포넌트가 0개일 수 있다"를 정상 상태로 취급해 경고가 안 뜬다.
     kpis = load_screen1_kpis()
+    # "최고 베어링 온도"·"부품 출고 금액(누적)"은 삭제한다 — 남은 4개가 같은
+    # 458px 폭(4×458 + 3×16 = 1880)으로 행 전체를 균등 분배한다.
     kpi_specs = [
         ("관측 기계 (대)", f"{kpis['observed_machines']:,}", None),
         ("고장 표시 기계·일", f"{kpis['failure_machine_days']:,}", None),
         ("종합 고장율 (%)", f"{kpis['failure_rate_pct']:.1f}%", KPI_FAILRATE_ID),
         ("평균 소비 전력 (kW)", f"{kpis['avg_power_kw']:,.2f}", None),
-        ("최고 베어링 온도 (°C)", f"{kpis['max_bearing_temp']:.1f}", None),
-        ("부품 출고 금액 (누적, INR)", f"{kpis['parts_issue_value_inr']:,.0f}", None),
     ]
-    row_a = row(ROW_KPI, [kpi_value_tile(label, value_text, tid=tid) for label, value_text, tid in kpi_specs])
+    row_a = row(ROW_KPI, [kpi_value_tile(label, value_text, w=458, tid=tid) for label, value_text, tid in kpi_specs])
 
     prio_cols = [("순위", 48, "right"), ("대상", 200, "left"), ("종류", 110, "left"), ("공장", 100, "left"),
                  ("등급가중 고장점수", 150, "right"), ("기준선 초과", 110, "center"),
                  ("최근 고장 표시일", 150, "left"), ("당일 고장 표시 부품 수", 190, "right")]
-    sort_idx = 5 if prio_sort == "threshold" else 4
-    sort_hint = ("정렬: 기준선 초과 (KPI '종합 고장율' 클릭으로 이동함)" if prio_sort == "threshold"
-                 else "정렬: 등급가중 고장점수 (기본)")
-    priority_records = load_priority_table(prio_sort)
+    sort_by = prio_sort.get("sort_by", "grade")
+    direction = prio_sort.get("direction", "desc")
+    sort_idx = 5 if sort_by == "threshold" else 4
+    sort_hint = ("정렬: 기준선 초과 (KPI '종합 고장율' 클릭으로 이동함)" if sort_by == "threshold"
+                 else "정렬: 등급가중 고장점수 (기본)") + (" · 오름차순" if direction == "asc" else " · 내림차순")
+    priority_records = load_priority_table(sort_by, direction)
+    dir_btn = html.Button("▲ 오름차순" if direction == "asc" else "▼ 내림차순",
+                           id={"type": "prio-dir-btn", "index": "screen1"}, n_clicks=0, style=btn_style(w=96))
     prio = card("점검 우선순위", 1090, ROW_MAIN,
                 priority_table(prio_cols, priority_records, 32, head_h=32, sort_col=sort_idx),
-                right=note(f"대상 = 엔티티 무관 (현재 기계 행만) · 헤더 고정 · 행 클릭 → ② · {sort_hint}"))
+                right=html.Div([note(f"대상 = 엔티티 무관 (현재 기계 행만) · 헤더 고정 · 행 클릭 → ② · {sort_hint}"),
+                                 dir_btn],
+                                style={"display": "flex", "alignItems": "center", "gap": "8px"}))
 
-    def machine_tile():
+    def machine_tile(status_row):
+        grade = status_row["current_grade"]
+        emphasize = grade in ("위험", "경계")
+        badge = html.Span(
+            grade,
+            style={"height": "18px", "boxSizing": "border-box", "padding": "0 6px",
+                   "border": f"1px solid {CTRL if emphasize else HAIR}", "borderRadius": "2px",
+                   "fontSize": "11px", "lineHeight": "16px",
+                   "fontWeight": "600" if emphasize else "500",
+                   "color": INK if emphasize else MUTED, "display": "inline-flex",
+                   "alignItems": "center", "whiteSpace": "nowrap"},
+        )
         return html.Div(
-            [html.Div([slot("기계 태그", 96, 22), slot("종류", 96, 18)],
+            [html.Div([html.Span(status_row["asset_tag"], style={"fontFamily": MONO, "fontSize": "13px",
+                                                                   "color": INK, "whiteSpace": "nowrap"}),
+                       html.Span(status_row["machine_type"], style={**MICRO_11, "whiteSpace": "nowrap",
+                                                                     "overflow": "hidden", "textOverflow": "ellipsis"})],
                       style={"width": "96px", "flexShrink": "0", "display": "flex",
-                             "flexDirection": "column", "gap": "4px"}),
-             slot("스파크라인", "가변", 32),
-             html.Div([slot("현재값", 88, 22), slot("상태 배지", 88, 18)],
+                             "flexDirection": "column", "gap": "4px", "overflow": "hidden"}),
+             dcc.Graph(id={"type": "spark-chart", "index": status_row["asset_tag"]},
+                       figure=_spark_figure(status_row["sparkline"], "light"),
+                       config={"displayModeBar": False, "responsive": True},
+                       style={"flexGrow": "1", "minWidth": "0", "height": "32px"}),
+             html.Div([html.Span(f"{status_row['risk_score']:,.0f}",
+                                  style={"fontFamily": MONO, "fontSize": "16px", "fontWeight": "600", "color": INK}),
+                       badge],
                       style={"width": "88px", "flexShrink": "0", "display": "flex",
                              "flexDirection": "column", "gap": "4px"})],
             style={"width": "367px", "height": "72px", "flexShrink": "0", "boxSizing": "border-box",
@@ -970,50 +1020,37 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None):
                    "background": CARD, "padding": "10px 12px", "display": "flex", "alignItems": "center",
                    "gap": "8px"},
         )
-    tiles_grid = html.Div([machine_tile() for _ in range(10)],
+    machine_status_rows = load_screen1_machine_status()
+    tiles_grid = html.Div([machine_tile(r) for r in machine_status_rows],
                            style={"display": "grid", "gridTemplateColumns": "repeat(2, minmax(0, 1fr))",
                                   "gridTemplateRows": "repeat(5, 72px)", "columnGap": "8px", "rowGap": "8px",
                                   "width": "742px", "height": "392px"})
-    status = card("기계 상태", 774, ROW_MAIN, tiles_grid, right=note("타일 367 × 72 · 2열 × 5행 · 간격 8"))
+    status = card("기계 상태", 774, ROW_MAIN, tiles_grid,
+                  right=note("스파크라인 · 값 = 등급가중 고장점수 최근 30일 · 타일 367 × 72"))
     row_b = row(ROW_MAIN, [prio, status])
 
-    ylabels = html.Div([slot(f"기계 {i+1}", 112, 25) for i in range(10)],
-                        style={"width": "112px", "flexShrink": "0", "display": "flex", "flexDirection": "column"})
-    heatgrid = html.Div(
-        [html.Div(style={"height": "25px", "boxSizing": "border-box", "borderBottom": f"1px dashed {HAIR}"})
-         for _ in range(10)],
-        style={"flexGrow": "1", "minWidth": "0", "boxSizing": "border-box", "border": f"1px dashed {CTRL}",
-               "background": SUNK, "position": "relative"},
-    )
-    legend = html.Div(
-        [html.Div([html.Div(style={"width": "14px", "height": "14px", "border": f"1px solid {CTRL}",
-                                    "boxSizing": "border-box"}),
-                   html.Span(f"구간 {i+1}", style=MICRO_11)],
-                  style={"display": "flex", "alignItems": "center", "gap": "6px"})
-         for i in range(5)],
-        style={"width": "96px", "flexShrink": "0", "display": "flex", "flexDirection": "column", "gap": "6px"},
-    )
     heat_body = html.Div(
-        [hstack([ylabels, heatgrid,
-                 html.Div([html.Span("범례 (부품 수)", style=LABEL_12), legend], style={"width": "96px",
-                           "flexShrink": "0", "display": "flex", "flexDirection": "column", "gap": "6px"})],
-                8, {"height": "250px"}),
-         hstack([html.Div(style={"width": "112px"}), slot("x축 · 날짜", "가변", 22)], 8, {"height": "22px"})],
+        dcc.Graph(id={"type": "heatmap-chart", "index": "screen1"},
+                  figure=_heatmap_figure(load_asset_failure_heatmap(), "light"),
+                  config={"displayModeBar": False, "responsive": True},
+                  style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
+        style={"height": "100%", "display": "flex", "flexDirection": "column"},
     )
     heat = card("고장 표시 히트맵", 1248, ROW_SUB, heat_body,
-                right=note("셀 = 그날 고장 표시된 부품 수 · 5구간"))
+                right=note("셀 = 그 달 고장 표시된 부품-일 행 수 합계 · 자산 × 월"))
 
+    power_rows = load_screen1_power_by_machine()
+    max_power = max((r["avg_power_kw"] for r in power_rows), default=1.0) or 1.0
     prows = html.Div(
-        [html.Div([html.Div(bar(70, 6), style={"width": "88px", "flexShrink": "0"}),
-                   slot("막대 (두께 ≤ 24)" if i == 0 else "", "가변", 16),
-                   html.Div(bar(70, 6), style={"width": "48px", "flexShrink": "0", "display": "flex",
-                                                "justifyContent": "flex-end"})],
+        [html.Div([html.Span(r["asset_tag"], style={"fontFamily": MONO, "fontSize": "12px", "color": INK,
+                                                      "width": "88px", "flexShrink": "0"}),
+                   html.Div(bar(r["avg_power_kw"] / max_power * 100, 6), style={"flexGrow": "1"}),
+                   html.Span(f"{r['avg_power_kw']:,.2f}",
+                             style={**NUM_12, "width": "56px", "flexShrink": "0", "textAlign": "right"})],
                   style={"height": "25px", "display": "flex", "alignItems": "center", "gap": "8px"})
-         for i in range(10)],
+         for r in power_rows],
     )
-    power_body = html.Div([prows,
-                            hstack([html.Div(style={"width": "96px"}), slot("x축 (kW)", "가변", 22)], 0,
-                                   {"height": "22px"})])
+    power_body = html.Div([prows], style={"display": "flex", "flexDirection": "column"})
     power = card("기계별 평균 소비 전력 (kW)", 616, ROW_SUB, power_body, right=note("10개 · 내림차순"))
     row_c = row(ROW_SUB, [heat, power])
 
@@ -1094,58 +1131,198 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None):
     smult = card("센서 8종 스몰 멀티플", 1248, 520, sm_body,
                  right=note("x축 공유 · 밴드 = 위험 기준선 초과일"))
 
-    anom = card("이상 점수 추이", 616, 144, slot("라인 + 임계선", 584, 76), right=note("임계선 포함"))
-    clus = card("군집 위치", 616, 144, slot("산점도 · 군집 1 / 2 / 3", 584, 76), right=note("선택 기계 표시"))
-    parts = card("부품 출고 이력", 616, 200,
+    # "이상 점수 추이"·"군집 위치"·"고장 직전 센서 변화"·"동종 기계 대비" 4개
+    # 카드를 삭제한다. K-Means 결과(군집·이상 점수)는 화면④ 데이터 조회의
+    # 그레인 토글로 옮겨 원자료 조회로는 남길 계획이었으나, 그 산출물
+    # (dataVerification/outputs/kmeans_assignments.csv)이 리포지토리 어디에도
+    # 없다 — 대시보드는 모델을 재실행하지 않는다는 공통 제약과 충돌해 새로
+    # 만들지 않았다(별도 오프라인 클러스터링 스크립트가 먼저 필요).
+    # "부품 출고 이력"만 남아 오른쪽 칸(616 × 520)을 그대로 채운다.
+    parts = card("부품 출고 이력", 616, 520,
                  dcc.Graph(id={"type": "parts-chart", "index": "screen2"},
                            figure=_parts_figure(load_asset_parts_history(asset_tag), "light"),
                            config={"displayModeBar": False, "responsive": True},
                            style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}))
-    rightcol = col(616, 520, [anom, clus, parts])
-    row_b = row(520, [smult, rightcol])
+    row_b = row(520, [smult, parts])
 
-    pre = card("고장 직전 센서 변화", 932, 288,
-               dcc.Graph(id={"type": "pre-chart", "index": "screen2"},
-                         figure=_pre_figure(load_asset_failure_onset_trend(asset_tag), "light"),
-                         config={"displayModeBar": False, "responsive": True},
-                         style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
-               right=note("고장 표시 시점 t=0 · t−7 ~ t"))
-    peer = card("동종 기계 대비", 932, 288,
-                dcc.Graph(id={"type": "peer-chart", "index": "screen2"},
-                          figure=_peer_figure(load_asset_peer_comparison(asset_tag), "light"),
-                          config={"displayModeBar": False, "responsive": True},
-                          style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
-                right=note("동일 종류 나머지 1대 대비"))
-    row_c = row(288, [pre, peer])
-
-    return html.Div([strip, row_b, row_c],
+    return html.Div([strip, row_b],
                      style={"display": "flex", "flexDirection": "column", "gap": f"{GUTTER}px"})
+
+
+def _model_comparison_table(rows, selected_key, width=742):
+    """화면 ③ "모델 비교" 표 — 과제 0(현재 고장 표시 분류)·2(부품 고장 탐지)가
+    공유하는 렌더러. 열 순서는 모델 → AP → 정밀도 → 재현율 → F1 → 선택 여부로
+    고정한다(Accuracy는 상단 KPI 카드에 이미 있고 양성률이 낮아 부풀려지므로
+    이 표에는 넣지 않는다). ``rows``는 {"key","label","average_precision",
+    "precision","recall","f1"}를 가진 dict 목록이며, 결과가 있는 모델만 담아야
+    한다 — 빈 행을 채우지 않는다.
+    """
+    cols = [("모델", 182, "left"), ("AP", 93, "right"), ("정밀도", 93, "right"),
+            ("재현율", 93, "right"), ("F1", 93, "right"), ("선택", 72, "center")]
+
+    def cell(content, align="left", highlight=False):
+        return html.Td(content, style={"padding": "0 8px", "textAlign": align, "boxSizing": "border-box",
+                                        "background": SUNK if highlight else "none",
+                                        "borderBottom": f"1px solid {HAIR}"})
+
+    body_rows = []
+    for r in rows:
+        is_selected = r["key"] == selected_key
+        body_rows.append(html.Tr([
+            cell(html.Span(r["label"], style={"fontSize": "13px", "color": INK}), highlight=is_selected),
+            cell(f"{r['average_precision']:.3f}", align="right", highlight=is_selected),
+            cell(f"{r['precision']:.3f}", align="right", highlight=is_selected),
+            cell(f"{r['recall']:.3f}", align="right", highlight=is_selected),
+            cell(f"{r['f1']:.3f}", align="right", highlight=is_selected),
+            cell("선택" if is_selected else "—", align="center", highlight=is_selected),
+        ], style={"height": "32px"}))
+
+    thead = html.Tr(
+        [html.Th(l, style={"width": f"{w}px", "padding": "0 8px", "textAlign": a, "boxSizing": "border-box",
+                            **LABEL_12, "whiteSpace": "nowrap", "borderBottom": f"1px solid {CTRL}"})
+         for l, w, a in cols],
+        style={"height": "32px"},
+    )
+    return html.Table([html.Thead(thead), html.Tbody(body_rows)],
+                       style={"width": f"{width}px", "tableLayout": "fixed", "borderCollapse": "collapse"})
+
+
+# 화면 ③ "주요 영향 변수" 막대 색 구분 — 새 색상 토큰이 아니라 이 카드
+# 전용으로 도입한 예외다(사용자 명시 지시). 파생 변수(_lag1/_median3/...)는
+# 전부 "<기본 센서명>_<변환>" 형태라 접두사만 봐도 분류된다 — 파생이 늘어나도
+# 매핑을 새로 추가할 필요가 없다.
+FEATURE_COLOR_HEALTH = "#0f766e"    # 건강 센서 — 청록
+FEATURE_COLOR_OPERATING = "#c2660d"  # 운전 조건 — 주황
+_HEALTH_SENSOR_PREFIXES = (
+    "temp_bearing_degC", "temp_motor_degC", "vibration_h_mms", "vibration_v_mms", "oil_pressure_bar",
+)
+_OPERATING_PREFIXES = ("load_pct", "shaft_rpm", "power_consumption_kw")
+_OPERATING_EXACT = {"day_of_week", "is_weekend"}
+
+
+def _feature_color_category(feature: str) -> str:
+    """건강 센서(청록) / 운전 조건(주황) / 장비·부품·날짜(회색, 그 외 전부)."""
+    if feature.startswith(_HEALTH_SENSOR_PREFIXES):
+        return "health"
+    if feature.startswith(_OPERATING_PREFIXES) or feature in _OPERATING_EXACT:
+        return "operating"
+    return "other"
+
+
+_FEATURE_CATEGORY_COLOR = {"health": FEATURE_COLOR_HEALTH, "operating": FEATURE_COLOR_OPERATING, "other": MUTED}
+
+
+def _interpretation_summary(actual_rate, ap, precision, recall):
+    """화면 ③ 성능 카드 바로 아래 "모델 해석 요약" 두 줄 — 현재 선택된
+    과제·모델의 metrics에서 그때그때 계산한다(하드코딩 없음)."""
+    multiplier = ap / actual_rate if actual_rate > 0 else float("inf")
+    found = round(recall * 100)
+    hit = round(precision * 100)
+    line1 = (f"실제 고장률 {actual_rate * 100:.1f}% · AP {ap * 100:.1f}% · "
+             f"무작위 기준 대비 {multiplier:.1f}배")
+    line2 = f"고장 100건 중 약 {found}건을 찾지만, 경고 100건 중 실제 고장은 약 {hit}건"
+    return html.Div(
+        [html.Div(line1, style={"fontSize": "13px", "lineHeight": "20px", "fontWeight": "600", "color": INK}),
+         html.Div(line2, style={"fontSize": "12px", "lineHeight": "18px", "color": INK2})],
+        style={"width": "1880px", "flexShrink": "0"},
+    )
+
+
+def _judgment_verdict(multiplier):
+    if multiplier < 1.2:
+        return "사용 불가 — 무작위 대비 개선 없음"
+    if multiplier < 2.0:
+        return "탐색적 사용 가능 — 점검 후보를 좁히는 보조 수단"
+    return "제한적 운영 검토 가능"
+
+
+def _threshold_metrics_body(metrics, threshold):
+    """화면 ③ "판정 임계값 조정" — 슬라이더가 움직일 때마다 다시 그리는 본문.
+    ``metrics``는 load_*_at_threshold()가 돌려준 dict다."""
+    tp = metrics["predicted_alerts"] - metrics["false_alarms"]
+    actual_positive = tp + metrics["missed_failures"]
+    sentence = (f"임계값 {threshold:.2f} 적용 시 {metrics['total_rows']:,}건 중 "
+                f"{metrics['predicted_alerts']:,}건을 점검 대상으로 선정하며, "
+                f"실제 고장 {actual_positive:,}건 중 {tp:,}건을 탐지합니다.")
+    rows = [
+        ("정밀도", f"{metrics['precision']:.3f}"), ("재현율", f"{metrics['recall']:.3f}"),
+        ("F1", f"{metrics['f1']:.3f}"), ("예상 경고 건수", f"{metrics['predicted_alerts']:,}건"),
+        ("오경보 건수", f"{metrics['false_alarms']:,}건"), ("놓친 고장 건수", f"{metrics['missed_failures']:,}건"),
+    ]
+    return html.Div(
+        [html.Div([html.Span(k, style={**LABEL_12, "width": "110px", "flexShrink": "0"}),
+                   html.Span(v, style={"fontSize": "13px", "fontWeight": "600", "color": INK})],
+                  style={"display": "flex", "alignItems": "center", "gap": "8px", "minHeight": "18px"})
+         for k, v in rows]
+        + [html.Div(sentence, style={"fontSize": "12px", "lineHeight": "17px", "color": INK2, "marginTop": "6px"})],
+        style={"display": "flex", "flexDirection": "column", "gap": "2px"},
+    )
+
+
+def _operational_judgment_body(actual_rate, ap, precision, recall, confusion):
+    """화면 ③ "운영 판단" 카드 — 재발 간격(회고적 통계) 대신 현재 모델의
+    실사용 가능성을 요약한다. 과제 0·2에서만 쓴다(과제 1은 실제 재발 간격
+    히스토그램이 이미 있어 대체하지 않는다)."""
+    multiplier = ap / actual_rate if actual_rate > 0 else float("inf")
+    total = sum(confusion.values())
+    predicted_alert_rate = (confusion["tp"] + confusion["fp"]) / total if total else 0.0
+    rows = [
+        ("실제 고장률", f"{actual_rate * 100:.1f}%"),
+        ("예측 경고율", f"{predicted_alert_rate * 100:.1f}%"),
+        ("AP ÷ 실제 고장률", f"{multiplier:.1f}배"),
+        ("경고 100건당 실제 고장", f"{round(precision * 100)}건"),
+        ("실제 고장 100건당 탐지", f"{round(recall * 100)}건"),
+        ("현재 모델 판정", _judgment_verdict(multiplier)),
+    ]
+    return html.Div(
+        [html.Div([html.Span(k, style={**LABEL_12, "width": "152px", "flexShrink": "0"}),
+                   html.Span(v, style={"fontSize": "12px", "lineHeight": "15px", "color": INK,
+                                        "fontWeight": "600" if k == "현재 모델 판정" else "500"})],
+                  style={"display": "flex", "alignItems": "center", "gap": "8px", "minHeight": "18px"})
+         for k, v in rows]
+        + [html.Div("자동 부품 교체 판단에는 사용할 수 없습니다.",
+                    style={**MICRO_11, "marginTop": "4px"})],
+        style={"display": "flex", "flexDirection": "column", "gap": "3px"},
+    )
 
 
 # ============================================================
 # 화면 ③ 모델·예측 — 툴바 32 / 행 96 / 460 / 272 (마지막 행이 남는 높이 흡수)
 # ============================================================
 
-def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE):
+def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=None):
     seg_state = seg_state or DEFAULT_SEG
     thr_sel = seg_state.get("threshold", 0)
     thr_changed = thr_sel != DEFAULT_SEG["threshold"]
+    task_sel = seg_state.get("task", 0)
+    assets = load_asset_list()
+    asset_tag = asset_tag if asset_tag in assets else assets[0]
 
-    # 위험 기준선은 표의 축이 아니라 '라벨 정의'다 — 바꾸면 정답이 바뀌므로
-    # 모델을 다시 학습/교체해야 한다. 관리자가 필터로 착각하고 눌렀다가
-    # 화면 전체 수치가 갈리는 것이 원래 문제였다. 경고를 컨트롤 바로 아래에
-    # 상시 노출하고, 기본값에서 벗어나면 문구를 강조로 바꾼다.
-    warn_text = ("주의 — 위험 기준선은 필터가 아니라 학습 라벨 정의다. "
-                 f"값을 바꾸면 해당 기준선으로 학습된 모델로 교체되고 아래 모든 지표가 다시 계산된다."
-                 + (f"  현재 기본값({SEG_GROUPS['threshold'][DEFAULT_SEG['threshold']]}) 아님 "
-                    f"→ {SEG_GROUPS['threshold'][thr_sel]} 기준 모델" if thr_changed else ""))
+    if task_sel == 0:
+        # 이 과제(부품 단위 당일 고장 분류)에는 위험 기준선이 적용되지
+        # 않는다 — 설비 단위 위험도 분류 과제(별도)에서만 쓰이므로, 세그먼트
+        # 값과 무관하게 항상 이 안내를 상시 노출한다. "기본값 아님" 강조
+        # 개념 자체가 이 과제엔 의미가 없어 항상 비강조 스타일로 고정한다.
+        warn_text = ("위험 기준선(12/13/14)은 이 과제(부품 단위 당일 고장 분류)에는 "
+                     "적용되지 않는다 — 설비 단위 위험도 분류 과제(별도)에서만 쓰인다.")
+        warn_emphasis = False
+    else:
+        # 위험 기준선은 표의 축이 아니라 '라벨 정의'다 — 바꾸면 정답이 바뀌므로
+        # 모델을 다시 학습/교체해야 한다. 관리자가 필터로 착각하고 눌렀다가
+        # 화면 전체 수치가 갈리는 것이 원래 문제였다. 경고를 컨트롤 바로 아래에
+        # 상시 노출하고, 기본값에서 벗어나면 문구를 강조로 바꾼다.
+        warn_text = ("주의 — 위험 기준선은 필터가 아니라 학습 라벨 정의다. "
+                     f"값을 바꾸면 해당 기준선으로 학습된 모델로 교체되고 아래 모든 지표가 다시 계산된다."
+                     + (f"  현재 기본값({SEG_GROUPS['threshold'][DEFAULT_SEG['threshold']]}) 아님 "
+                        f"→ {SEG_GROUPS['threshold'][thr_sel]} 기준 모델" if thr_changed else ""))
+        warn_emphasis = thr_changed
     warn_line = html.Div(
         html.Span(warn_text,
                   style={"fontSize": "11px", "lineHeight": "16px",
-                         "fontWeight": "600" if thr_changed else "500",
-                         "color": INK if thr_changed else MUTED, "whiteSpace": "nowrap",
+                         "fontWeight": "600" if warn_emphasis else "500",
+                         "color": INK if warn_emphasis else MUTED, "whiteSpace": "nowrap",
                          "boxSizing": "border-box", "padding": "0 6px",
-                         "border": f"1px solid {CTRL if thr_changed else HAIR}", "borderRadius": "2px"}),
+                         "border": f"1px solid {CTRL if warn_emphasis else HAIR}", "borderRadius": "2px"}),
         style={"height": "16px", "display": "flex", "alignItems": "center", "justifyContent": "flex-end"},
     )
 
@@ -1153,8 +1330,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE):
         [html.Div([seg("task", "과제", SEG_GROUPS["task"], sel=seg_state.get("task", 0)),
                    html.Div([note("툴바 1880 × 32"),
                              seg("threshold", "위험 기준선 (등급가중 고장점수)",
-                                 SEG_GROUPS["threshold"], sel=thr_sel),
-                             slot("값 추가 여지", 96, 32)],
+                                 SEG_GROUPS["threshold"], sel=thr_sel)],
                             style={"display": "flex", "alignItems": "center", "gap": "12px"})],
                   style={"height": "32px", "display": "flex", "alignItems": "center",
                          "justifyContent": "space-between", "gap": "16px"}),
@@ -1168,95 +1344,246 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE):
     )
 
     # 과제에 따라 행 A가 갈린다 (원래 스펙의 '③ 행A 변형'):
-    #   분류 2종 → 지표 타일 6개 × 300 / 전력 회귀 → 지표 타일 4개 × 458
-    task_sel = seg_state.get("task", 0)
+    #   과제 0(현재 고장 표시 분류)은 실제 값(hist_gradient_boosting 기준) 타일 6개.
+    #   과제 1(부품군 진단)은 KPI 타일 행 자체를 만들지 않는다 — mcomp 카드
+    #   자리에 부품군별 표가 대신 들어간다.
+    #   과제 2(부품 고장 탐지)는 아직 자리표시자 그대로(타일 4개 × 458).
+    kpi_labels = ["정확도", "정밀도", "재현율", "F1", "ROC-AUC", "평균정밀도(AP)"]
+    part_failure_kpi_labels = ["평균정밀도(AP)", "정밀도", "재현율", "F1"]
+    part_failure_kpi_cols = ["average_precision", "precision", "recall", "f1"]
     if task_sel == 2:
-        row_a = row(ROW_KPI, [tile(f"[회귀 지표 {i+1}]", w=458, sub="값 또는 빈 상태") for i in range(4)])
+        part_failure_metrics = load_part_failure_metrics()
+        selected_model = load_part_failure_selected_model()
+        selected_metrics = part_failure_metrics[selected_model]
+        row_a = row(ROW_KPI, [
+            kpi_value_tile(label, f"{selected_metrics[col]:.3f}", w=458)
+            for label, col in zip(part_failure_kpi_labels, part_failure_kpi_cols)
+        ])
+    elif task_sel == 0:
+        current_metrics = load_current_classification_metrics()["hist_gradient_boosting"]
+        row_a = row(ROW_KPI, [
+            kpi_value_tile(label, f"{current_metrics[col]:.3f}")
+            for label, col in zip(kpi_labels, CLASSIFICATION_METRIC_COLUMNS)
+        ])
     else:
-        kind = "분류" if task_sel == 0 else "사전예측"
-        row_a = row(ROW_KPI, [tile(f"[{kind} 지표 {i+1}]", sub="값 또는 빈 상태") for i in range(6)])
+        row_a = html.Div()
 
-    metric_cols = [("모델", 182, "left")] + [(f"[지표 {i+1}]", 93, "right") for i in range(6)]
-    model_rows = []
-    for name in ["기준 A", "기준 B", "RandomForest"]:
-        cells = [html.Td(
-            html.Div([html.Span(style={"width": "10px", "height": "10px", "border": f"1px solid {CTRL}",
-                                        "boxSizing": "border-box"}),
-                      html.Span(name, style={"fontSize": "13px", "color": INK})],
-                     style={"display": "flex", "alignItems": "center", "gap": "8px"}),
-            style={"padding": "0 8px", "borderBottom": f"1px solid {HAIR}"})]
-        cells += [html.Td(html.Div(bar(45, 8), style={"display": "flex", "justifyContent": "flex-end"}),
-                          style={"padding": "0 8px", "borderBottom": f"1px solid {HAIR}"}) for _ in range(6)]
-        model_rows.append(html.Tr(cells, style={"height": "32px"}))
-    model_rows.append(html.Tr(
-        html.Td("+ 레지스트리 모델 행 (가변 · 32px/행)", colSpan=7,
-                style={"padding": "0 8px", "border": f"1px dashed {CTRL}", "background": SUNK, **LABEL_12}),
-        style={"height": "32px"}))
-    mthead = html.Tr([html.Th(l, style={"width": f"{w}px", "padding": "0 8px", "textAlign": a,
-                                         **LABEL_12, "whiteSpace": "nowrap", "borderBottom": f"1px solid {CTRL}"})
-                       for l, w, a in metric_cols], style={"height": "32px"})
-    mtable = html.Table([html.Thead(mthead), html.Tbody(model_rows)],
-                         style={"width": "740px", "tableLayout": "fixed", "borderCollapse": "collapse"})
-    mcomp_body = html.Div([mtable, html.Div(style={"flexGrow": "1"}),
-                           note("가시 한도: 헤더 32 + 모델 10행 × 32 = 352 / 392"),
-                           note("기계 종류 → 필터바 · 위험 기준선 → 툴바 (표의 축 아님)")])
-    mcomp = card("모델 비교", 774, ROW_MAIN, mcomp_body, right=note("행 = 모델 (레지스트리) · 열 = 지표"))
+    if task_sel == 1:
+        # 부품군 진단 — ...
+        family_rows = load_asset_family_diagnosis(asset_tag)
+        valid_families = [fr["part_family"] for fr in family_rows]
+        family = family if family in valid_families else valid_families[0]
+        pr_cm = load_family_pr_curve_and_confusion(asset_tag, family)
+        interp_row = None
+    elif task_sel == 0:
+        pr_cm = load_current_classification_pr_curve_and_confusion("hist_gradient_boosting")
+        actual_rate = load_current_classification_actual_rate("hist_gradient_boosting")
+        interp_row = _interpretation_summary(actual_rate, current_metrics["average_precision"],
+                                              current_metrics["precision"], current_metrics["recall"])
+    else:
+        pr_cm = load_part_failure_pr_curve_and_confusion()
+        actual_rate = load_part_failure_actual_rate(selected_model)
+        interp_row = _interpretation_summary(actual_rate, selected_metrics["average_precision"],
+                                              selected_metrics["precision"], selected_metrics["recall"])
 
-    pr_body = html.Div([slot("범례 · 모델 n + 무작위 기준선", 584, 20),
-                        hstack([slot("y축 · 정밀도", 40, 342), slot("PR 곡선 영역", "가변", 342)], 0),
-                        hstack([html.Div(style={"width": "40px"}), slot("x축 · 재현율", "가변", 22)], 0)])
-    prc = card("PR 곡선", 616, ROW_MAIN, pr_body, right=note("모델 수만큼 + 무작위 기준선"))
+    if task_sel == 1:
+        # 부품군 진단 — mcomp 카드 자리에 선택 자산의 부품군 9종별 표를 넣는다
+        # (기존 '모델 비교' 표와는 열 구성 자체가 달라 별도로 만든다).
+        # average_precision 내림차순(load_asset_family_diagnosis가 이미 정렬)
+        # 기준 1행이 최초 진입 기본 선택 부품군이다.
+        family_cols = [
+            ("부품군", 130, "left"), ("모델", 150, "left"), ("표본 수", 64, "right"),
+            ("양성률(%)", 80, "right"), ("정밀도", 82, "right"), ("재현율", 82, "right"),
+            ("AP", 72, "right"), ("ROC-AUC", 82, "right"),
+        ]
+        def family_cell(content, align="left", highlight=False):
+            # boxSizing 없이는 padding이 지정한 width 위에 더해져 8열이 카드
+            # 폭(742px)을 넘기고 overflow:hidden에 잘린다(기존 '모델 비교'
+            # 표에도 있던 문제이나, 그 표는 이번 범위 밖이라 손대지 않는다).
+            return html.Td(content, style={"width": "auto", "padding": "0 8px", "textAlign": align,
+                                            "boxSizing": "border-box", "background": SUNK if highlight else "none",
+                                            "borderBottom": f"1px solid {HAIR}"})
+        family_body_rows = [
+            html.Tr([
+                family_cell(html.Span(fr["part_family"], style={"fontSize": "13px", "color": INK}),
+                            highlight=fr["part_family"] == family),
+                family_cell(html.Span(fr["model"], style={"fontSize": "13px", "color": INK}),
+                            highlight=fr["part_family"] == family),
+                family_cell(str(fr["support"]), align="right", highlight=fr["part_family"] == family),
+                family_cell(f"{fr['positive_rate'] * 100:.1f}%", align="right", highlight=fr["part_family"] == family),
+                family_cell(f"{fr['precision']:.3f}", align="right", highlight=fr["part_family"] == family),
+                family_cell(f"{fr['recall']:.3f}", align="right", highlight=fr["part_family"] == family),
+                family_cell(f"{fr['average_precision']:.3f}", align="right", highlight=fr["part_family"] == family),
+                family_cell(f"{fr['roc_auc']:.3f}", align="right", highlight=fr["part_family"] == family),
+            ], id={"type": "family-row", "index": fr["part_family"]}, n_clicks=0,
+               style={"height": "32px", "cursor": "pointer"})
+            for fr in family_rows
+        ]
+        family_thead = html.Tr([html.Th(l, style={"width": f"{w}px", "padding": "0 8px", "textAlign": a,
+                                                    "boxSizing": "border-box",
+                                                    **LABEL_12, "whiteSpace": "nowrap",
+                                                    "borderBottom": f"1px solid {CTRL}"})
+                                 for l, w, a in family_cols], style={"height": "32px"})
+        family_table = html.Table([html.Thead(family_thead), html.Tbody(family_body_rows)],
+                                   style={"width": "742px", "tableLayout": "fixed", "borderCollapse": "collapse"})
+        mcomp_body = html.Div([family_table])
+        mcomp = card("부품군 진단", 774, ROW_MAIN, mcomp_body, right=note("행 = 부품군 · 열 = 지표 · 행 클릭 시 아래 카드 갱신"))
+    else:
+        # 모델 비교 표 — 과제 0(현재 고장 표시 분류)·2(부품 고장 탐지) 공용.
+        # 열 순서는 모델 → AP → 정밀도 → 재현율 → F1 → 선택 여부로 고정하고
+        # Accuracy는 넣지 않는다(상단 KPI 카드에 이미 있고 양성률이 낮아
+        # 부풀려진다). 결과가 있는 모델만 행으로 넣는다.
+        if task_sel == 0:
+            metrics = load_current_classification_metrics()
+            comparison_rows = [
+                {"key": "prior", "label": "prior (기준)", **{
+                    col: metrics["prior"][col] for col in ("average_precision", "precision", "recall", "f1")
+                }},
+                {"key": "hist_gradient_boosting", "label": "hist_gradient_boosting", **{
+                    col: metrics["hist_gradient_boosting"][col]
+                    for col in ("average_precision", "precision", "recall", "f1")
+                }},
+            ]
+            selected_key = "hist_gradient_boosting"
+        else:
+            metrics = load_part_failure_metrics()
+            comparison_rows = [{"key": m, "label": m, **vals} for m, vals in metrics.items()]
+            selected_key = load_part_failure_selected_model()
+        mcomp_body = html.Div([_model_comparison_table(comparison_rows, selected_key)])
+        mcomp = card("모델 비교", 774, ROW_MAIN, mcomp_body,
+                     right=note(f"행 = 모델 · 선택 = AP 최댓값 ({selected_key})"))
 
-    def cell(t):
-        return slot(t, 169, 160)
+    pr_chart_id_type = {0: "classification-pr-chart", 1: "family-pr-chart", 2: "partfail-pr-chart"}[task_sel]
+    pr_body = html.Div(
+        dcc.Graph(id={"type": pr_chart_id_type, "index": "screen3"},
+                  figure=_family_pr_figure(pr_cm, "light"),
+                  config={"displayModeBar": False, "responsive": True},
+                  style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
+        style={"width": "584px", "height": "392px", "display": "flex", "flexDirection": "column"})
+    prc_note = f"모델: {pr_cm['model']}" if "model" in pr_cm else f"{asset_tag} · {family}"
+    prc = card("PR 곡선", 616, ROW_MAIN, pr_body, right=note(prc_note))
+
+    def cm_cell(value):
+        return html.Div(html.Span(str(value), style={"fontFamily": MONO, "fontSize": "24px",
+                                                       "fontWeight": "600", "color": INK}),
+                         style={"width": "169px", "height": "160px", "boxSizing": "border-box",
+                                "display": "flex", "alignItems": "center", "justifyContent": "center",
+                                "border": f"1px dashed {CTRL}", "background": SUNK})
+    c = pr_cm["confusion"]
     cm_body = html.Div([
         hstack([html.Div(style={"width": "72px"}),
                 html.Div("예측 고장 표시 있음", style={"width": "169px", "textAlign": "center", **LABEL_12}),
                 html.Div("예측 고장 표시 없음", style={"width": "169px", "textAlign": "center", **LABEL_12})],
                8, {"height": "24px", "alignItems": "center"}),
         hstack([html.Div("실제 있음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
-                cell("실제 있음 · 예측 있음"), cell("실제 있음 · 예측 없음")], 8, {"height": "160px"}),
+                cm_cell(c["tp"]), cm_cell(c["fn"])], 8, {"height": "160px"}),
         hstack([html.Div("실제 없음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
-                cell("실제 없음 · 예측 있음"), cell("실제 없음 · 예측 없음")], 8, {"height": "160px"}),
+                cm_cell(c["fp"]), cm_cell(c["tn"])], 8, {"height": "160px"}),
         html.Div([html.Span("판정 임계값", style={**LABEL_12, "whiteSpace": "nowrap"}),
-                  slot("값 · 하단 슬라이더와 연동", 220, 24)],
+                  html.Span(f"{pr_cm['cutoff']:.3f}", style=NUM_12)],
                  style={"height": "32px", "display": "flex", "alignItems": "center", "gap": "8px"}),
     ])
     cmx = card("혼동행렬", 458, ROW_MAIN, cm_body, right=note("2 × 2"))
     row_b = row(ROW_MAIN, [mcomp, prc, cmx])
 
-    frows = html.Div(
-        [html.Div([html.Div(bar(70, 5), style={"width": "160px", "flexShrink": "0"}),
-                   html.Div(style={"flexGrow": "1", "height": "11px", "boxSizing": "border-box",
-                                    "border": f"1px dashed {CTRL}", "background": SUNK}),
-                   html.Div(bar(80, 5), style={"width": "48px", "flexShrink": "0"})],
-                  style={"height": "15px", "display": "flex", "alignItems": "center", "gap": "8px",
-                         "flexShrink": "0"})
-         for _ in range(12)],
-    )
-    feat = card("주요 영향 변수 상위 12", 774, 252, frows, right=note("12행 × 15 · 직접 값 라벨"))
+    if task_sel == 1:
+        fi_rows = load_family_feature_importance(family)
+        max_importance = max(r["importance_mean"] for r in fi_rows)
+        fi_list = html.Div(
+            [html.Div([
+                html.Div(r["feature"], style={"width": "220px", "flexShrink": "0", "fontSize": "12px",
+                                               "color": INK, "whiteSpace": "nowrap", "overflow": "hidden",
+                                               "textOverflow": "ellipsis"}),
+                html.Div(style={"flexGrow": "1", "height": "7px", "borderRadius": "2px",
+                                "width": f"{r['importance_mean'] / max_importance * 100}%",
+                                "background": _FEATURE_CATEGORY_COLOR[_feature_color_category(r["feature"])]}),
+                html.Div(f"{r['importance_mean']:.3f}",
+                         style={**NUM_12, "width": "56px", "textAlign": "right", "flexShrink": "0"}),
+             ], style={"height": "12px", "display": "flex", "alignItems": "center", "gap": "8px", "flexShrink": "0"})
+             for r in fi_rows],
+            style={"display": "flex", "flexDirection": "column", "gap": "3px"},
+        )
+        legend_dot = lambda color: html.Span(style={"width": "7px", "height": "7px", "borderRadius": "2px",
+                                                      "background": color, "display": "inline-block"})
+        fi_footer = html.Div(
+            [html.Div([legend_dot(FEATURE_COLOR_HEALTH), html.Span("건강 센서", style=MICRO_11),
+                       legend_dot(FEATURE_COLOR_OPERATING), html.Span("운전 조건", style=MICRO_11),
+                       legend_dot(MUTED), html.Span("장비·부품·날짜", style=MICRO_11)],
+                      style={"display": "flex", "alignItems": "center", "gap": "4px", "flexShrink": "0"}),
+             note("중요도는 고장 원인이 아니라 고장과 함께 변화한 운전 상태를 뜻한다.",
+                  {"whiteSpace": "normal", "textAlign": "right"})],
+            style={"display": "flex", "alignItems": "center", "justifyContent": "space-between",
+                   "gap": "12px", "marginTop": "8px", "paddingTop": "6px", "borderTop": f"1px solid {HAIR}"},
+        )
+        feat_body = html.Div([fi_list, fi_footer], style={"display": "flex", "flexDirection": "column"})
+        feat = card("주요 영향 변수 상위 10", 774, 252, feat_body, right=note("10행 · 부품군 자체 속성(자산 무관)"))
+    else:
+        # prior·로지스틱회귀/랜덤포레스트 모두 변수중요도를 사전 계산해 두지
+        # 않았다 — 그럴듯한 값을 새로 만들지 않고 데이터 없음을 그대로 밝힌다.
+        feat_body = empty_state(
+            "데이터 없음", "이 과제의 모델은 변수중요도를 사전 계산해 두지 않음", 742, 184,
+        )
+        feat = card("주요 영향 변수", 774, 252, feat_body, right=note("데이터 없음"))
+
+    if task_sel == 0:
+        default_threshold = pr_cm["cutoff"]
+        threshold_basis = "검증 구간 기준"
+        thr_metrics = load_current_classification_at_threshold("hist_gradient_boosting", default_threshold)
+    elif task_sel == 2:
+        default_threshold = pr_cm["cutoff"]
+        # pf_within_7d는 임계값을 검증 구간에서 최적화하지 않고 0.5로 고정해
+        # 둔 채로 학습됐다 — "검증 구간 기준"이라고 표시하면 사실이 아니므로
+        # 있는 그대로 밝힌다.
+        threshold_basis = "고정값 — 검증 구간 최적화 아님"
+        thr_metrics = load_part_failure_at_threshold(selected_model, default_threshold)
+    else:
+        default_threshold = None
+        threshold_basis = None
 
     slider = html.Div(
-        [html.Label("판정 임계값 (즉시 재계산)", htmlFor="thr-slider", style={**LABEL_12, "whiteSpace": "nowrap"}),
-         dcc.Slider(id="thr-slider", min=0, max=100, value=50, marks=None,
-                    tooltip={"placement": "bottom"})],
-        style={"display": "flex", "alignItems": "center", "gap": "8px", "width": "260px"},
+        [html.Label("판정 임계값", htmlFor="thr-slider", style={**LABEL_12, "whiteSpace": "nowrap"}),
+         dcc.Slider(id={"type": "thr-slider", "index": "screen3"}, min=0, max=100, marks=None,
+                    value=round(default_threshold * 100) if default_threshold is not None else 50,
+                    tooltip={"placement": "bottom"}),
+         note("설명용 가상 실험" + (f" · 기본값 {threshold_basis}" if threshold_basis else ""),
+              {"whiteSpace": "nowrap"})],
+        style={"display": "flex", "alignItems": "center", "gap": "8px", "width": "420px"},
     )
-    thr_body = html.Div([hstack([slot("y축", 40, 162), slot("위험도 분포 히스토그램 + 임계값 세로선", "가변", 162)], 0),
-                         hstack([html.Div(style={"width": "40px"}), slot("x축 · 위험도", "가변", 22)], 0)])
+    if task_sel == 1:
+        thr_body = empty_state("이 과제에는 해당 없음", "부품군 진단 과제에서는 표시하지 않음", 584, 184)
+    else:
+        thr_body = html.Div(_threshold_metrics_body(thr_metrics, default_threshold),
+                             id={"type": "thr-metrics", "index": "screen3"})
     thr = card("판정 임계값 조정", 616, 252, thr_body, right=slider)
 
-    # 과제 세그먼트가 실제로 동작하므로 이 카드도 실제로 갈린다
-    # (원래 카드 문구가 "7일 사전 예측 과제에서만 활성"이었는데, 선택이
-    #  고정이라 영원히 빈 상태였다).
+    # 과제 1(부품군 진단)은 실제 재발 간격 히스토그램이 이미 있어 그대로 둔다.
+    # 과제 0·2는 원래 "해당 없음"이던 자리를 "운영 판단" 카드로 바꾼다 —
+    # AP 향상배수 기준 규칙으로 지금 이 모델을 실사용에 써도 되는지 요약한다.
     if task_sel == 1:
-        lead_body = html.Div([slot("선행 경보 일수 히스토그램", 426, 162), slot("x축 · 선행 일수", 426, 22)])
+        intervals = load_family_recurrence_intervals(asset_tag, family)
+        if intervals:
+            lead_body = html.Div(
+                dcc.Graph(id={"type": "family-recur-chart", "index": "screen3"},
+                          figure=_family_recur_figure(intervals, "light"),
+                          config={"displayModeBar": False, "responsive": True},
+                          style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
+                style={"width": "426px", "height": "184px", "display": "flex", "flexDirection": "column"})
+        else:
+            lead_body = empty_state("이 과제에는 해당 없음",
+                                     "재발 이력이 2회 미만이라 간격을 계산할 수 없음", 426, 184)
+        lead = card("재발 간격", 458, 252, lead_body,
+                    right=note("과거 재발 간격 — 예측이 아닌 회고적 통계"))
     else:
-        lead_body = empty_state("이 과제에는 해당 없음", "7일 사전 예측 과제에서만 활성", 426, 184)
-    lead = card("선행 경보 일수 분포", 458, 252, lead_body)
+        lead_body = _operational_judgment_body(actual_rate,
+                                                (current_metrics if task_sel == 0 else selected_metrics)["average_precision"],
+                                                (current_metrics if task_sel == 0 else selected_metrics)["precision"],
+                                                (current_metrics if task_sel == 0 else selected_metrics)["recall"],
+                                                pr_cm["confusion"])
+        lead = card("운영 판단", 458, 252, lead_body, right=note("AP 향상배수 기준 자동 판정"))
     row_c = row(252, [feat, thr, lead])
 
-    return html.Div([toolbar, row_a, row_b, row_c],
+    interp_children = [interp_row] if interp_row is not None else []
+    return html.Div([toolbar, row_a, *interp_children, row_b, row_c],
                      style={"display": "flex", "flexDirection": "column", "gap": f"{GUTTER}px"})
 
 
@@ -1500,6 +1827,10 @@ def screen_5(seg_state=None, audience=DEFAULT_AUDIENCE):
                      style={"display": "flex", "flexDirection": "column", "gap": f"{GUTTER}px"})
 
 
+# screen_5()는 탭에서는 빠지지만 함수 자체는 지우지 않는다 — 헤더의 내보내기
+# 드롭다운(REPORT_AUDIENCES/build_report_pdf/xlsx)이 화면⑤ 없이도 정상
+# 동작하는지는 확인했지만, screen_5()가 그 보고서 구성의 참조 구현이라
+# 남겨 둔다(요청: "함수 자체는 삭제하지 마라").
 SCREEN_BUILDERS = {"1": screen_1, "2": screen_2, "3": screen_3, "4": screen_4}
 
 
@@ -1820,6 +2151,9 @@ app.layout = html.Div(
         # ②의 "‹ 이전 기계"/"다음 기계 ›"가 바꾸는, 현재 상세를 보고 있는 기계.
         # prio-sort-store와 동일하게 세션 메모리(storage_type 미지정)로 둔다.
         dcc.Store(id="selected-asset-store", data=load_asset_list()[0]),
+        # ③ "부품군 진단" 표 행 클릭이 바꾸는, 현재 드릴다운 중인 부품군.
+        # None이면 screen_3()이 정렬 후 1행(average_precision 최댓값)으로 대체한다.
+        dcc.Store(id="selected-family-store", data=None),
         dcc.Store(id="theme-store", data="light", storage_type="local"),
         dcc.Store(id="audit-sync-status"),
         dcc.Store(id="audit-audience-event"),
@@ -2010,20 +2344,23 @@ app.layout = html.Div(
     Output("screen-content", "children"),
     Input("screen-tabs", "value"),
     Input("seg-store", "data"),
-    Input("report-audience-dd", "value"),
     Input("prio-sort-store", "data"),
     Input("selected-asset-store", "data"),
+    Input("selected-family-store", "data"),
     State("actor-id-input", "value"),
 )
-def render_screen(active, seg_state, audience, prio_sort, selected_asset, actor_id):
+def render_screen(active, seg_state, prio_sort, selected_asset, selected_family, actor_id):
     if ctx.triggered_id == "screen-tabs":
         record_action("ACT_TAB_OPEN", "화면 이동", actor_id=actor_id,
                       target_type="tab", target_id=active)
-    kwargs = {"seg_state": seg_state, "audience": audience or DEFAULT_AUDIENCE}
+    kwargs = {"seg_state": seg_state, "audience": DEFAULT_AUDIENCE}
     if active == "1":
         kwargs["prio_sort"] = prio_sort or DEFAULT_PRIO_SORT
     if active == "2":
         kwargs["asset_tag"] = selected_asset
+    if active == "3":
+        kwargs["asset_tag"] = selected_asset
+        kwargs["family"] = selected_family
     try:
         return SCREEN_BUILDERS[active](**kwargs)
     except Exception as exc:
@@ -2065,6 +2402,48 @@ def cycle_selected_asset(_clicks, current_asset, actor_id):
     return chosen
 
 
+# ③ "부품군 진단" 표의 행 클릭 — family-row는 task_sel==1일 때만 DOM에
+# 있으므로, 다른 과제·다른 화면을 보는 동안은 이 패턴매칭 Input에 매치될
+# 대상이 없어 콜백 자체가 호출되지 않는다. cycle_selected_asset과 같은
+# 이유로 n_clicks 전부가 falsy인 마운트 시 유령 발화를 무시한다.
+@app.callback(
+    Output("selected-family-store", "data"),
+    Input({"type": "family-row", "index": ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def select_family_row(n_clicks_list):
+    if not n_clicks_list or not any(n_clicks_list):
+        return no_update
+    triggered = ctx.triggered_id
+    if not triggered:
+        return no_update
+    return triggered["index"]
+
+
+# ③ "판정 임계값 조정" 슬라이더 — 과제 0·2에서만 thr-metrics가 DOM에 있으므로
+# (과제 1은 "해당 없음" 정적 문구) 이 패턴매칭 Output이 0개일 때 Dash가
+# 콜백 자체를 호출하지 않는다. 모델을 다시 학습·평가하지 않고, 이미 저장된
+# 예측 확률을 슬라이더 값으로 다시 이진화만 한다.
+@app.callback(
+    Output({"type": "thr-metrics", "index": ALL}, "children"),
+    Input({"type": "thr-slider", "index": ALL}, "value"),
+    State("seg-store", "data"),
+    prevent_initial_call=True,
+)
+def recompute_threshold_metrics(slider_values, seg_state):
+    if not slider_values or slider_values[0] is None:
+        return no_update
+    task_sel = (seg_state or DEFAULT_SEG).get("task", 0)
+    threshold = slider_values[0] / 100
+    if task_sel == 0:
+        metrics = load_current_classification_at_threshold("hist_gradient_boosting", threshold)
+    elif task_sel == 2:
+        metrics = load_part_failure_at_threshold(load_part_failure_selected_model(), threshold)
+    else:
+        return no_update
+    return [_threshold_metrics_body(metrics, threshold)]
+
+
 # ------------------------------------------------------------
 # 테마 전환 — 루트 className만 갈아끼우면 CSS 변수가 전부 따라 바뀐다
 # ------------------------------------------------------------
@@ -2084,12 +2463,11 @@ def toggle_theme(_n, current, actor_id):
 
 @app.callback(
     Output("root", "className"),
-    Output("theme-btn", "children"),
     Input("theme-store", "data"),
 )
 def apply_theme(theme):
     theme = theme if theme in ("light", "dark") else "light"
-    return f"theme-{theme}", f"테마 · {'다크' if theme == 'dark' else '라이트'}"
+    return f"theme-{theme}"
 
 
 # 화면⑤ "고장·위험 추세" 차트 전용 재색칠 — render_screen과 무관한 별도
@@ -2106,6 +2484,30 @@ def apply_theme(theme):
 )
 def recolor_trend_chart(theme, _active_tab):
     return [_trend_figure(load_failure_trend(), theme or "light")]
+
+
+# 화면① "고장 표시 히트맵" 차트도 같은 방식으로 재색칠한다 — trend-chart와
+# id 타입을 나눠야 두 콜백의 Output 매칭 개수가 서로 섞이지 않는다.
+@app.callback(
+    Output({"type": "heatmap-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+)
+def recolor_heatmap_chart(theme, _active_tab):
+    return [_heatmap_figure(load_asset_failure_heatmap(), theme or "light")]
+
+
+# 화면① "기계 상태" 타일 10개의 스파크라인도 같은 방식으로 재색칠한다.
+# load_screen1_machine_status()가 매번 asset_tag 오름차순으로 반환하므로,
+# 이 순서가 tiles_grid가 실제로 그린 spark-chart 컴포넌트 순서와 항상 같다.
+@app.callback(
+    Output({"type": "spark-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+)
+def recolor_spark_charts(theme, _active_tab):
+    rows = load_screen1_machine_status()
+    return [_spark_figure(r["sparkline"], theme or "light") for r in rows]
 
 
 # 화면② 스몰 멀티플도 같은 방식으로 재색칠한다. trend-chart와 id 타입을 나눠
@@ -2137,33 +2539,64 @@ def recolor_parts_chart(theme, _active_tab, asset_tag):
     return [_parts_figure(load_asset_parts_history(asset_tag), theme or "light")]
 
 
-# 화면② "동종 기계 대비" 박스플롯도 같은 방식으로 재색칠한다. smult-chart/
-# parts-chart와 id 타입을 나눠야 세 콜백의 Output 매칭 개수가 서로 섞이지 않는다.
+# ③ "부품군 진단" 드릴다운의 PR곡선·재발간격 차트도 같은 방식으로 재색칠한다.
+# family-pr-chart/family-recur-chart는 task_sel==1일 때만 DOM에 있으므로
+# 다른 과제·다른 화면에서는 호출 자체가 안 된다 — asset_tag/family 폴백은
+# screen_3()의 폴백 로직과 동일하게 반복한다(그 함수 자체를 State로 참조할
+# 수는 없으므로).
 @app.callback(
-    Output({"type": "peer-chart", "index": ALL}, "figure"),
+    Output({"type": "family-pr-chart", "index": ALL}, "figure"),
     Input("theme-store", "data"),
     Input("screen-tabs", "value"),
     State("selected-asset-store", "data"),
+    State("selected-family-store", "data"),
 )
-def recolor_peer_chart(theme, _active_tab, asset_tag):
+def recolor_family_pr_chart(theme, _active_tab, asset_tag, family):
     assets = load_asset_list()
     asset_tag = asset_tag if asset_tag in assets else assets[0]
-    return [_peer_figure(load_asset_peer_comparison(asset_tag), theme or "light")]
+    valid_families = [r["part_family"] for r in load_asset_family_diagnosis(asset_tag)]
+    family = family if family in valid_families else valid_families[0]
+    pr_cm = load_family_pr_curve_and_confusion(asset_tag, family)
+    return [_family_pr_figure(pr_cm, theme or "light")]
 
 
-# 화면② "고장 직전 센서 변화" 차트도 같은 방식으로 재색칠한다. smult-chart/
-# parts-chart/peer-chart와 id 타입을 나눠야 네 콜백의 Output 매칭 개수가
-# 서로 섞이지 않는다.
 @app.callback(
-    Output({"type": "pre-chart", "index": ALL}, "figure"),
+    Output({"type": "family-recur-chart", "index": ALL}, "figure"),
     Input("theme-store", "data"),
     Input("screen-tabs", "value"),
     State("selected-asset-store", "data"),
+    State("selected-family-store", "data"),
 )
-def recolor_pre_chart(theme, _active_tab, asset_tag):
+def recolor_family_recur_chart(theme, _active_tab, asset_tag, family):
     assets = load_asset_list()
     asset_tag = asset_tag if asset_tag in assets else assets[0]
-    return [_pre_figure(load_asset_failure_onset_trend(asset_tag), theme or "light")]
+    valid_families = [r["part_family"] for r in load_asset_family_diagnosis(asset_tag)]
+    family = family if family in valid_families else valid_families[0]
+    intervals = load_family_recurrence_intervals(asset_tag, family)
+    return [_family_recur_figure(intervals, theme or "light")]
+
+
+# ③ "현재 고장 표시 분류"/"부품 고장 탐지" 과제의 PR곡선도 같은 방식으로
+# 재색칠한다. 이 둘은 선택 자산·부품군과 무관한 전체 테스트 구간 지표라
+# family-pr-chart와 달리 State가 필요 없다 — heatmap-chart와 같은 패턴.
+@app.callback(
+    Output({"type": "classification-pr-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+)
+def recolor_classification_pr_chart(theme, _active_tab):
+    pr_cm = load_current_classification_pr_curve_and_confusion("hist_gradient_boosting")
+    return [_family_pr_figure(pr_cm, theme or "light")]
+
+
+@app.callback(
+    Output({"type": "partfail-pr-chart", "index": ALL}, "figure"),
+    Input("theme-store", "data"),
+    Input("screen-tabs", "value"),
+)
+def recolor_partfail_pr_chart(theme, _active_tab):
+    pr_cm = load_part_failure_pr_curve_and_confusion()
+    return [_family_pr_figure(pr_cm, theme or "light")]
 
 
 # <html>에도 같은 클래스를 얹는다. #root는 1920 고정폭이라 넓은 화면에서
@@ -2301,13 +2734,32 @@ def drill_failrate_to_priority(n_clicks_list, current, actor_id):
     # 화면 재렌더로 타일이 다시 만들어질 때의 n_clicks=0도 함께 무시한다.
     if not n_clicks_list or not any(n_clicks_list):
         return no_update, no_update
-    new = "grade" if (current or DEFAULT_PRIO_SORT) == "threshold" else "threshold"
+    current = current or DEFAULT_PRIO_SORT
+    new_sort_by = "grade" if current.get("sort_by") == "threshold" else "threshold"
     msg = ("'종합 고장율' 클릭 → 점검 우선순위를 기준선 초과 기준으로 정렬"
-           if new == "threshold" else
+           if new_sort_by == "threshold" else
            "'종합 고장율' 다시 클릭 → 점검 우선순위를 등급가중 고장점수 기준으로 복귀")
+    new_state = {"sort_by": new_sort_by, "direction": current.get("direction", "desc")}
     record_action("ACT_PRIORITY_SORT", "점검 우선순위 정렬", actor_id=actor_id,
-                  target_type="priority", target_id=new)
-    return new, msg
+                  target_type="priority", target_id=f"{new_sort_by}:{new_state['direction']}")
+    return new_state, msg
+
+
+# 점검 우선순위 표의 오름차순 ↔ 내림차순 토글 — sort_by(등급가중 고장점수 ↔
+# 기준선 초과)는 그대로 두고 방향만 뒤집는다. drill_failrate_to_priority와
+# 같은 prio-sort-store를 쓰므로 화면 전환·테마 전환에도 함께 유지된다.
+@app.callback(
+    Output("prio-sort-store", "data", allow_duplicate=True),
+    Input({"type": "prio-dir-btn", "index": ALL}, "n_clicks"),
+    State("prio-sort-store", "data"),
+    prevent_initial_call=True,
+)
+def toggle_priority_direction(n_clicks_list, current):
+    if not n_clicks_list or not any(n_clicks_list):
+        return no_update
+    current = current or DEFAULT_PRIO_SORT
+    new_direction = "asc" if current.get("direction", "desc") == "desc" else "desc"
+    return {"sort_by": current.get("sort_by", "grade"), "direction": new_direction}
 
 
 # ------------------------------------------------------------
@@ -2317,37 +2769,35 @@ def drill_failrate_to_priority(n_clicks_list, current, actor_id):
     Output("report-download", "data"),
     Output("action-echo", "children", allow_duplicate=True),
     Output("export-access-modal", "style"),
-    Input("export-pdf-btn", "n_clicks"),
-    Input("export-xlsx-btn", "n_clicks"),
+    Input("export-run-btn", "n_clicks"),
     Input("export-access-modal-close", "n_clicks"),
-    State("report-audience-dd", "value"),
+    State("export-dd", "value"),
     State("filter-store", "data"),
     State("seg-store", "data"),
     State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def export_report(_pdf, _xlsx, _close, audience, filters, seg_state, actor_id):
+def export_report(_run, _close, export_value, filters, seg_state, actor_id):
     if ctx.triggered_id == "export-access-modal-close":
         return no_update, no_update, {"display": "none"}
 
-    export_format = "pdf" if ctx.triggered_id == "export-pdf-btn" else "excel"
+    fmt, audience = (export_value or f"pdf:{DEFAULT_AUDIENCE}").split(":")
+    audit_format = "excel" if fmt == "xlsx" else fmt
     # 버튼은 보이지만, 파일을 만드는 직전에 서버 세션의 역할을 다시 확인한다.
     # 일반 사용자가 요청을 직접 바꾸더라도 PDF·Excel은 받을 수 없다.
     if str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
         record_action("ACT_EXPORT_ACCESS_BLOCKED", "파일 내보내기 접근 차단", actor_id=actor_id,
-                      target_type="export", target_id=export_format, status="BLOCKED",
+                      target_type="export", target_id=audit_format, status="BLOCKED",
                       block_reason="관리자 역할이 필요합니다.")
         return no_update, "파일 내보내기는 관리자 계정만 사용할 수 있습니다.", {
             "display": "flex", "position": "fixed", "inset": 0, "zIndex": 340,
             "background": "#0006", "alignItems": "center", "justifyContent": "center",
         }
-
-    audience = audience or DEFAULT_AUDIENCE
     aud = REPORT_AUDIENCES[audience]
     stamp = datetime.now().strftime("%Y%m%d-%H%M")
     base = f"설비모니터링_보고서_{audience}_{stamp}"
     try:
-        if ctx.triggered_id == "export-pdf-btn":
+        if fmt == "pdf":
             payload, name, mime = build_report_pdf(filters, seg_state, audience), f"{base}.pdf", "application/pdf"
         else:
             payload, name, mime = (
@@ -2358,8 +2808,8 @@ def export_report(_pdf, _xlsx, _close, audience, filters, seg_state, actor_id):
                     source="wireframe_app.export_report", target_id=ctx.triggered_id)
         return no_update, f"내보내기 실패 — {type(exc).__name__}", {"display": "none"}
     record_action("ACT_REPORT_EXPORT", "보고서 내보내기", actor_id=actor_id,
-                  target_type="export", target_id=export_format,
-                  detail={"audience": audience, "format": export_format})
+                  target_type="export", target_id=audit_format,
+                  detail={"audience": audience, "format": audit_format})
     return (dcc.send_bytes(lambda b: b.write(payload), name, type=mime),
             f"{aud['label']} 보고서 내보냄 — {name} (섹션 {len(aud['sections'])}개 · 값은 {NO_DATA_MARK})",
             {"display": "none"})
@@ -2668,12 +3118,14 @@ def toggle_logout_confirmation(logout_clicks, cancel_clicks):
 
 
 @app.callback(Output("audit-audience-event", "data"),
-              Input("report-audience-dd", "value"), State("actor-id-input", "value"),
+              Input("export-dd", "value"), State("actor-id-input", "value"),
               prevent_initial_call=True)
-def log_audience_change(audience, actor_id):
-    record_action("ACT_AUDIENCE_CHANGE", "보고서 대상 선택", actor_id=actor_id,
-                  target_type="audience", target_id=audience)
-    return audience
+def log_audience_change(export_value, actor_id):
+    fmt, audience = (export_value or f"pdf:{DEFAULT_AUDIENCE}").split(":")
+    record_action("ACT_EXPORT_OPTION_CHANGE", "내보내기 옵션 선택", actor_id=actor_id,
+                  target_type="export_option", target_id=f"{fmt}:{audience}",
+                  detail={"format": fmt, "audience": audience})
+    return {"format": fmt, "audience": audience}
 
 
 @app.callback(Output("audit-sync-status", "data"), Input("audit-csv-interval", "n_intervals"))
