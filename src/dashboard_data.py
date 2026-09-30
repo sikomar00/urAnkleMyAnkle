@@ -1039,6 +1039,11 @@ def load_source_info() -> dict:
     }
 
 
+def load_data_start_date() -> str:
+    """필터바 "적용 기간"(전체) 시작일 — 원본 데이터의 가장 이른 transaction_date."""
+    return _load_raw()[DATE_COLUMN].min().strftime("%Y-%m-%d")
+
+
 def load_data_reference_date() -> str:
     """앱 헤더 "데이터 기준일" — 원본 데이터의 최신 transaction_date."""
     raw = _load_raw()

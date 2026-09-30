@@ -52,6 +52,7 @@ from .dashboard_data import (  # noqa: E402
     load_data_dictionary,
     load_data_quality_summary,
     load_data_reference_date,
+    load_data_start_date,
     load_failure_trend,
     load_family_feature_importance,
     load_family_pr_curve_and_confusion,
@@ -139,7 +140,7 @@ def status_badge(label):
 
 
 # 레이아웃 토큰
-CANVAS_W, CANVAS_H = 1920, 1080
+CANVAS_H = 1080  # 폭은 1280~1920px 유동(12열 그리드), 높이는 행 높이 토큰 합으로 고정
 HEADER_H, FILTERBAR_H = 56, 56
 MARGIN, GUTTER = 20, 16
 ROW_KPI, ROW_MAIN, ROW_SUB = 96, 460, 340
@@ -293,31 +294,42 @@ def slot(label, w, h, sub=None):
     )
 
 
+LAYOUT_COL = 142  # --layout-col: 1920 캔버스에서 12열 그리드 한 칸의 폭
+
+
+def _span(w):
+    """1920 캔버스 기준 폭(px)을 12열 그리드 칸 수로 바꾼다 — 칸 142 + 거터 16(레이아웃 토큰).
+    예: 1880 → 12, 1090 → 7, 774 → 5, 458 → 3. 실제 폭은 화면 폭을 따른다."""
+    return max(1, min(12, round((w + GUTTER) / (LAYOUT_COL + GUTTER))))
+
+
 def card(title, w, h, body, right=None):
-    """카드(.pf-card) — hairline 테두리 + radius-md, 그림자 없음. 제목 줄 36px 고정."""
+    """카드(.pf-card) — hairline 테두리 + radius-md, 그림자 없음. 제목 줄 36px 고정.
+    w는 1920 캔버스 기준 폭이며 12열 그리드 칸 수로 바뀐다(_span)."""
     return html.Section(
         [
             html.Div(
                 [html.H3(title, className=f"pf-card__title {TITLE_14}", style={"whiteSpace": "nowrap"}),
-                 html.Div(right, className="pf-card__actions", style={"minWidth": "0"})],
+                 html.Div(right, className="pf-card__actions")],
                 className="pf-card__head",
             ),
-            html.Div(body, style={"width": f"{w - 34}px", "height": f"{h - 70}px",
-                                   "display": "flex", "flexDirection": "column", "position": "relative"}),
+            html.Div(body, className="pf-card__body",
+                     style={"display": "flex", "flexDirection": "column", "minWidth": "0"}),
         ],
         className="pf-card",
-        style={"width": f"{w}px", "height": f"{h}px", "flexShrink": "0"},
+        style={"gridColumn": f"span {_span(w)}", "height": f"{h}px", "minWidth": "0"},
     )
 
 
-def row(height, children, gap=16, width=1880):
-    return html.Div(children, style={"width": f"{width}px", "height": f"{height}px",
-                                      "display": "flex", "gap": f"{gap}px"})
+def row(height, children, gap=16):
+    """12열 그리드 행 — 칸 폭은 minmax(0, 1fr)이라 1280~1920px 화면 폭을 따라 줄고 는다."""
+    return html.Div(children, style={"display": "grid", "gridTemplateColumns": "repeat(12, minmax(0, 1fr))",
+                                      "gap": f"{gap}px", "height": f"{height}px"})
 
 
 def col(width, height, children, gap=16):
-    return html.Div(children, style={"width": f"{width}px", "height": f"{height}px",
-                                      "flexShrink": "0", "display": "flex",
+    return html.Div(children, style={"gridColumn": f"span {_span(width)}", "height": f"{height}px",
+                                      "minWidth": "0", "display": "flex",
                                       "flexDirection": "column", "gap": f"{gap}px"})
 
 
@@ -335,7 +347,7 @@ def tile(label, w=300, h=96, sub="값 · value-28", tid=None):
     return html.Div(
         [html.Span(label, className=f"pf-kpi__label {LABEL_12}"), slot(sub, 168, 32)],
         className="pf-card pf-kpi" + (" pf-kpi--action" if tid else ""),
-        style={"width": f"{w}px", "height": f"{h}px", "flexShrink": "0"}, **kwargs,
+        style={"gridColumn": f"span {_span(w)}", "height": f"{h}px", "minWidth": "0"}, **kwargs,
     )
 
 
@@ -378,7 +390,7 @@ def filter_dropdown(dd_id, label, options, w):
              value=None, placeholder="전체", clearable=True,
              style={"width": f"{w}px"},
          )],
-        className="pf-field", style={"gap": "6px"},
+        className="pf-field", style={"gap": "6px", "flexShrink": "0"},
     )
 
 
@@ -393,7 +405,7 @@ def period_toggle():
     return html.Div(
         [html.Span("기간", className=LABEL_12, style={"whiteSpace": "nowrap"}),
          html.Div(buttons, id="period-btn-group", className="pf-seg")],
-        style={"display": "flex", "alignItems": "center", "gap": "8px"},
+        style={"display": "flex", "alignItems": "center", "gap": "8px", "flexShrink": "0"},
     )
 
 
@@ -424,13 +436,14 @@ def table_placeholder(cols, nrows, row_h, head_h=32, first_idx=False, sort_col=N
     )
 
 
-def empty_state(title, reason, w, h):
-    """확정되지 않은 값은 0/—이 아니라 이유가 적힌 빈 상태(.pf-empty)로 표시한다."""
+def empty_state(title, reason, h=None):
+    """확정되지 않은 값은 0/—이 아니라 이유가 적힌 빈 상태(.pf-empty)로 표시한다.
+    폭은 부모를 채우고, h를 주지 않으면 높이도 부모를 채운다."""
     return html.Div(
         [html.Span(title, className=f"pf-empty__title {TITLE_14}"),
          html.Span(reason, className=BODY_13)],
-        className="pf-empty" + (" pf-empty--inline" if h < 160 else ""),
-        style={"width": f"{w}px", "height": f"{h}px"},
+        className="pf-empty" + (" pf-empty--inline" if h is not None and h < 160 else ""),
+        style={"width": "100%", "height": f"{h}px" if h is not None else "100%"},
     )
 
 
@@ -444,7 +457,7 @@ def app_header():
         [html.Span("산업 기계 센서 기반 고장 위험 예측", className="pf-header__brand title-16"),
          html.Div([html.Span("데이터 기준일", className=LABEL_12),
                    html.Span(load_data_reference_date(), className=f"{CODE_12} pf-muted")],
-                  style={"display": "flex", "alignItems": "center", "gap": "6px"}),
+                  style={"display": "flex", "alignItems": "center", "gap": "6px", "whiteSpace": "nowrap"}),
          html.Span("합성 데이터 · 교육용", className="pf-chip-synthetic micro-11")],
         style={"display": "flex", "alignItems": "center", "gap": "12px", "minWidth": "0"},
     )
@@ -459,13 +472,20 @@ def app_header():
         for aud_key, aud in REPORT_AUDIENCES.items()
     ]
     right = html.Div(
-        [dcc.Dropdown(
-             id="export-dd",
-             options=export_options,
-             value=f"pdf:{DEFAULT_AUDIENCE}", clearable=False,
-             style={"width": "220px"},
-         ),
-         html.Button("내보내기", id="export-run-btn", n_clicks=0, className="pf-btn label-12"),
+        # 1600px 미만에서는 내보내기 드롭다운을 이 버튼 뒤 팝오버로 접는다(03-app.css).
+        # 계정 메뉴는 접지 않는다.
+        [html.Button("보고서 내보내기", id="export-menu-btn", n_clicks=0,
+                     className="pf-btn label-12 pf-export-toggle",
+                     **{"aria-expanded": "false", "aria-controls": "export-group"}),
+         html.Div([
+             dcc.Dropdown(
+                 id="export-dd",
+                 options=export_options,
+                 value=f"pdf:{DEFAULT_AUDIENCE}", clearable=False,
+                 style={"width": "220px"},
+             ),
+             html.Button("내보내기", id="export-run-btn", n_clicks=0, className="pf-btn label-12"),
+         ], id="export-group", className="pf-export"),
          html.Button("", id="theme-btn", n_clicks=0, title="테마 전환", className="pf-btn body-14",
                      style={"width": "32px", "padding": "0"}, **{"aria-label": "테마 전환"}),
          html.Span(DEMO_BADGE_TEXT, id="demo-badge", className="pf-badge pf-badge--role label-12",
@@ -494,18 +514,19 @@ def app_header():
          dcc.Download(id="table-download")],
         style={"display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "8px",
                # overflow:hidden을 여기 두면 "내보내기" 드롭다운 팝업까지 잘라버릴 수 있다.
-               "minWidth": "0"},
+               "minWidth": "0", "position": "relative"},
     )
     return html.Header(
         [left, center, right],
-        className="pf-header",
-        style={"width": f"{CANVAS_W}px", "height": f"{HEADER_H}px",
-               # center를 max-content로 못박아야 탭이 잘리지 않는다
-               # (auto면 1fr 두 열이 먼저 자리를 가져가 탭이 깎인다).
-               "display": "grid", "gridTemplateColumns": "minmax(0, 1fr) max-content minmax(0, 1fr)",
+        # 3열 그리드(좌 · 탭 · 우) — 열 구성은 화면 폭에 따라 03-app.css(.pf-header--grid)가 정한다.
+        className="pf-header pf-header--grid",
+        style={"height": f"{HEADER_H}px",
                # 드롭다운 팝업이 main(카드들) 밑에 깔리지 않도록 헤더를 항상 위에 둔다.
                "position": "relative", "zIndex": 30},
     )
+
+
+FILTER_ECHO_STYLE = {"display": "flex", "alignItems": "center", "gap": "6px", "flexShrink": "0"}
 
 
 def filter_bar():
@@ -513,22 +534,24 @@ def filter_bar():
     dcc.Store(id="filter-store")가 화면 전환과 무관하게 값을 들고 있어 화면을
     옮겨도 선택이 유지된다."""
     return html.Div(
-        [filter_dropdown("plant-dd", "공장", PLANT_OPTIONS, 140),
-         filter_dropdown("machine-type-dd", "기계 종류", MACHINE_TYPE_OPTIONS, 140),
-         filter_dropdown("machine-dd", "기계", MACHINE_OPTIONS, 180),
+        [filter_dropdown("plant-dd", "공장", PLANT_OPTIONS, 120),
+         filter_dropdown("machine-type-dd", "기계 종류", MACHINE_TYPE_OPTIONS, 150),
+         filter_dropdown("machine-dd", "기계", MACHINE_OPTIONS, 130),
          period_toggle(),
          html.Button("초기화", id="reset-btn", n_clicks=0, className="pf-btn label-12",
                      style={"flexShrink": "0"}),
          html.Div(style={"flexGrow": "1"}),
-         html.Span(id="filter-scope-note", className=NOTE_12, style={"whiteSpace": "nowrap", "flexShrink": "0"}),
-         html.Div([html.Span("현재 필터", className=LABEL_12, style={"whiteSpace": "nowrap"}),
+         # 화면 ③에서는 적용 기간 대신 필터 적용 범위 안내를 보여 준다(apply_filter_scope).
+         html.Span(id="filter-scope-note", className=NOTE_12,
+                   style={"whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis", "minWidth": "0"}),
+         html.Div([html.Span("적용 기간", className=LABEL_12, style={"whiteSpace": "nowrap"}),
                    html.Span(id="filter-echo", className=f"{CODE_12} pf-muted", style={"whiteSpace": "nowrap"})],
-                  style={"display": "flex", "alignItems": "center", "gap": "6px", "flexShrink": "0"}),
+                  id="filter-echo-wrap", style=FILTER_ECHO_STYLE),
          html.Span("", id="action-echo", className=NOTE_12,
-                   style={"width": "208px", "textAlign": "right", "flexShrink": "0",
+                   style={"maxWidth": "208px", "minWidth": "0", "textAlign": "right",
                           "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis"})],
         className="pf-filterbar",
-        style={"width": f"{CANVAS_W}px", "height": f"{FILTERBAR_H}px", "gap": "10px",
+        style={"height": f"{FILTERBAR_H}px", "gap": "10px",
                # overflow:hidden을 쓰면 드롭다운 팝업까지 clip된다. 줄바꿈만 막는다.
                "flexWrap": "nowrap",
                # app_header()와 같은 이유 — 필터바를 main보다 항상 위에 둔다.
@@ -548,7 +571,7 @@ def kpi_value_tile(label, value_text, w=300, h=96, tid=None, scope=None):
                   style={"display": "flex", "justifyContent": "space-between", "gap": "8px"}),
          html.Span(value_text, className="pf-kpi__value value-28")],
         className="pf-card pf-kpi" + (" pf-kpi--action" if tid else ""),
-        style={"width": f"{w}px", "height": f"{h}px", "flexShrink": "0"}, **kwargs,
+        style={"gridColumn": f"span {_span(w)}", "height": f"{h}px", "minWidth": "0"}, **kwargs,
     )
 
 
@@ -725,13 +748,14 @@ def _family_recur_figure(intervals, theme):
 
 def priority_table(cols, records, sort_col=None, direction="desc"):
     """점검 우선순위 표(.pf-table) — load_priority_table()이 만든 자산별 값을 채운다.
-    숫자 열은 num-13 우측 정렬, 식별자(asset_tag·plant_code)는 code-12."""
+    숫자 열은 num-13 우측 정렬, 식별자(asset_tag·plant_code)는 code-12.
+    열 폭은 내용에 맞추고(자동 배치), 카드보다 넓으면 카드 안에서만 가로 스크롤한다."""
     arrow = " ▲" if direction == "asc" else " ▼"
     thead = html.Tr(
         [html.Th(f"{l}{arrow if i == sort_col else ''}",
                  className="label-12" + (" pf-th--num" if a == "right" else ""),
-                 style={"width": f"{w}px", "textAlign": a})
-         for i, (l, w, a) in enumerate(cols)],
+                 style={"textAlign": a})
+         for i, (l, a) in enumerate(cols)],
     )
     field_order = ["rank", "asset_tag", "machine_type", "plant_code", "failure_points",
                    "threshold_exceeded", "last_failure_date", "failed_part_count"]
@@ -740,7 +764,7 @@ def priority_table(cols, records, sort_col=None, direction="desc"):
     body_rows = []
     for record in records:
         cells = []
-        for (l, w, a), field in zip(cols, field_order):
+        for (l, a), field in zip(cols, field_order):
             value = record[field]
             if field == "failure_points":
                 text = f"{value:,.0f}"
@@ -758,11 +782,8 @@ def priority_table(cols, records, sort_col=None, direction="desc"):
                 cls = BODY_13
             cells.append(html.Td(text, className=cls, style={"textAlign": a}))
         body_rows.append(html.Tr(cells))
-    tw = sum(c[1] for c in cols)
-    return html.Table(
-        [html.Thead(thead), html.Tbody(body_rows)], className="pf-table",
-        style={"width": f"{tw}px", "tableLayout": "fixed", "flexShrink": "0"},
-    )
+    return html.Div(html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table"),
+                    className="pf-table__scroll")
 
 
 def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=None, start=None):
@@ -797,9 +818,9 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=N
     row_a = row(ROW_KPI, [kpi_value_tile(label, value_text, w=458, tid=tid, scope=scope)
                           for label, value_text, tid, scope in kpi_specs])
 
-    prio_cols = [("순위", 48, "right"), ("대상", 200, "left"), ("종류", 110, "left"), ("공장", 100, "left"),
-                 ("등급가중 고장점수", 150, "right"), ("기준선 초과", 110, "center"),
-                 ("최근 고장 표시일", 150, "left"), ("당일 고장 표시 부품 수", 190, "right")]
+    prio_cols = [("순위", "right"), ("대상", "left"), ("종류", "left"), ("공장", "left"),
+                 ("등급가중 고장점수", "right"), ("기준선 초과", "center"),
+                 ("최근 고장 표시일", "left"), ("당일 고장 표시 부품 수", "right")]
     sort_by = prio_sort.get("sort_by", "grade")
     direction = prio_sort.get("direction", "desc")
     sort_idx = 5 if sort_by == "threshold" else 4
@@ -820,7 +841,7 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=N
             [html.Div([html.Span(status_row["asset_tag"], className=CODE_12, style={"whiteSpace": "nowrap"}),
                        html.Span(status_row["machine_type"], className=MICRO_11,
                                  style={"whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis"})],
-                      style={"width": "96px", "flexShrink": "0", "display": "flex",
+                      style={"width": "84px", "flexShrink": "0", "display": "flex",
                              "flexDirection": "column", "gap": "4px", "overflow": "hidden"}),
              dcc.Graph(id={"type": "spark-chart", "index": status_row["asset_tag"]},
                        figure=_spark_figure(status_row["sparkline"], "light"),
@@ -828,17 +849,17 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=N
                        style={"flexGrow": "1", "minWidth": "0", "height": "32px"}),
              html.Div([html.Span(f"{status_row['risk_score']:,.0f}", className="value-20"),
                        status_badge(status_row["current_grade"])],
-                      style={"width": "88px", "flexShrink": "0", "display": "flex",
+                      style={"width": "64px", "flexShrink": "0", "display": "flex",
                              "flexDirection": "column", "alignItems": "flex-start", "gap": "2px"})],
             className="pf-machinetile",
-            style={"width": "367px", "height": "72px", "flexShrink": "0", "padding": "8px 12px",
+            style={"minWidth": "0", "minHeight": "0", "padding": "8px 12px",
                    "display": "flex", "alignItems": "center", "gap": "8px"},
         )
     machine_status_rows = load_screen1_machine_status(assets)
     tiles_grid = html.Div([machine_tile(r) for r in machine_status_rows],
                            style={"display": "grid", "gridTemplateColumns": "repeat(2, minmax(0, 1fr))",
-                                  "gridTemplateRows": "repeat(5, 72px)", "columnGap": "8px", "rowGap": "8px",
-                                  "width": "742px", "height": "392px"})
+                                  "gridTemplateRows": "repeat(5, minmax(0, 1fr))", "columnGap": "8px",
+                                  "rowGap": "8px", "height": "100%"})
     status = card("기계 상태", 774, ROW_MAIN, tiles_grid,
                   right=note("스파크라인 = 등급가중 고장점수 최근 30일 · 기간 미적용"))
     row_b = row(ROW_MAIN, [prio, status])
@@ -918,7 +939,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
          metric("고장 표시 일수 (일)", 140, f"{detail['failure_days_count']:,}"),
          metric("평균 소비 전력 (kW)", 140, f"{detail['avg_power_kw']:,.2f}")],
         className="pf-card",
-        style={"width": "1880px", "height": "88px", "flexDirection": "row",
+        style={"height": "88px", "flexDirection": "row",
                "alignItems": "center", "gap": "16px"},
     )
 
@@ -952,7 +973,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
     # "부품 출고 이력"만 남아 오른쪽 칸(616 × 520)을 그대로 채운다.
     parts_history = load_asset_parts_history(asset_tag, start)
     if parts_history.empty:
-        parts_body = empty_state("기간 내 부품 출고 없음", "선택한 기간에 이 기계의 부품 출고 금액이 0이다", 584, 452)
+        parts_body = empty_state("기간 내 부품 출고 없음", "선택한 기간에 이 기계의 부품 출고 금액이 0이다")
     else:
         parts_body = dcc.Graph(id={"type": "parts-chart", "index": "screen2"},
                                figure=_parts_figure(parts_history, "light"),
@@ -965,7 +986,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
                      style={"display": "flex", "flexDirection": "column", "gap": f"{GUTTER}px"})
 
 
-def _model_comparison_table(rows, selected_key, width=742):
+def _model_comparison_table(rows, selected_key):
     """화면 ③ "모델 비교" 표 — 과제 0(현재 고장 표시 분류)·2(부품 고장 탐지)가
     공유하는 렌더러. 열 순서는 모델 → AP → 정밀도 → 재현율 → F1 → 선택 여부로
     고정한다(Accuracy는 상단 KPI 카드에 이미 있고 양성률이 낮아 부풀려지므로
@@ -973,8 +994,8 @@ def _model_comparison_table(rows, selected_key, width=742):
     "precision","recall","f1"}를 가진 dict 목록이며, 결과가 있는 모델만 담아야
     한다 — 빈 행을 채우지 않는다.
     """
-    cols = [("모델", 182, "left"), ("AP", 93, "right"), ("정밀도", 93, "right"),
-            ("재현율", 93, "right"), ("F1", 93, "right"), ("선택", 72, "center")]
+    cols = [("모델", "left"), ("AP", "right"), ("정밀도", "right"),
+            ("재현율", "right"), ("F1", "right"), ("선택", "center")]
 
     def num(value):
         return html.Td(f"{value:.3f}", className=f"{NUM_13} pf-td--num")
@@ -989,12 +1010,11 @@ def _model_comparison_table(rows, selected_key, width=742):
         ], **{"aria-selected": "true" if is_selected else "false"}))
 
     thead = html.Tr(
-        [html.Th(l, className="label-12" + (" pf-th--num" if a == "right" else ""),
-                 style={"width": f"{w}px", "textAlign": a})
-         for l, w, a in cols],
+        [html.Th(l, className="label-12" + (" pf-th--num" if a == "right" else ""), style={"textAlign": a})
+         for l, a in cols],
     )
-    return html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table",
-                       style={"width": f"{width}px", "tableLayout": "fixed"})
+    return html.Div(html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table"),
+                    className="pf-table__scroll")
 
 
 # 화면 ③ "주요 영향 변수" 막대 범주 — 범주색은 series 토큰을 고정 순서로 쓴다
@@ -1029,7 +1049,7 @@ def _interpretation_summary(actual_rate, ap, precision, recall):
     return html.Div(
         [html.Div(line1, className=f"{BODY_13} pf-strong"),
          html.Div(line2, className=LABEL_12)],
-        style={"width": "1880px", "flexShrink": "0"},
+        style={"flexShrink": "0"},
     )
 
 
@@ -1132,7 +1152,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
                   style={"height": "32px", "display": "flex", "alignItems": "center",
                          "justifyContent": "space-between", "gap": "16px"}),
          warn_line],
-        style={"width": "1880px", "height": "52px", "display": "flex", "flexDirection": "column",
+        style={"height": "52px", "display": "flex", "flexDirection": "column",
                "gap": "4px", "flexShrink": "0"},
     )
 
@@ -1185,9 +1205,9 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
         # average_precision 내림차순(load_asset_family_diagnosis가 이미 정렬)
         # 기준 1행이 최초 진입 기본 선택 부품군이다.
         family_cols = [
-            ("부품군", 130, "left"), ("모델", 150, "left"), ("표본 수", 64, "right"),
-            ("양성률(%)", 80, "right"), ("정밀도", 82, "right"), ("재현율", 82, "right"),
-            ("AP", 72, "right"), ("ROC-AUC", 82, "right"),
+            ("부품군", "left"), ("모델", "left"), ("표본 수", "right"),
+            ("양성률(%)", "right"), ("정밀도", "right"), ("재현율", "right"),
+            ("AP", "right"), ("ROC-AUC", "right"),
         ]
         def family_num(text):
             return html.Td(text, className=f"{NUM_13} pf-td--num")
@@ -1207,11 +1227,10 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
             for fr in family_rows
         ]
         family_thead = html.Tr([html.Th(l, className="label-12" + (" pf-th--num" if a == "right" else ""),
-                                        style={"width": f"{w}px", "textAlign": a})
-                                for l, w, a in family_cols])
-        family_table = html.Table([html.Thead(family_thead), html.Tbody(family_body_rows)], className="pf-table",
-                                   style={"width": "742px", "tableLayout": "fixed"})
-        mcomp_body = html.Div([family_table])
+                                        style={"textAlign": a})
+                                for l, a in family_cols])
+        mcomp_body = html.Div(html.Table([html.Thead(family_thead), html.Tbody(family_body_rows)],
+                                         className="pf-table"), className="pf-table__scroll")
         mcomp = card("부품군 진단", 774, ROW_MAIN, mcomp_body, right=note("행 = 부품군 · 열 = 지표 · 행 클릭 시 아래 카드 갱신"))
     else:
         # 모델 비교 표 — 과제 0(현재 고장 표시 분류)·2(부품 고장 탐지) 공용.
@@ -1234,7 +1253,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
             metrics = load_part_failure_metrics()
             comparison_rows = [{"key": m, "label": m, **vals} for m, vals in metrics.items()]
             selected_key = load_part_failure_selected_model()
-        mcomp_body = html.Div([_model_comparison_table(comparison_rows, selected_key)])
+        mcomp_body = _model_comparison_table(comparison_rows, selected_key)
         mcomp = card("모델 비교", 774, ROW_MAIN, mcomp_body,
                      right=note(f"행 = 모델 · 선택 = AP 최댓값 ({selected_key})"))
 
@@ -1244,20 +1263,20 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
                   figure=_family_pr_figure(pr_cm, "light"),
                   config={"displayModeBar": False, "responsive": True},
                   style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
-        style={"width": "584px", "height": "392px", "display": "flex", "flexDirection": "column"})
+        style={"flex": "1 1 auto", "minHeight": "0", "display": "flex", "flexDirection": "column"})
     prc_note = f"모델: {pr_cm['model']}" if "model" in pr_cm else f"{asset_tag} · {family}"
     prc = card("PR 곡선", 616, ROW_MAIN, pr_body, right=note(prc_note))
 
     def cm_cell(value):
         return html.Div(html.Span(f"{value:,}", className="value-20"), className="pf-cm-cell",
-                         style={"width": "169px", "height": "160px",
+                         style={"flex": "1 1 0", "minWidth": "0", "height": "160px",
                                 "display": "flex", "alignItems": "center", "justifyContent": "center"})
     c = pr_cm["confusion"]
     cm_body = html.Div([
         hstack([html.Div(style={"width": "72px"}),
-                html.Div("예측 고장 표시 있음", className=LABEL_12, style={"width": "169px", "textAlign": "center"}),
-                html.Div("예측 고장 표시 없음", className=LABEL_12, style={"width": "169px", "textAlign": "center"})],
-               8, {"height": "24px", "alignItems": "center"}),
+                html.Div("예측 고장 표시 있음", className=LABEL_12, style={"flex": "1 1 0", "textAlign": "center"}),
+                html.Div("예측 고장 표시 없음", className=LABEL_12, style={"flex": "1 1 0", "textAlign": "center"})],
+               8, {"minHeight": "24px", "alignItems": "center"}),
         hstack([html.Div("실제 있음", className=LABEL_12, style={"width": "72px", "display": "flex", "alignItems": "center"}),
                 cm_cell(c["tp"]), cm_cell(c["fn"])], 8, {"height": "160px"}),
         hstack([html.Div("실제 없음", className=LABEL_12, style={"width": "72px", "display": "flex", "alignItems": "center"}),
@@ -1304,9 +1323,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
     else:
         # prior·로지스틱회귀/랜덤포레스트 모두 변수중요도를 사전 계산해 두지
         # 않았다 — 그럴듯한 값을 새로 만들지 않고 데이터 없음을 그대로 밝힌다.
-        feat_body = empty_state(
-            "데이터 없음", "이 과제의 모델은 변수중요도를 사전 계산해 두지 않음", 742, 184,
-        )
+        feat_body = empty_state("데이터 없음", "이 과제의 모델은 변수중요도를 사전 계산해 두지 않음")
         feat = card("주요 영향 변수", 774, 252, feat_body, right=note("데이터 없음"))
 
     if task_sel == 0:
@@ -1326,15 +1343,17 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
 
     slider = html.Div(
         [html.Label("판정 임계값", htmlFor="thr-slider", className=LABEL_12, style={"whiteSpace": "nowrap"}),
-         dcc.Slider(id={"type": "thr-slider", "index": "screen3"}, min=0, max=100, marks=None,
-                    value=round(default_threshold * 100) if default_threshold is not None else 50,
-                    tooltip={"placement": "bottom"}),
+         html.Div(dcc.Slider(id={"type": "thr-slider", "index": "screen3"}, min=0, max=100, marks=None,
+                             value=round(default_threshold * 100) if default_threshold is not None else 50,
+                             tooltip={"placement": "bottom"}),
+                  style={"flex": "1 1 120px", "minWidth": "80px"}),
          note("설명용 가상 실험" + (f" · 기본값 {threshold_basis}" if threshold_basis else ""),
-              {"whiteSpace": "nowrap"})],
-        style={"display": "flex", "alignItems": "center", "gap": "8px", "width": "420px"},
+              {"whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis", "minWidth": "0"})],
+        style={"display": "flex", "alignItems": "center", "gap": "8px", "flex": "1 1 auto",
+               "minWidth": "0", "maxWidth": "420px"},
     )
     if task_sel == 1:
-        thr_body = empty_state("이 과제에는 해당 없음", "부품군 진단 과제에서는 표시하지 않음", 584, 184)
+        thr_body = empty_state("이 과제에는 해당 없음", "부품군 진단 과제에서는 표시하지 않음")
     else:
         thr_body = html.Div(_threshold_metrics_body(thr_metrics, default_threshold),
                              id={"type": "thr-metrics", "index": "screen3"})
@@ -1351,10 +1370,9 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
                           figure=_family_recur_figure(intervals, "light"),
                           config={"displayModeBar": False, "responsive": True},
                           style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
-                style={"width": "426px", "height": "184px", "display": "flex", "flexDirection": "column"})
+                style={"flex": "1 1 auto", "minHeight": "0", "display": "flex", "flexDirection": "column"})
         else:
-            lead_body = empty_state("이 과제에는 해당 없음",
-                                     "재발 이력이 2회 미만이라 간격을 계산할 수 없음", 426, 184)
+            lead_body = empty_state("이 과제에는 해당 없음", "재발 이력이 2회 미만이라 간격을 계산할 수 없음")
         lead = card("재발 간격", 458, 252, lead_body,
                     right=note("과거 재발 간격 — 예측이 아닌 회고적 통계"))
     else:
@@ -1414,7 +1432,7 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None)
         # fixed_columns(앞 2열 고정)를 시도했으나 헤더 셀이 어긋나(빈 헤더가
         # 섞여 나옴) 포기하고 가로 스크롤만 남긴다(사용자 승인 — 이 문제에
         # 시간을 더 쓰지 않음).
-        style_table={"overflowX": "auto", "width": "1840px"},
+        style_table={"overflowX": "auto", "width": "100%"},
         style_header={"height": "32px", "minHeight": "32px", "maxHeight": "32px"},
         style_cell={"padding": "0 8px", "height": "24px", "minHeight": "24px", "maxHeight": "24px",
                     "textAlign": "left"},
@@ -1451,21 +1469,22 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None)
     toolbar = html.Div(
         [seg("dataset", "데이터셋", SEG_GROUPS["dataset"], sel=dataset_index),
          html.Div([csv_btn], style={"display": "flex", "alignItems": "center", "gap": "12px"})],
-        style={"width": "1880px", "height": "32px", "flexShrink": "0", "display": "flex",
+        style={"height": "32px", "flexShrink": "0", "display": "flex",
                "alignItems": "center", "justifyContent": "space-between"},
     )
 
     dtable = card(f"데이터 조회 · {SEG_GROUPS['dataset'][dataset_index]}", 1880, 524, dtable_body,
                   right=note("공장·기계 종류·기계·기간 필터 적용"))
 
-    dict_cols = [("컬럼명", 130, "left"), ("타입", 64, "left"), ("단위", 56, "left"),
-                 ("결측률 (%)", 72, "right"), ("설명", 120, "left")]
+    # 열 폭은 반쪽 표 폭에 대한 비율 — 두 반쪽이 카드 폭을 나눠 가진다.
+    dict_cols = [("컬럼명", "30%", "left"), ("타입", "13%", "left"), ("단위", "12%", "left"),
+                 ("결측률 (%)", "17%", "right"), ("설명", "28%", "left")]
 
     def dict_table(records):
         """데이터 사전 표(.pf-table, 행 22px) — "컬럼명"·"설명" 칸은 말줄임 + title 툴팁."""
         thead = html.Tr(
             [html.Th(l, className="label-12" + (" pf-th--num" if a == "right" else ""),
-                     style={"width": f"{w}px", "height": "24px", "padding": "0 8px", "textAlign": a})
+                     style={"width": w, "height": "24px", "padding": "0 8px", "textAlign": a})
              for l, w, a in dict_cols],
         )
         body_rows = []
@@ -1480,40 +1499,39 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None)
                 cells.append(html.Td(text, className=cls, title=text if l in ("컬럼명", "설명") else None,
                                      style={"height": "22px", "padding": "0 8px", "textAlign": a}))
             body_rows.append(html.Tr(cells))
-        tw = sum(c[1] for c in dict_cols)
         return html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table",
-                           style={"width": f"{tw}px", "tableLayout": "fixed", "flexShrink": "0"})
+                           style={"tableLayout": "fixed"})
 
     def dict_half(records):
-        return html.Div(dict_table(records), style={"width": "442px"})
+        return html.Div(dict_table(records), style={"flex": "1 1 0", "minWidth": "0"})
 
     dict_rows = load_data_dictionary()
     ddict = card("데이터 사전 (22열)", 932, ROW_SUB,
                  hstack([dict_half(dict_rows[:11]), dict_half(dict_rows[11:])], 16),
                  right=note("데이터셋 전체 기준 · 필터 미적용"))
 
-    def info_box(text, w, h=94):
-        """slot()의 점선 테두리 대신 실제 문장을 보여준다 — screen_4 전용."""
+    def info_box(text, h=94):
+        """품질·출처 카드의 문장 칸 — 같은 줄의 칸들이 카드 폭을 나눠 가진다. screen_4 전용."""
         return html.Div(
             html.Span(text, className="label-12", style={"whiteSpace": "pre-line", "wordBreak": "keep-all"}),
-            style={"width": f"{w}px", "height": f"{h}px", "overflow": "hidden"},
+            style={"flex": "1 1 0", "minWidth": "0", "height": f"{h}px", "overflow": "hidden"},
         )
 
     q = load_data_quality_summary()
     period_tile = html.Div(
         [html.Span(f"기간: {q['period_days']:,}일", className="label-12"),
          html.Span(f"{q['period_start']} ~ {q['period_end']}", className=CODE_12, style={"whiteSpace": "nowrap"})],
-        style={"width": "213px", "height": "94px", "overflow": "hidden",
+        style={"flex": "1 1 0", "minWidth": "0", "height": "94px", "overflow": "hidden",
                "display": "flex", "flexDirection": "column"},
     )
     quality_tiles = [
         info_box(f"중복: 복합키(날짜·기계·부품) 중복 {q['composite_key_duplicates']:,}건 · "
-                 f"완전 중복 {q['full_duplicates']:,}건", 213),
+                 f"완전 중복 {q['full_duplicates']:,}건"),
         info_box(f"wo_type: '작업 없음' 범주 {q['wo_type_blank_count']:,}행 ({q['wo_type_blank_pct']:.2f}%) · "
-                 f"결측 아님", 213),
+                 f"결측 아님"),
         period_tile,
         info_box(f"센서값 반복: 기계×날짜 {q['group_count']:,}개 그룹, 그룹당 부품 행 {q['rows_per_group']:,}개에 "
-                 f"센서값 동일 반복", 213),
+                 f"센서값 동일 반복"),
     ]
     qual = card("품질 요약", 932, 162, hstack(quality_tiles, 16), right=note("데이터셋 전체 기준 · 필터 미적용"))
 
@@ -1521,8 +1539,7 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None)
     source_lines = "\n".join([s["source_name"], f"{s['row_count']:,}행 × {s['col_count']}열",
                                s["access_date_note"]])
     src = card("출처 · 라이선스 · 합성 데이터 한계", 932, 162,
-               hstack([info_box(source_lines, 288), info_box(s["license"], 288),
-                       info_box(s["limitations"], 292)], 16))
+               hstack([info_box(source_lines), info_box(s["license"]), info_box(s["limitations"])], 16))
     row_c = row(ROW_SUB, [ddict, col(932, ROW_SUB, [qual, src])])
 
     return html.Div([toolbar, row(524, [dtable]), row_c],
@@ -1570,13 +1587,13 @@ def screen_5(seg_state=None, audience=DEFAULT_AUDIENCE):
     summary_card = card("이번 기간 요약", 932, ROW_SUB, summary_lines,
                         right=note(f"자동 생성 문구 자리 · 9줄 한도 · 현재 내보내기 대상: "
                                    f"{aud['label']} (섹션 {len(aud['sections'])}개)"))
-    caveat_top = empty_state("모델 최종 평가 전", "평가 구간·지표는 평가 완료 후 기재", 900, 78)
+    caveat_top = empty_state("모델 최종 평가 전", "평가 구간·지표는 평가 완료 후 기재", 78)
     caveat_bot = html.Div(
         html.Span("합성 데이터 · 교육용 — 이 보고서의 모든 수치는 실제 설비 이력이 아니다 "
                   "(헤더 배지와 동일 문구를 보고서 산출물에도 유지)",
                   className=LABEL_12, style={"textAlign": "center"}),
         className="pf-placeholder",
-        style={"width": "900px", "height": "78px", "display": "flex", "alignItems": "center",
+        style={"height": "78px", "display": "flex", "alignItems": "center",
                "justifyContent": "center", "padding": "8px 16px"},
     )
     caveat_card = card("데이터·모델 신뢰도 고지", 932, ROW_SUB,
@@ -2004,16 +2021,20 @@ app.layout = html.Div(
         # 일반 계정이 PDF·Excel을 누르면 파일 생성 없이 이 안내만 보여 준다.
         _modal("export-access-modal", 340, 330, "접근 권한", [_modal_text("접근 권한이 필요합니다.")],
                [_modal_btn("확인", "export-access-modal-close", "primary")]),
+        # 1280px 미만에서만 보인다(03-app.css). 그 폭에서는 가로 스크롤로 본다.
+        html.Div("이 대시보드는 폭 1280px 이상의 데스크톱 화면 전용이다",
+                 className="pf-desktop-only pf-notice pf-notice--warning label-12", role="note"),
         app_header(),
         filter_bar(),
         html.Main(
             id="screen-content",
-            style={"width": f"{CANVAS_W}px", "height": f"{CANVAS_H - HEADER_H - FILTERBAR_H}px",
+            style={"height": f"{CANVAS_H - HEADER_H - FILTERBAR_H}px",
                    "padding": f"{MARGIN}px", "overflow": "hidden"},
         ),
     ],
+    # 폭 1280~1920px에서 12열 그리드가 늘고 준다(03-app.css .pf-app). 높이는 레이아웃 토큰 고정.
     id="root", className="pf-app",
-    style={"width": f"{CANVAS_W}px", "minHeight": f"{CANVAS_H}px", "margin": "0 auto"},
+    style={"minHeight": f"{CANVAS_H}px"},
 )
 
 
@@ -2037,7 +2058,7 @@ def render_screen(active, seg_state, prio_sort, filters, selected_family, actor_
     assets, start = _filter_scope(filters)
     if active in ("1", "2", "4") and not assets:
         return empty_state("조건에 맞는 기계 없음",
-                           "선택한 공장·기계 종류·기계 조합에 해당하는 기계가 없다", 1880, 400)
+                           "선택한 공장·기계 종류·기계 조합에 해당하는 기계가 없다", 400)
     kwargs = {"seg_state": seg_state, "audience": DEFAULT_AUDIENCE}
     if active == "1":
         kwargs.update(prio_sort=prio_sort or DEFAULT_PRIO_SORT, assets=assets, start=start)
@@ -2279,6 +2300,17 @@ def recolor_partfail_pr_chart(theme, _active_tab):
     return [_family_pr_figure(pr_cm, theme or "light")]
 
 
+# 좁은 화면(1600px 미만)에서 헤더 내보내기 팝오버를 여닫는다 — 넓은 화면에서는 CSS가
+# 항상 펼쳐 두므로 이 클래스가 영향을 주지 않는다.
+app.clientside_callback(
+    """function(n){ const open = (n || 0) % 2 === 1;
+        return [open ? 'pf-export is-open' : 'pf-export', open ? 'true' : 'false']; }""",
+    Output("export-group", "className"),
+    Output("export-menu-btn", "aria-expanded"),
+    Input("export-menu-btn", "n_clicks"),
+)
+
+
 # DESIGN.md §1.3 — Python 콜백으로 CSS 변수를 바꾸지 않고 <html data-theme>만 토글한다.
 app.clientside_callback(
     "function(theme){ document.documentElement.setAttribute('data-theme', "
@@ -2366,17 +2398,18 @@ def sync_filter_options(data):
     Output("machine-dd", "disabled"),
     Output({"type": "period-btn", "index": ALL}, "disabled"),
     Output("filter-scope-note", "children"),
+    Output("filter-echo-wrap", "style"),
     Input("screen-tabs", "value"),
     Input("seg-store", "data"),
 )
 def apply_filter_scope(active, seg_state):
     period_count = len(PERIOD_PRESETS)
     if active != "3":
-        return False, False, False, [False] * period_count, ""
+        return False, False, False, [False] * period_count, "", FILTER_ECHO_STYLE
     family_task = (seg_state or DEFAULT_SEG).get("task", 0) == 1
-    note_text = ("모델 지표는 고정 평가 구간 전체 결과라 공장·기계 종류·기간 필터 미적용"
-                 + ("" if family_task else " · 기계 필터는 부품군 진단 과제에만 적용"))
-    return True, True, not family_task, [True] * period_count, note_text
+    note_text = ("모델 지표는 평가 구간 전체 기준 · "
+                 + ("부품군 진단은 기계 필터만 적용" if family_task else "필터 미적용"))
+    return True, True, not family_task, [True] * period_count, note_text, {"display": "none"}
 
 
 # ------------------------------------------------------------
@@ -2392,12 +2425,10 @@ def render_filters(data):
     data = data or DEFAULT_FILTERS
     pi = _period_index(data)
     pressed = ["true" if i == pi else "false" for i in range(len(PERIOD_PRESETS))]
-    label, days = PERIOD_PRESETS[pi]
-    start = period_start(days)
-    period_text = label if start is None else f"{label} {start:%Y-%m-%d}~{load_data_reference_date()}"
-    echo = (f"공장={data.get('plant') or '전체'} · 종류={data.get('machine_type') or '전체'} · "
-            f"기계={data.get('machine') or '전체'} · 기간={period_text}")
-    return pressed, echo
+    start = period_start(PERIOD_PRESETS[pi][1])
+    # 공장·기계 종류·기계는 드롭다운이 이미 보여 주므로 기간 버튼이 뜻하는 실제 날짜만 적는다.
+    start_text = load_data_start_date() if start is None else f"{start:%Y-%m-%d}"
+    return pressed, f"{start_text} ~ {load_data_reference_date()}"
 
 
 # ------------------------------------------------------------

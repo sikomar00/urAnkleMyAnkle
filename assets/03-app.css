@@ -81,6 +81,8 @@
    ════════════════════════════════════════════════════════════════════ */
 
 .pf-card__title { margin: 0; }
+/* 카드 머리 오른쪽(보조 설명·버튼·슬라이더)은 남는 폭을 받아 오른쪽에 붙는다. */
+.pf-card__actions { flex: 1 1 auto; min-width: 0; justify-content: flex-end; text-align: right; }
 .pf-strong { font-weight: 600; }
 .pf-seg { flex-shrink: 0; }
 .pf-seg__item { white-space: nowrap; }
@@ -201,3 +203,32 @@
   background: var(--surface-card); color: var(--ink); border-color: var(--border-control);
 }
 .pf-divider-top { border-top: var(--stroke-hairline) solid var(--border-hairline); }
+
+/* ── 반응형 1280~1920px ─────────────────────────────────────────────── */
+/* 02-bundle.css는 캔버스를 1920 고정(min-width: --layout-canvas-w)으로 둔다.
+   화면 폭 1280~1920px에서는 12열 그리드가 늘고 줄며, 그보다 넓으면 가운데 정렬한다. */
+.pf-app { min-width: 1280px; max-width: var(--layout-canvas-w); margin: 0 auto; }
+.pf-desktop-only { display: none; }
+@media (max-width: 1279px) {
+  .pf-desktop-only { display: flex; }
+}
+
+/* 헤더 내보내기 — 넓은 화면에서는 한 줄로 펼치고, 1600px 미만에서는 버튼 뒤 팝오버로 접는다.
+   계정 메뉴는 접지 않는다. */
+/* 헤더 3열 — 탭(가운데 열)은 내용 폭으로 못박아야 잘리지 않는다. */
+.pf-header--grid { display: grid; grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr); }
+.pf-export { display: flex; align-items: center; gap: var(--space-2); }
+.pf-export-toggle { display: none; }
+@media (max-width: 1599px) {
+  .pf-export-toggle { display: inline-block; }
+  .pf-export {
+    display: none; position: absolute; top: 44px; right: 0; z-index: 100;
+    padding: var(--space-3);
+    background: var(--surface-raised);
+    border: var(--stroke-hairline) solid var(--border-hairline);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-popover);
+  }
+  .pf-export.is-open { display: flex; }
+  /* 좌측(시스템명·기준일·배지)은 내용 폭을 다 받고, 탭 다음 남는 폭을 우측이 받는다. */
+  .pf-header--grid { grid-template-columns: max-content max-content minmax(0, 1fr); }
+}
