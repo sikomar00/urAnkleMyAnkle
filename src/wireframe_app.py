@@ -87,6 +87,19 @@ from .audit_service import (  # noqa: E402
 from .dashboard_auth import (  # noqa: E402
     current_session_state, end_admin_session, extend_admin_session, install_auth,
 )
+from .demo_mode import (  # noqa: E402
+    DEMO_BADGE_TEXT, empty_list, is_demo_mode, no_session_state, noop,
+)
+
+DEMO_MODE = is_demo_mode()
+if DEMO_MODE:
+    # 데모 모드: 감사·계정 함수가 DB에 접속하지 않도록 이름만 no-op으로 바꾼다.
+    change_admin_password = delete_user_accounts = ensure_dashboard_admin = noop
+    create_audit_tables = log_failure = record_action = record_error = noop
+    sync_if_csv_changed = noop
+    list_user_accounts = empty_list
+    current_session_state = extend_admin_session = no_session_state
+    end_admin_session = noop
 
 # ============================================================
 # 디자인 토큰 (Plantfloor, 그레이스케일만 — 계열/상태/강조 색은 쓰지 않는다)
@@ -584,6 +597,10 @@ def app_header():
          html.Button("내보내기", id="export-run-btn", n_clicks=0, style=btn_style(w=72)),
          html.Button("", id="theme-btn", n_clicks=0, title="테마 전환",
                      style=btn_style(w=32, extra={"padding": "0", "textAlign": "center", "fontSize": "16px"})),
+         html.Span(DEMO_BADGE_TEXT, id="demo-badge",
+                   style={"display": "inline-block" if DEMO_MODE else "none", "padding": "4px 10px",
+                          "border": f"1px solid {HAIR}", "borderRadius": "12px", "fontSize": "12px",
+                          "fontWeight": "600", "color": INK, "whiteSpace": "nowrap"}),
          html.Details([
              html.Summary(html.Span("관", id="profile-display"), id="profile-menu-toggle",
                           title="마이 프로필",
@@ -613,7 +630,7 @@ def app_header():
              ], style={"position": "absolute", "right": "0", "top": "40px", "width": "210px",
                        "background": CARD, "color": INK, "border": f"1px solid {HAIR}",
                        "boxShadow": "0 8px 24px #0003", "padding": "10px", "zIndex": 100}),
-         ], style={"position": "relative", "flexShrink": "0"}),
+         ], style={"position": "relative", "flexShrink": "0", "display": "none" if DEMO_MODE else "block"}),
          dcc.Download(id="report-download"),
          dcc.Download(id="table-download")],
         style={"display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "8px",
@@ -2123,7 +2140,8 @@ def build_report_xlsx(filters, seg_state, audience):
 app = Dash(__name__)
 app.title = "설비 모니터링 대시보드 — 와이어프레임"
 app.index_string = INDEX_STRING
-install_auth(app.server)
+if not DEMO_MODE:
+    install_auth(app.server)
 ADMIN_INPUT_STYLE = {"display": "block", "width": "100%", "boxSizing": "border-box",
                      "marginBottom": "8px", "padding": "7px", "fontSize": "13px"}
 
@@ -2163,7 +2181,7 @@ app.layout = html.Div(
         dcc.Store(id="account-delete-mode", data=False),
         dcc.Store(id="account-delete-refresh", data=0),
         dcc.Interval(id="audit-csv-interval", interval=60_000, n_intervals=0),
-        dcc.Interval(id="session-timer", interval=1_000, n_intervals=0),
+        dcc.Interval(id="session-timer", interval=1_000, n_intervals=0, disabled=DEMO_MODE),
         dcc.Location(id="auth-redirect", refresh=True),
         # 이전 콜백의 State 식별자는 유지하되 사용자 입력은 제거한다.
         # 실제 actor_id는 audit_service가 검증된 Flask 세션에서 읽는다.
@@ -2785,7 +2803,7 @@ def export_report(_run, _close, export_value, filters, seg_state, actor_id):
     audit_format = "excel" if fmt == "xlsx" else fmt
     # 버튼은 보이지만, 파일을 만드는 직전에 서버 세션의 역할을 다시 확인한다.
     # 일반 사용자가 요청을 직접 바꾸더라도 PDF·Excel은 받을 수 없다.
-    if str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
+    if not DEMO_MODE and str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
         record_action("ACT_EXPORT_ACCESS_BLOCKED", "파일 내보내기 접근 차단", actor_id=actor_id,
                       target_type="export", target_id=audit_format, status="BLOCKED",
                       block_reason="관리자 역할이 필요합니다.")
@@ -3195,17 +3213,20 @@ def logout_admin(confirm_clicks, session_decline_clicks, password_confirm_clicks
 
 
 if __name__ == "__main__":
-    try:
-        create_audit_tables()
-        created = ensure_dashboard_admin()
-        print(f"[DB] 기본 관리자 계정: {'새로 준비됨' if created else '기존 계정 사용'}")
-        result = sync_if_csv_changed()
-        print(f"[DB] 관측 고장 로그: {result['date']} / 새로 저장 {result['created']}건")
-    except Exception as exc:
-        record_error("ERR_DB_STARTUP", "로그 DB 준비", exc, source="wireframe_app.startup")
-        print(f"[DB] 연결 또는 초기 적재 실패: {type(exc).__name__} — instance/audit_fallback.log 확인")
+    if DEMO_MODE:
+        print("[DEMO] 데모 모드 — DB·로그인 없이 읽기 전용으로 실행합니다.")
+    else:
+        try:
+            create_audit_tables()
+            created = ensure_dashboard_admin()
+            print(f"[DB] 기본 관리자 계정: {'새로 준비됨' if created else '기존 계정 사용'}")
+            result = sync_if_csv_changed()
+            print(f"[DB] 관측 고장 로그: {result['date']} / 새로 저장 {result['created']}건")
+        except Exception as exc:
+            record_error("ERR_DB_STARTUP", "로그 DB 준비", exc, source="wireframe_app.startup")
+            print(f"[DB] 연결 또는 초기 적재 실패: {type(exc).__name__} — instance/audit_fallback.log 확인")
     # 최신 Dash(2.17+)는 app.run, 이전 버전은 app.run_server를 쓴다.
     # 이전 실행본이 8050 포트에 남아 오래된 시간 기록을 만들 수 있어 새 포트를 사용한다.
     # 같은 사내·가정 네트워크의 다른 기기도 접속할 수 있도록 모든 네트워크 인터페이스에서 받는다.
     # 외부 인터넷 공개는 별도의 방화벽·공유기·HTTPS 설정이 필요하므로 여기서 자동으로 열지 않는다.
-    app.run(host=os.environ.get("DASHBOARD_HOST", "0.0.0.0"), port=8052, debug=False)
+    app.run(host=os.environ.get("DASHBOARD_HOST", "0.0.0.0"), port=int(os.environ.get("DASHBOARD_PORT", "8052")), debug=False)
