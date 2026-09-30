@@ -6,6 +6,7 @@ import hmac
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from flask import abort, redirect, render_template_string, request, session, url_for
 
@@ -21,6 +22,12 @@ from .audit_service import (
 
 
 SESSION_TIMEOUT = timedelta(minutes=10)
+
+# 로그인 전에는 /assets 요청이 401이므로(require_admin_session) 대시보드와 같은
+# 토큰·컴포넌트 CSS를 로그인 페이지에 직접 넣는다. 색은 이 파일에 적지 않는다.
+_ASSETS = Path(__file__).resolve().parents[1] / "assets"
+DESIGN_CSS = "\n".join((_ASSETS / name).read_text(encoding="utf-8")
+                        for name in ("00-tokens.css", "01-type.css", "02-bundle.css", "03-app.css"))
 
 
 def _now_utc() -> datetime:
@@ -95,79 +102,74 @@ def end_admin_session(reason: str, *, event_code: str = "ACT_LOGOUT", status: st
 
 
 LOGIN_HTML = """<!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="ko" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>설비 모니터링 · 계정 로그인</title>
+<style>{{ design_css|safe }}</style>
 <style>
-  * { box-sizing:border-box; } body { margin:0; min-height:100vh; display:grid; place-items:center;
-    background:#f3f5f7; color:#19232e; font:15px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif; }
-  main { width:min(400px,calc(100vw - 32px)); padding:34px; background:#fff; border:1px solid #d7dde3;
-    border-radius:16px; box-shadow:0 16px 40px #1b283b14; }
-  .eyebrow { color:#637181; font-size:12px; font-weight:700; letter-spacing:.08em; }
-  h1 { margin:8px 0 6px; font-size:25px; } p { margin:0 0 25px; color:#627080; font-size:13px; }
-  label { display:block; margin:16px 0 6px; font-size:13px; font-weight:700; }
-  input { width:100%; padding:12px; border:1px solid #bac5cf; border-radius:8px; font:inherit; }
-  input:focus { outline:2px solid #235a96; outline-offset:1px; }
-  button { width:100%; margin-top:25px; padding:12px; border:0; border-radius:8px;
-    color:#fff; background:#20364c; font:inherit; font-weight:700; cursor:pointer; }
-  .register-link { display:block; margin:16px auto 0; padding:0; width:auto; border:0; color:#425f7a;
-    background:transparent; font-size:13px; text-decoration:underline; }
-  .modal-backdrop { position:fixed; inset:0; display:grid; place-items:center; background:#0006; z-index:10; }
-  .modal { width:min(420px,calc(100vw - 32px)); padding:24px; border-radius:12px; background:#fff;
-    box-shadow:0 12px 40px #0005; text-align:center; }
-  .modal p { margin:0 0 18px; color:#26323e; font-size:15px; }
-  .modal button { margin:0; }
-  .account-type { display:flex; gap:10px; margin:0 0 18px; }
-  .account-type button { flex:1; padding:11px 8px; border:1px solid #b8c0ca; background:#fff; color:#1f2937; }
-  .account-type button.selected { border-color:#2563eb; background:#2563eb; color:#fff; }
-  .register-modal { text-align:left; max-height:calc(100vh - 32px); overflow:auto; }
-  .register-modal h2 { margin:0 0 18px; font-size:21px; text-align:left; }
-  .register-modal .message { min-height:20px; color:#b42318; text-align:center; margin:0 0 8px; }
-  .register-modal .submit { background:#2563eb; margin-top:18px; }
-  .register-modal .cancel { margin-top:10px; background:#fff; border:1px solid #b8c0ca; color:#1f2937; }
-  small { display:block; margin-top:20px; color:#768391; text-align:center; }
-</style></head><body><main>
-  <div class="eyebrow">LS JUMP-UP · 설비 모니터링</div>
-  <h1>계정 로그인</h1><p>등록된 계정으로 대시보드에 접속합니다.</p>
+  /* 로그인 화면 배치만 적는다 — 색·글꼴·테두리는 위 토큰 CSS의 클래스가 입힌다(DESIGN.md §7.3). */
+  *, *::before, *::after { box-sizing:border-box; }
+  *:focus-visible { outline:var(--stroke-focus) solid var(--border-focus); outline-offset:1px; }
+  body { min-height:100vh; display:grid; place-items:center; color:var(--ink); font-family:var(--font-sans); }
+  main.pf-card { width:min(400px,calc(100vw - 32px)); padding:var(--space-8); }
+  main h1 { margin:var(--space-2) 0 var(--space-1); }
+  main > p { margin:0 0 var(--space-6); }
+  label { display:block; margin:var(--space-4) 0 var(--space-1); }
+  .pf-control { width:100%; }
+  .submit { width:100%; margin-top:var(--space-6); }
+  .register-link { display:block; margin:var(--space-4) auto 0; }
+  .login-foot { display:flex; justify-content:center; margin-top:var(--space-6); }
+  .pf-scrim { display:grid; place-items:center; z-index:10; }
+  .pf-modal { width:min(420px,calc(100vw - 32px)); }
+  .register-modal { max-height:calc(100vh - 32px); overflow:auto; }
+  .account-type { display:flex; margin:0 0 var(--space-2); }
+  .account-type .pf-seg__item { flex:1; }
+  .message { min-height:20px; margin:var(--space-2) 0 0; }
+</style></head><body><main class="pf-card">
+  <div class="label-12 pf-muted">LS JUMP-UP · 설비 모니터링</div>
+  <h1 class="title-16">계정 로그인</h1><p class="body-13 pf-secondary">등록된 계정으로 대시보드에 접속합니다.</p>
   <form method="post" action="{{ url_for('dashboard_login') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label for="login_id">아이디</label><input id="login_id" name="login_id" maxlength="80" autocomplete="username" required autofocus>
-    <label for="password">비밀번호</label><input id="password" name="password" type="password" autocomplete="current-password" required>
-    <button type="submit">로그인</button>
+    <label for="login_id" class="label-12 pf-secondary">아이디</label><input id="login_id" name="login_id" class="pf-control pf-control--lg" maxlength="80" autocomplete="username" required autofocus>
+    <label for="password" class="label-12 pf-secondary">비밀번호</label><input id="password" name="password" type="password" class="pf-control pf-control--lg" autocomplete="current-password" required>
+    <button type="submit" class="pf-btn pf-btn--primary pf-btn--lg body-14 submit">로그인</button>
   </form>
-  <button type="button" class="register-link" onclick="openRegister()">계정 생성</button>
+  <button type="button" class="pf-btn pf-btn--ghost label-12 register-link" onclick="openRegister()">계정 생성</button>
+  <div class="login-foot"><span class="pf-chip-synthetic micro-11">합성 데이터 · 교육용</span></div>
 </main>
-{% if error %}<div class="modal-backdrop" id="login-error-modal" role="dialog" aria-modal="true"
- onclick="if(event.target===this){closeModal('login-error-modal')}"><div class="modal">
-  <p>{{ error }}</p><button type="button" onclick="closeModal('login-error-modal')">확인</button>
+{% if error %}<div class="pf-scrim" id="login-error-modal" role="dialog" aria-modal="true"
+ onclick="if(event.target===this){closeModal('login-error-modal')}"><div class="pf-modal">
+  <p class="pf-notice pf-notice--critical pf-modal__body body-14" role="alert">{{ error }}</p>
+  <div class="pf-modal__actions"><button type="button" class="pf-btn pf-btn--primary label-12" onclick="closeModal('login-error-modal')">확인</button></div>
 </div></div>{% endif %}
-<div class="modal-backdrop" id="register-modal" role="dialog" aria-modal="true" style="display:{% if register_open %}grid{% else %}none{% endif %};"
- onclick="if(event.target===this){closeRegister()}"><div class="modal register-modal">
-  <h2>계정 생성</h2>
-  <div class="account-type"><button type="button" id="user-type" class="selected" onclick="chooseRole('USER')">일반 계정 생성</button>
-    <button type="button" id="admin-type" onclick="chooseRole('ADMIN')">관리자 계정 생성</button></div>
+<div class="pf-scrim" id="register-modal" role="dialog" aria-modal="true" style="display:{% if register_open %}grid{% else %}none{% endif %};"
+ onclick="if(event.target===this){closeRegister()}"><div class="pf-modal register-modal">
+  <h2 class="pf-modal__title title-16">계정 생성</h2>
+  <div class="account-type pf-seg" role="group" aria-label="계정 종류"><button type="button" id="user-type" class="pf-seg__item label-12" aria-pressed="true" onclick="chooseRole('USER')">일반 계정 생성</button>
+    <button type="button" id="admin-type" class="pf-seg__item label-12" aria-pressed="false" onclick="chooseRole('ADMIN')">관리자 계정 생성</button></div>
   <form method="post" action="{{ url_for('dashboard_register') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" id="role" name="role" value="USER">
-    <label for="register_name">이름</label><input id="register_name" name="name" maxlength="120" required>
-    <label for="register_email">이메일</label><input id="register_email" name="email" type="email" maxlength="160" required>
-    <label for="register_phone">전화번호</label><input id="register_phone" name="phone" maxlength="40" required>
-    <label for="register_id">아이디</label><input id="register_id" name="login_id" maxlength="80" autocomplete="username" required>
-    <label for="register_password">비밀번호</label><input id="register_password" name="password" type="password" autocomplete="new-password" required>
-    <label for="register_confirm">비밀번호 확인</label><input id="register_confirm" name="password_confirm" type="password" autocomplete="new-password" required>
-    <div id="invite-wrap" style="display:none"><label for="invite_code">관리인 코드</label><input id="invite_code" name="invite_code" type="password" autocomplete="off"></div>
-    <p class="message">{{ register_message or '' }}</p>
-    <button class="submit" type="submit">계정 생성</button>
-    <button class="cancel" type="button" onclick="closeRegister()">닫기</button>
+    <label for="register_name" class="label-12 pf-secondary">이름</label><input id="register_name" name="name" class="pf-control" maxlength="120" required>
+    <label for="register_email" class="label-12 pf-secondary">이메일</label><input id="register_email" name="email" type="email" class="pf-control" maxlength="160" required>
+    <label for="register_phone" class="label-12 pf-secondary">전화번호</label><input id="register_phone" name="phone" class="pf-control" maxlength="40" required>
+    <label for="register_id" class="label-12 pf-secondary">아이디</label><input id="register_id" name="login_id" class="pf-control" maxlength="80" autocomplete="username" required>
+    <label for="register_password" class="label-12 pf-secondary">비밀번호</label><input id="register_password" name="password" type="password" class="pf-control" autocomplete="new-password" required>
+    <label for="register_confirm" class="label-12 pf-secondary">비밀번호 확인</label><input id="register_confirm" name="password_confirm" type="password" class="pf-control" autocomplete="new-password" required>
+    <div id="invite-wrap" style="display:none"><label for="invite_code" class="label-12 pf-secondary">관리인 코드</label><input id="invite_code" name="invite_code" type="password" class="pf-control" autocomplete="off"></div>
+    <p class="message pf-field__error label-12" role="status">{{ register_message or '' }}</p>
+    <div class="pf-modal__actions"><button class="pf-btn pf-btn--ghost label-12" type="button" onclick="closeRegister()">닫기</button>
+      <button class="pf-btn pf-btn--primary label-12" type="submit">계정 생성</button></div>
   </form>
 </div></div>
-{% if register_success %}<div class="modal-backdrop" id="register-success-modal" role="dialog" aria-modal="true"><div class="modal">
-  <p>계정이 생성되었습니다. 로그인해 주세요.</p><button type="button" onclick="closeModal('register-success-modal')">확인</button>
+{% if register_success %}<div class="pf-scrim" id="register-success-modal" role="dialog" aria-modal="true"><div class="pf-modal">
+  <p class="pf-modal__body body-14">계정이 생성되었습니다. 로그인해 주세요.</p>
+  <div class="pf-modal__actions"><button type="button" class="pf-btn pf-btn--primary label-12" onclick="closeModal('register-success-modal')">확인</button></div>
 </div></div>{% endif %}
 <script>
 function closeModal(id){const modal=document.getElementById(id);if(modal){modal.remove();}}
 function openRegister(){document.getElementById('register-modal').style.display='grid';}
 function closeRegister(){document.getElementById('register-modal').style.display='none';}
 function chooseRole(role){document.getElementById('role').value=role;const admin=role==='ADMIN';
- document.getElementById('user-type').classList.toggle('selected',!admin);document.getElementById('admin-type').classList.toggle('selected',admin);
+ document.getElementById('user-type').setAttribute('aria-pressed',String(!admin));document.getElementById('admin-type').setAttribute('aria-pressed',String(admin));
  document.getElementById('invite-wrap').style.display=admin?'block':'none';document.getElementById('invite_code').required=admin;}
 {% if register_role == 'ADMIN' %}chooseRole('ADMIN');{% endif %}
 </script></body></html>"""
@@ -230,7 +232,7 @@ def install_auth(server) -> None:
         if "login_csrf" not in session:
             session["login_csrf"] = secrets.token_urlsafe(32)
         return render_template_string(
-            LOGIN_HTML, csrf_token=session["login_csrf"], error=error,
+            LOGIN_HTML, design_css=DESIGN_CSS, csrf_token=session["login_csrf"], error=error,
             register_open=register_open, register_message=register_message,
             register_success=register_success, register_role=register_role,
         ), status

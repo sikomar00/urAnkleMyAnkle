@@ -31,11 +31,13 @@ def build_template(theme: str) -> go.layout.Template:
         colorway=[C(f"series-{i}", theme) for i in range(1, 9)],
         font=dict(family="Pretendard, system-ui, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif",
                   size=11, color=C("ink-muted", theme)),
+        # automargin — Plotly 기본 템플릿이 켜 두던 값이다. 템플릿을 바꾸면 꺼져서
+        # 축 눈금 라벨(기계 태그·부품 번호)이 여백 밖으로 잘린다.
         xaxis=dict(showgrid=False, zerolinecolor=C("chart-axis", theme),
                    linecolor=C("chart-axis", theme), ticks="outside",
-                   tickcolor=C("chart-muted", theme)),
+                   tickcolor=C("chart-muted", theme), automargin=True),
         yaxis=dict(showgrid=True, gridcolor=C("chart-grid", theme), gridwidth=1,
-                   zerolinecolor=C("chart-axis", theme)),
+                   zerolinecolor=C("chart-axis", theme), automargin=True),
         margin=dict(l=44, r=16, t=8, b=32),
         hovermode="x unified",
         showlegend=False,

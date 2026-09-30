@@ -70,6 +70,7 @@ from .dashboard_data import (  # noqa: E402
     load_table_page,
     period_start,
 )
+from .theme import C  # noqa: E402  (import 시 plantfloor_light/dark 템플릿 등록)
 from .audit_service import (  # noqa: E402
     change_admin_password, create_audit_tables, delete_user_accounts,
     ensure_dashboard_admin, list_user_accounts, log_failure, record_action, record_error, sync_if_csv_changed,
@@ -92,118 +93,50 @@ if DEMO_MODE:
     end_admin_session = noop
 
 # ============================================================
-# 디자인 토큰 (Plantfloor, 그레이스케일만 — 계열/상태/강조 색은 쓰지 않는다)
+# 디자인 토큰 — assets/00-tokens.css(design/tokens.json에서 생성)가 정본이다.
 #
-# 토큰을 hex 리터럴이 아니라 CSS 변수 참조로 둔다. 인라인 style에 들어가는
-# 문자열이 var(--pf-*)이므로, 루트 div의 className만 theme-light ↔ theme-dark로
-# 바꾸면 트리를 다시 그리지 않고도 전체 팔레트가 갈린다. "테마 전환"이 실제로
-# 동작하는 건 이 구조 때문이다. (계열/상태/강조 색은 와이어프레임 단계에서
-# 여전히 쓰지 않는다 — 다크도 그레이스케일 대응값일 뿐이다.)
+# 색·폰트·테두리·그림자는 assets/의 클래스(01-type.css·02-bundle.css·03-app.css)로만
+# 입히고, 인라인 style에는 치수·배치만 둔다(DESIGN.md §6). 테마는 <html data-theme>를
+# clientside callback으로 바꿔 전환한다(§1.3). Plotly는 CSS 변수를 읽지 못하므로
+# src/theme.py가 같은 tokens.json으로 등록한 plantfloor_{light,dark} 템플릿과 C()를 쓴다(§8).
 # ============================================================
 
-PAGE = "var(--pf-page)"      # surface-page
-CARD = "var(--pf-card)"      # surface-card
-SUNK = "var(--pf-sunken)"    # surface-sunken (플레이스홀더 채움)
-RAISED = "var(--pf-raised)"  # surface-raised
-INK = "var(--pf-ink)"        # ink
-INK2 = "var(--pf-ink-2)"     # ink-secondary
-MUTED = "var(--pf-muted)"    # ink-muted
-HAIR = "var(--pf-hair)"      # border-hairline
-CTRL = "var(--pf-ctrl)"      # border-control (점선 테두리)
-
-# 테마별 실제 값. 라이트는 Plantfloor 원본 값, 다크는 같은 역할의 그레이스케일
-# 대응값이다(대비 뒤집기 — 새 색을 도입하지 않는다).
-THEME_CSS = """
-.theme-light {
-  --pf-page:#f9f9f7; --pf-card:#fcfcfb; --pf-sunken:#f0efec; --pf-raised:#ffffff;
-  --pf-ink:#0b0b0b; --pf-ink-2:#52514e; --pf-muted:#68665f;
-  --pf-hair:#e1e0d9; --pf-ctrl:#898781;
-  --pf-dd-bg:#ffffff; --pf-dd-ink:#0b0b0b;
-}
-.theme-dark {
-  --pf-page:#131311; --pf-card:#1b1b19; --pf-sunken:#262622; --pf-raised:#2f2f2b;
-  --pf-ink:#f4f4f1; --pf-ink-2:#bdbcb6; --pf-muted:#9d9b95;
-  --pf-hair:#34342f; --pf-ctrl:#6f6d68;
-  --pf-dd-bg:#1b1b19; --pf-dd-ink:#f4f4f1;
-}
-/* dcc.Dropdown은 자체 DOM(.dash-dropdown-*)이라 인라인 토큰이 닿지 않는다.
-   Dash 4 기준 클래스명이며, Dash를 올리면 이 블록만 다시 맞추면 된다. */
-.theme-dark .dash-dropdown,
-.theme-dark .dash-dropdown-content,
-.theme-dark .dash-dropdown-search {
-  background:var(--pf-dd-bg) !important; color:var(--pf-dd-ink) !important;
-  border-color:var(--pf-ctrl) !important;
-}
-.theme-dark .dash-dropdown-value,
-.theme-dark .dash-dropdown-value-item,
-.theme-dark .dash-dropdown-option,
-.theme-dark .dash-options-list-option { color:var(--pf-dd-ink) !important; }
-.theme-dark .dash-dropdown-placeholder { color:var(--pf-ink-2) !important; }
-.theme-dark .dash-dropdown-option:hover,
-.theme-dark .dash-options-list-option.selected { background:var(--pf-sunken) !important; }
-.theme-dark .dash-dropdown-trigger-icon { color:var(--pf-ink-2) !important; }
-
-/* 테마 버튼은 텍스트 없이 아이콘만 표시한다 — "누르면 될 상태"를 보여주는
-   관례(라이트에서는 다크로 바꾸는 아이콘, 다크에서는 라이트로 바꾸는
-   아이콘). 아이콘 라이브러리 의존성 없이 유니코드 글리프만 쓴다. */
-.theme-light #theme-btn::before { content: "☾"; }
-.theme-dark  #theme-btn::before { content: "☀"; }
-
-/* dcc.Tabs는 컨테이너를 100% 폭으로 잡고 탭 5개를 균등 분배(flex:1)한다.
-   그대로 두면 "⑤ 보고서 요약"처럼 긴 라벨이 잘린다. 바깥 컨테이너는
-   내용 폭으로, 각 탭은 자기 글자 폭으로 되돌린다. */
-#screen-tabs-parent, #screen-tabs { width:max-content !important; }
-#screen-tabs { flex-wrap:nowrap !important; }
-#screen-tabs .tab { flex:0 0 auto !important; width:auto !important; }
-
-/* 현재 화면에 적용되지 않는 필터 컨트롤 */
-#period-btn-group button:disabled { opacity:0.4; cursor:not-allowed; }
-
-/* 캔버스가 1920 고정폭이라 넓은 화면에서는 좌우 여백이 생긴다 —
-   다크에서 그 여백이 흰색으로 남지 않도록 body에도 같은 배경을 준다. */
-html, body { margin:0; background:var(--pf-page); }
-
-/* 드롭다운 팝업이 카드 밑에 깔리는 문제 방지 (Dash 버전 호환).
-   이 환경(Dash 4.x)의 dcc.Dropdown은 position:fixed + z-index:500인
-   팝업(.dash-dropdown-content)을 쓰지만, 설치된 Dash 버전이 다르면
-   z-index 없는 position:absolute짜리 구버전 react-select 팝업
-   (.Select-menu-outer 등)을 쓸 수 있다 — 그 경우 헤더/필터바가
-   DOM에서 main보다 먼저 나와 z-index 없이는 뒤에 그려지는 카드가
-   위로 깔린다. 두 세대 모두 항상 최상단에 오도록 강제한다. */
-.dash-dropdown-content, .Select-menu-outer { z-index: 1000 !important; }
-.Select-menu-outer { position: absolute !important; }
-"""
-
-# go.Figure는 var(--pf-*) CSS 변수를 안정적으로 못 읽으므로, Plotly 차트
-# 전용으로만 THEME_CSS의 라이트/다크 hex 값을 그대로 복사해 둔다 — 새 색상
-# 토큰이 아니라 기존 값의 사본이다.
-FIGURE_COLORS = {
-    "light": {"ink": "#0b0b0b", "ink2": "#52514e", "muted": "#68665f",
-              "hair": "#e1e0d9", "card": "#fcfcfb"},
-    "dark": {"ink": "#f4f4f1", "ink2": "#bdbcb6", "muted": "#9d9b95",
-             "hair": "#34342f", "card": "#1b1b19"},
-}
-
 INDEX_STRING = """<!DOCTYPE html>
-<html>
+<html data-theme="light">
   <head>
     {%metas%}<title>{%title%}</title>{%favicon%}{%css%}
-    <style>__THEME_CSS__</style>
   </head>
   <body>{%app_entry%}<footer>{%config%}{%scripts%}{%renderer%}</footer></body>
 </html>
-""".replace("__THEME_CSS__", THEME_CSS)
+"""
 
-SANS = ("Pretendard, 'Pretendard Variable', system-ui, -apple-system, "
-        "'Segoe UI', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif")
-MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace"
+# 타이포 클래스(01-type.css)와 잉크 보조 클래스(02-bundle.css) 조합
+TITLE_14 = "title-14"
+LABEL_12 = "label-12 pf-secondary"
+NOTE_12 = "label-12 pf-muted"      # 카드 머리·필터바의 보조 설명
+MICRO_11 = "micro-11 pf-muted"     # 배지·단위 전용
+CODE_12 = "code-12"                # 식별자(asset_tag·part_no·plant_code)
+NUM_13 = "num-13"                  # 열로 쌓이는 숫자
+BODY_13 = "body-13"
 
-TITLE_14 = {"margin": "0", "fontSize": "14px", "lineHeight": "20px",
-            "fontWeight": "600", "color": INK, "whiteSpace": "nowrap"}
-LABEL_12 = {"fontSize": "12px", "lineHeight": "16px", "fontWeight": "500", "color": INK2}
-MICRO_11 = {"fontSize": "11px", "lineHeight": "14px", "fontWeight": "500", "color": MUTED}
-NUM_12 = {"fontFamily": MONO, "fontSize": "12px", "lineHeight": "16px",
-          "fontWeight": "500", "color": MUTED, "whiteSpace": "nowrap"}
+# 기계 등급(한글 라벨) → 상태 배지 변형(.pf-badge--*)
+GRADE_BADGE = {"정상": "good", "주의": "warning", "경계": "serious", "위험": "critical"}
+
+
+def _figure_template(theme):
+    return f"plantfloor_{theme if theme in ('light', 'dark') else 'light'}"
+
+
+def _theme(theme):
+    return theme if theme in ("light", "dark") else "light"
+
+
+def status_badge(label):
+    """상태 배지 — 8px 점 + 글자. 상태색은 글자 라벨 없이 쓰지 않는다(DESIGN.md §2.1)."""
+    variant = GRADE_BADGE.get(label, "neutral")
+    return html.Span([html.Span(className="pf-badge__dot"), label],
+                     className=f"pf-badge pf-badge--{variant} {MICRO_11.split()[0]}")
+
 
 # 레이아웃 토큰
 CANVAS_W, CANVAS_H = 1920, 1080
@@ -342,55 +275,38 @@ KPI_FAILRATE_ID = {"type": "kpi-drill", "index": "failrate"}
 # ============================================================
 
 def note(text, style=None):
-    """작은 보조 설명(micro-11)."""
-    s = dict(MICRO_11)
-    if style:
-        s.update(style)
-    return html.Span(text, style=s)
+    """카드 머리·필터바의 보조 설명."""
+    return html.Span(text, className=NOTE_12, style=style)
 
 
 def slot(label, w, h, sub=None):
-    """아직 채워지지 않은 영역 — 점선 테두리 + 라벨."""
+    """아직 채워지지 않은 영역 — 라벨만 있는 자리."""
     width_style = {"width": f"{w}px"} if isinstance(w, (int, float)) else {"flexGrow": "1", "minWidth": "0"}
-    if h < 34:
-        return html.Div(
-            note(label),
-            style={**width_style, "height": f"{h}px", "flexShrink": "0", "boxSizing": "border-box",
-                   "border": f"1px dashed {CTRL}", "background": SUNK, "display": "flex",
-                   "alignItems": "center", "justifyContent": "center", "padding": "0 6px",
-                   "overflow": "hidden"},
-        )
-    children = [html.Span(label, style={**LABEL_12, "textAlign": "center"})]
-    if sub:
-        children.append(html.Span(sub, style={**MICRO_11, "textAlign": "center"}))
+    children = [html.Span(label, className=LABEL_12, style={"textAlign": "center"})]
+    if sub and h >= 34:
+        children.append(html.Span(sub, className=MICRO_11, style={"textAlign": "center"}))
     return html.Div(
-        children,
-        style={**width_style, "height": f"{h}px", "flexShrink": "0", "boxSizing": "border-box",
-               "border": f"1px dashed {CTRL}", "background": SUNK, "display": "flex",
+        children, className="pf-placeholder",
+        style={**width_style, "height": f"{h}px", "flexShrink": "0", "display": "flex",
                "flexDirection": "column", "alignItems": "center", "justifyContent": "center",
-               "gap": "2px", "padding": "4px 8px", "overflow": "hidden"},
+               "gap": "2px", "padding": "0 6px", "overflow": "hidden"},
     )
 
 
 def card(title, w, h, body, right=None):
-    """카드 = 1px 테두리 + 라운드, 그림자 없음. 제목 줄 36px 고정."""
-    header_right = [right] if right else []
+    """카드(.pf-card) — hairline 테두리 + radius-md, 그림자 없음. 제목 줄 36px 고정."""
     return html.Section(
         [
             html.Div(
-                [html.H3(title, style=TITLE_14),
-                 html.Div(header_right, style={"display": "flex", "alignItems": "center", "gap": "12px",
-                                                "minWidth": "0"})],
-                style={"height": "36px", "flexShrink": "0", "display": "flex",
-                       "alignItems": "flex-start", "justifyContent": "space-between", "gap": "12px"},
+                [html.H3(title, className=f"pf-card__title {TITLE_14}", style={"whiteSpace": "nowrap"}),
+                 html.Div(right, className="pf-card__actions", style={"minWidth": "0"})],
+                className="pf-card__head",
             ),
-            html.Div(body, style={"width": f"{w - 32}px", "height": f"{h - 68}px",
+            html.Div(body, style={"width": f"{w - 34}px", "height": f"{h - 70}px",
                                    "display": "flex", "flexDirection": "column", "position": "relative"}),
         ],
-        style={"width": f"{w}px", "height": f"{h}px", "flexShrink": "0", "boxSizing": "border-box",
-               "background": CARD, "outline": f"1px solid {HAIR}", "outlineOffset": "-1px",
-               "borderRadius": "4px", "padding": "16px", "display": "flex", "flexDirection": "column",
-               "overflow": "hidden"},
+        className="pf-card",
+        style={"width": f"{w}px", "height": f"{h}px", "flexShrink": "0"},
     )
 
 
@@ -413,66 +329,41 @@ def hstack(children, gap=8, style=None):
 
 
 def tile(label, w=300, h=96, sub="값 · value-28", tid=None):
-    """tid를 주면 클릭 가능한 KPI 타일이 된다 — html.Div도 n_clicks를 받으므로
-    버튼으로 바꾸지 않아도 된다. 클릭 가능하다는 걸 시각적으로도 드러내려고
-    커서와 살짝 진한 테두리를 준다."""
-    style = {"width": f"{w}px", "height": f"{h}px", "flexShrink": "0", "boxSizing": "border-box",
-             "background": CARD, "outline": f"1px solid {CTRL if tid else HAIR}", "outlineOffset": "-1px",
-             "borderRadius": "4px", "padding": "16px", "display": "flex",
-             "flexDirection": "column", "gap": "8px",
-             "cursor": "pointer" if tid else "default"}
+    """값이 아직 없는 KPI 자리. tid를 주면 클릭 가능한 타일이 된다 — html.Div도
+    n_clicks를 받으므로 버튼으로 바꾸지 않아도 된다."""
     kwargs = {"id": tid, "n_clicks": 0} if tid else {}
     return html.Div(
-        [
-            html.Div([html.Span(label, style=LABEL_12)],
-                      style={"height": "16px", "display": "flex", "justifyContent": "space-between", "gap": "8px"}),
-            slot(sub, 168, 32),
-        ],
-        style=style, **kwargs,
+        [html.Span(label, className=f"pf-kpi__label {LABEL_12}"), slot(sub, 168, 32)],
+        className="pf-card pf-kpi" + (" pf-kpi--action" if tid else ""),
+        style={"width": f"{w}px", "height": f"{h}px", "flexShrink": "0"}, **kwargs,
     )
 
 
 def bar(pct=45, h=8):
     """더미 숫자가 아니라 '여기 값이 온다'는 자리 표시일 뿐 — 길이에 의미 없음."""
-    return html.Div(style={"width": f"{pct}%", "height": f"{h}px", "background": SUNK, "borderRadius": "2px"})
+    return html.Div(className="pf-placeholder", style={"width": f"{pct}%", "height": f"{h}px"})
 
 
-def btn_style(pressed=False, w=None, extra=None):
-    style = {"height": "32px", "flexShrink": "0", "boxSizing": "border-box", "padding": "0 12px",
-             "borderRadius": "2px", "background": RAISED if pressed else "transparent",
-             "fontFamily": "inherit", "fontSize": "13px", "lineHeight": "18px",
-             "fontWeight": "600" if pressed else "500", "color": INK if pressed else INK2,
-             "whiteSpace": "nowrap", "cursor": "pointer",
-             "border": f"1px solid {CTRL}" if pressed else f"1px solid {HAIR}"}
-    if w:
-        style["width"] = f"{w}px"
-    if extra:
-        style.update(extra)
-    return style
-
-
-def btn(label, w=None, pressed=None, extra_style=None, bid=None):
-    """와이어프레임의 모든 버튼은 클릭된다. 기능이 아직 없는 버튼은
-    {"type": "ghost-btn"} 패턴을 달아, 눌렀을 때 하단 action-echo에
-    '무엇이 눌렸고 무엇이 아직 없는지'를 그대로 표시한다. 가짜로 동작하는
-    척하지 않는다 — 상호작용만 증명한다."""
+def btn(label, w=None, bid=None):
+    """기능이 아직 없는 버튼은 {"type": "ghost-btn"} 패턴을 달아, 눌렀을 때 하단
+    action-echo에 '무엇이 눌렸고 무엇이 아직 없는지'를 그대로 표시한다."""
     return html.Button(
         label, id={"type": "ghost-btn", "index": bid or label}, n_clicks=0,
-        style=btn_style(pressed, w, extra_style),
+        className="pf-btn label-12", style={"width": f"{w}px"} if w else None,
     )
 
 
 def seg(group, label_text, options, sel=0):
-    """세그먼티드 컨트롤 — 실제로 선택이 바뀐다. group은 seg-store의 키다.
+    """세그먼티드 컨트롤(.pf-seg) — 실제로 선택이 바뀐다. group은 seg-store의 키다.
     ③ 과제 / ③ 위험 기준선 / ④ 데이터셋이 각각 하나의 group."""
     buttons = [
         html.Button(o, id={"type": "seg-btn", "group": group, "index": i}, n_clicks=0,
-                    style=btn_style(i == sel, extra={"borderRadius": "0", "marginLeft": "-1px"}))
+                    className="pf-seg__item label-12", **{"aria-pressed": "true" if i == sel else "false"})
         for i, o in enumerate(options)
     ]
     return html.Div(
-        [html.Span(label_text, style={**LABEL_12, "whiteSpace": "nowrap"}),
-         html.Div(buttons, style={"display": "flex", "paddingLeft": "1px"})],
+        [html.Span(label_text, className=LABEL_12, style={"whiteSpace": "nowrap"}),
+         html.Div(buttons, className="pf-seg")],
         style={"display": "flex", "alignItems": "center", "gap": "8px"},
     )
 
@@ -481,13 +372,13 @@ def filter_dropdown(dd_id, label, options, w):
     """필터바 드롭다운. 값은 filter-store(storage_type="local")가 원본이고,
     첫 렌더에 write_filters가 저장된 값을 드롭다운에 되돌려 놓는다."""
     return html.Div(
-        [html.Span(label, style={**LABEL_12, "whiteSpace": "nowrap"}),
+        [html.Span(label, className=f"pf-field__label {LABEL_12}"),
          dcc.Dropdown(
              id=dd_id, options=[{"label": o, "value": o} for o in options],
              value=None, placeholder="전체", clearable=True,
-             style={"width": f"{w}px", "fontFamily": "inherit", "fontSize": "13px"},
+             style={"width": f"{w}px"},
          )],
-        style={"display": "flex", "alignItems": "center", "gap": "6px"},
+        className="pf-field", style={"gap": "6px"},
     )
 
 
@@ -495,66 +386,51 @@ def period_toggle():
     """기간 버튼 4개 — 데이터 최신일을 포함한 최근 N일 또는 전체 기간."""
     buttons = [
         html.Button(label, id={"type": "period-btn", "index": i}, n_clicks=0,
-                    style=period_btn_style(i == DEFAULT_FILTERS["period_index"]))
+                    className="pf-seg__item label-12",
+                    **{"aria-pressed": "true" if i == DEFAULT_FILTERS["period_index"] else "false"})
         for i, (label, _days) in enumerate(PERIOD_PRESETS)
     ]
     return html.Div(
-        [html.Span("기간", style={**LABEL_12, "whiteSpace": "nowrap"}),
-         html.Div(buttons, id="period-btn-group", style={"display": "flex", "paddingLeft": "1px"})],
+        [html.Span("기간", className=LABEL_12, style={"whiteSpace": "nowrap"}),
+         html.Div(buttons, id="period-btn-group", className="pf-seg")],
         style={"display": "flex", "alignItems": "center", "gap": "8px"},
     )
-
-
-def period_btn_style(pressed):
-    return {"height": "32px", "boxSizing": "border-box", "padding": "0 12px",
-            "borderRadius": "0", "marginLeft": "-1px",
-            "background": RAISED if pressed else "transparent",
-            "fontFamily": "inherit", "fontSize": "13px", "lineHeight": "18px",
-            "fontWeight": "600" if pressed else "500", "color": INK if pressed else INK2,
-            "whiteSpace": "nowrap", "cursor": "pointer",
-            "border": f"1px solid {CTRL}" if pressed else f"1px solid {HAIR}"}
 
 
 def table_placeholder(cols, nrows, row_h, head_h=32, first_idx=False, sort_col=None, width=None, cell_h=6):
     """cols: [(라벨, 폭px, 정렬)] — 셀 내용은 실제 값이 아니라 자리 막대."""
     thead = html.Tr(
-        [html.Th(f"{l}{' ▼' if i == sort_col else (' ▲▼' if sort_col is not None else '')}",
-                 style={"width": f"{w}px", "boxSizing": "border-box", "padding": "0 8px",
-                        "textAlign": a, **LABEL_12, "whiteSpace": "nowrap", "overflow": "hidden",
-                        "borderBottom": f"1px solid {CTRL}"})
+        [html.Th(f"{l}{' ▼' if i == sort_col else ''}", className=LABEL_12,
+                 style={"width": f"{w}px", "textAlign": a})
          for i, (l, w, a) in enumerate(cols)],
-        style={"height": f"{head_h}px", "background": CARD},
+        style={"height": f"{head_h}px"},
     )
     body_rows = []
     for r in range(nrows):
         cells = []
         for i, (l, w, a) in enumerate(cols):
             if first_idx and i == 0:
-                cell = html.Span(str(r + 1), style={"fontFamily": MONO, "fontSize": "12px", "color": MUTED})
+                cell = html.Span(str(r + 1), className=f"{NUM_13} pf-muted")
             else:
                 just = "flex-end" if a == "right" else ("center" if a == "center" else "flex-start")
                 pct = 45 if a != "left" else 70
                 cell = html.Div(bar(pct, cell_h), style={"display": "flex", "justifyContent": just})
-            cells.append(html.Td(cell, style={"boxSizing": "border-box", "padding": "0 8px",
-                                               "textAlign": a, "borderBottom": f"1px solid {HAIR}"}))
+            cells.append(html.Td(cell, style={"textAlign": a}))
         body_rows.append(html.Tr(cells, style={"height": f"{row_h}px"}))
     tw = width or sum(c[1] for c in cols)
     return html.Table(
-        [html.Thead(thead), html.Tbody(body_rows)],
-        style={"width": f"{tw}px", "tableLayout": "fixed", "borderCollapse": "collapse", "flexShrink": "0"},
+        [html.Thead(thead), html.Tbody(body_rows)], className="pf-table",
+        style={"width": f"{tw}px", "tableLayout": "fixed", "flexShrink": "0"},
     )
 
 
 def empty_state(title, reason, w, h):
-    """확정되지 않은 값은 0/—이 아니라 이유가 적힌 빈 상태로 표시한다."""
+    """확정되지 않은 값은 0/—이 아니라 이유가 적힌 빈 상태(.pf-empty)로 표시한다."""
     return html.Div(
-        [html.Span(title, style={"margin": "0", "fontSize": "14px", "lineHeight": "20px",
-                                  "fontWeight": "600", "color": INK}),
-         html.Span(reason, style={"fontSize": "13px", "lineHeight": "18px", "color": INK2, "textAlign": "center"})],
-        style={"width": f"{w}px", "height": f"{h}px", "boxSizing": "border-box",
-               "border": f"1px dashed {CTRL}", "borderRadius": "4px", "display": "flex",
-               "flexDirection": "column", "alignItems": "center", "justifyContent": "center",
-               "gap": "6px", "padding": "16px"},
+        [html.Span(title, className=f"pf-empty__title {TITLE_14}"),
+         html.Span(reason, className=BODY_13)],
+        className="pf-empty" + (" pf-empty--inline" if h < 160 else ""),
+        style={"width": f"{w}px", "height": f"{h}px"},
     )
 
 
@@ -563,25 +439,18 @@ def empty_state(title, reason, w, h):
 # ============================================================
 
 def app_header():
-    """좌: 시스템명·기준일 / 중앙: 화면 탭 4개(dcc.Tabs) / 우: 내보내기·테마 토글."""
-    tab_style = {"height": "56px", "boxSizing": "border-box", "padding": "0 11px", "display": "flex",
-                 "alignItems": "center", "whiteSpace": "nowrap", "flexShrink": "0",
-                 "fontSize": "14px", "lineHeight": "20px", "fontWeight": "500",
-                 "color": INK2, "border": "none", "borderBottom": "2px solid transparent", "background": "none"}
-    tab_selected_style = {**tab_style, "fontWeight": "600", "color": INK, "borderBottom": f"2px solid {INK}"}
-
+    """좌: 시스템명·기준일 / 중앙: 화면 탭 4개(dcc.Tabs) / 우: 내보내기·테마 토글·계정 메뉴."""
     left = html.Div(
-        [html.Span("산업 기계 센서 기반 고장 위험 예측",
-                    style={"fontSize": "16px", "fontWeight": "600", "color": INK, "whiteSpace": "nowrap"}),
-         html.Div([html.Span("데이터 기준일", style=LABEL_12),
-                   html.Span(load_data_reference_date(), style=NUM_12)],
-                  style={"display": "flex", "alignItems": "center", "gap": "6px"})],
+        [html.Span("산업 기계 센서 기반 고장 위험 예측", className="pf-header__brand title-16"),
+         html.Div([html.Span("데이터 기준일", className=LABEL_12),
+                   html.Span(load_data_reference_date(), className=f"{CODE_12} pf-muted")],
+                  style={"display": "flex", "alignItems": "center", "gap": "6px"}),
+         html.Span("합성 데이터 · 교육용", className="pf-chip-synthetic micro-11")],
         style={"display": "flex", "alignItems": "center", "gap": "12px", "minWidth": "0"},
     )
     center = dcc.Tabs(
         id="screen-tabs", value="1",
-        children=[dcc.Tab(label=label, value=tid, style=tab_style, selected_style=tab_selected_style)
-                  for tid, label in SCREENS],
+        children=[dcc.Tab(label=label, value=tid) for tid, label in SCREENS],
         style={"height": "56px"},
     )
     export_options = [
@@ -594,68 +463,47 @@ def app_header():
              id="export-dd",
              options=export_options,
              value=f"pdf:{DEFAULT_AUDIENCE}", clearable=False,
-             style={"width": "220px", "fontFamily": "inherit", "fontSize": "13px"},
+             style={"width": "220px"},
          ),
-         html.Button("내보내기", id="export-run-btn", n_clicks=0, style=btn_style(w=72)),
-         html.Button("", id="theme-btn", n_clicks=0, title="테마 전환",
-                     style=btn_style(w=32, extra={"padding": "0", "textAlign": "center", "fontSize": "16px"})),
-         html.Span(DEMO_BADGE_TEXT, id="demo-badge",
-                   style={"display": "inline-block" if DEMO_MODE else "none", "padding": "4px 10px",
-                          "border": f"1px solid {HAIR}", "borderRadius": "12px", "fontSize": "12px",
-                          "fontWeight": "600", "color": INK, "whiteSpace": "nowrap"}),
+         html.Button("내보내기", id="export-run-btn", n_clicks=0, className="pf-btn label-12"),
+         html.Button("", id="theme-btn", n_clicks=0, title="테마 전환", className="pf-btn body-14",
+                     style={"width": "32px", "padding": "0"}, **{"aria-label": "테마 전환"}),
+         html.Span(DEMO_BADGE_TEXT, id="demo-badge", className="pf-badge pf-badge--role label-12",
+                   style={"display": "inline-flex" if DEMO_MODE else "none"}),
          html.Details([
              html.Summary(html.Span("관", id="profile-display"), id="profile-menu-toggle",
-                          title="마이 프로필",
-                          style={"listStyle": "none", "width": "34px", "height": "34px",
-                                 "borderRadius": "50%", "background": INK, "color": CARD,
-                                 "display": "grid", "placeItems": "center", "cursor": "pointer",
-                                 "fontSize": "13px", "fontWeight": "700"}),
+                          title="마이 프로필", className="pf-avatar label-12"),
              html.Div([
-                 html.Div(["아이디 · ", html.Span(id="profile-login-id")],
-                          style={"fontSize": "12px", "marginBottom": "6px"}),
+                 html.Div(["아이디 · ", html.Span(id="profile-login-id", className=CODE_12)],
+                          className=LABEL_12, style={"marginBottom": "6px"}),
                  html.Div([
-                     html.Span(["남은 시간 · ", html.Span("10:00", id="session-remaining")]),
-                     html.Button(html.Img(src=SESSION_REFRESH_ICON, alt="", style={"width": "19px", "height": "19px", "display": "block"}),
-                             id="session-extend-btn", n_clicks=0,
-                             style={"border": "0", "background": "transparent", "color": "#111",
-                                    "cursor": "pointer", "padding": "0", "marginLeft": "20px"},
-                             title="로그인 시간 10분으로 초기화",
-                             **{"aria-label": "로그인 시간 10분으로 초기화"}),
-                 ], style={"fontSize": "12px", "marginBottom": "8px", "display": "flex",
-                           "alignItems": "center"}),
-                 html.Button("비밀번호 변경", id="password-open-btn", n_clicks=0,
-                             style={"display": "block", "width": "100%", "padding": "8px", "marginBottom": "5px"}),
-                 html.Button("계정 관리", id="account-manage-btn", n_clicks=0,
-                             style={"display": "none", "width": "100%", "padding": "8px", "marginBottom": "5px"}),
-                 html.Button("로그아웃", id="logout-btn", n_clicks=0,
-                             style={"display": "block", "width": "100%", "padding": "8px"}),
-             ], style={"position": "absolute", "right": "0", "top": "40px", "width": "210px",
-                       "background": CARD, "color": INK, "border": f"1px solid {HAIR}",
-                       "boxShadow": "0 8px 24px #0003", "padding": "10px", "zIndex": 100}),
+                     html.Span(["남은 시간 · ", html.Span("10:00", id="session-remaining", className=NUM_13)]),
+                     html.Button("연장", id="session-extend-btn", n_clicks=0, className="pf-btn label-12",
+                                 style={"height": "24px", "padding": "0 8px", "marginLeft": "auto"},
+                                 title="로그인 시간 10분으로 초기화",
+                                 **{"aria-label": "로그인 시간 10분으로 초기화"}),
+                 ], className=LABEL_12, style={"marginBottom": "8px", "display": "flex",
+                                               "alignItems": "center", "gap": "8px"}),
+                 html.Button("비밀번호 변경", id="password-open-btn", n_clicks=0, className="pf-btn label-12"),
+                 html.Button("계정 관리", id="account-manage-btn", n_clicks=0, className="pf-btn label-12",
+                             style={"display": "none"}),
+                 html.Button("로그아웃", id="logout-btn", n_clicks=0, className="pf-btn label-12"),
+             ], className="pf-menu"),
          ], style={"position": "relative", "flexShrink": "0", "display": "none" if DEMO_MODE else "block"}),
          dcc.Download(id="report-download"),
          dcc.Download(id="table-download")],
         style={"display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "8px",
-               # overflow:hidden을 여기 두면 "내보내기" 드롭다운 팝업까지
-               # 잘라버릴 수 있다(설치된 Dash 버전에 따라 팝업이 position:fixed가
-               # 아니라 absolute일 수 있음) — 가로 폭은 이미 자식 실측으로
-               # 맞춰뒀으니 clip 없이도 넘치지 않는다.
+               # overflow:hidden을 여기 두면 "내보내기" 드롭다운 팝업까지 잘라버릴 수 있다.
                "minWidth": "0"},
     )
     return html.Header(
         [left, center, right],
-        style={"width": f"{CANVAS_W}px", "height": f"{HEADER_H}px", "boxSizing": "border-box",
-               "padding": f"0 {MARGIN}px", "background": CARD, "borderBottom": f"1px solid {HAIR}",
-               # center를 max-content로 못박아야 탭 5개가 잘리지 않는다
+        className="pf-header",
+        style={"width": f"{CANVAS_W}px", "height": f"{HEADER_H}px",
+               # center를 max-content로 못박아야 탭이 잘리지 않는다
                # (auto면 1fr 두 열이 먼저 자리를 가져가 탭이 깎인다).
                "display": "grid", "gridTemplateColumns": "minmax(0, 1fr) max-content minmax(0, 1fr)",
-               "alignItems": "center", "gap": "16px", "fontFamily": SANS, "color": INK,
-               # 헤더/필터바가 DOM에서 main보다 먼저 나오는데, 설치된 Dash
-               # 버전에 따라 드롭다운 팝업이 z-index 없는 position:absolute로
-               # 뜨는 구버전 컴포넌트를 쓸 수도 있다 — 그 경우 position:static인
-               # 두 요소는 "나중에 그려지는 쪽이 위" 규칙을 따르므로 main(카드들)이
-               # 위로 깔린다. 헤더 자체에 명시적 position+z-index를 줘서 어느
-               # Dash 버전이든 항상 main보다 위에 그려지게 만든다.
+               # 드롭다운 팝업이 main(카드들) 밑에 깔리지 않도록 헤더를 항상 위에 둔다.
                "position": "relative", "zIndex": 30},
     )
 
@@ -669,29 +517,21 @@ def filter_bar():
          filter_dropdown("machine-type-dd", "기계 종류", MACHINE_TYPE_OPTIONS, 140),
          filter_dropdown("machine-dd", "기계", MACHINE_OPTIONS, 180),
          period_toggle(),
-         html.Button("초기화", id="reset-btn", n_clicks=0,
-                     style={"height": "32px", "boxSizing": "border-box", "padding": "0 12px",
-                            "border": f"1px solid {HAIR}", "borderRadius": "2px", "background": "transparent",
-                            "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "500", "color": INK2,
-                            "cursor": "pointer", "whiteSpace": "nowrap", "flexShrink": "0"}),
+         html.Button("초기화", id="reset-btn", n_clicks=0, className="pf-btn label-12",
+                     style={"flexShrink": "0"}),
          html.Div(style={"flexGrow": "1"}),
-         html.Span(id="filter-scope-note", style={**MICRO_11, "whiteSpace": "nowrap", "flexShrink": "0"}),
-         html.Div([html.Span("현재 필터", style={**LABEL_12, "whiteSpace": "nowrap"}),
-                   html.Span(id="filter-echo", style={**NUM_12, "whiteSpace": "nowrap"})],
+         html.Span(id="filter-scope-note", className=NOTE_12, style={"whiteSpace": "nowrap", "flexShrink": "0"}),
+         html.Div([html.Span("현재 필터", className=LABEL_12, style={"whiteSpace": "nowrap"}),
+                   html.Span(id="filter-echo", className=f"{CODE_12} pf-muted", style={"whiteSpace": "nowrap"})],
                   style={"display": "flex", "alignItems": "center", "gap": "6px", "flexShrink": "0"}),
-         html.Span("", id="action-echo",
-                   style={**MICRO_11, "width": "208px", "textAlign": "right", "flexShrink": "0",
+         html.Span("", id="action-echo", className=NOTE_12,
+                   style={"width": "208px", "textAlign": "right", "flexShrink": "0",
                           "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis"})],
-        style={"width": f"{CANVAS_W}px", "height": f"{FILTERBAR_H}px", "boxSizing": "border-box",
-               "padding": f"0 {MARGIN}px", "background": CARD, "borderBottom": f"1px solid {HAIR}",
-               "display": "flex", "alignItems": "center", "gap": "10px", "fontFamily": SANS, "color": INK,
-               # overflow:hidden을 쓰면 자식(드롭다운 팝업 메뉴)까지 clip돼서
-               # 목록이 잘리거나 다른 카드 밑에 깔린 것처럼 보인다. overflow는
-               # 넣지 않고 줄바꿈만 막는다.
+        className="pf-filterbar",
+        style={"width": f"{CANVAS_W}px", "height": f"{FILTERBAR_H}px", "gap": "10px",
+               # overflow:hidden을 쓰면 드롭다운 팝업까지 clip된다. 줄바꿈만 막는다.
                "flexWrap": "nowrap",
-               # app_header()와 같은 이유 — 설치된 Dash 버전이 옛 방식(z-index
-               # 없는 position:absolute) 드롭다운을 쓸 경우를 대비해 필터바
-               # 자체를 main보다 항상 위에 오도록 고정한다.
+               # app_header()와 같은 이유 — 필터바를 main보다 항상 위에 둔다.
                "position": "relative", "zIndex": 20},
     )
 
@@ -701,83 +541,71 @@ def filter_bar():
 # ============================================================
 
 def kpi_value_tile(label, value_text, w=300, h=96, tid=None, scope=None):
-    """KPI 값 타일. scope는 라벨 오른쪽의 집계 범위 안내(예: "기준일", "선택 기간")."""
-    style = {"width": f"{w}px", "height": f"{h}px", "flexShrink": "0", "boxSizing": "border-box",
-             "background": CARD, "outline": f"1px solid {CTRL if tid else HAIR}", "outlineOffset": "-1px",
-             "borderRadius": "4px", "padding": "16px", "display": "flex",
-             "flexDirection": "column", "gap": "8px",
-             "cursor": "pointer" if tid else "default"}
+    """KPI 값 타일(.pf-kpi). scope는 라벨 오른쪽의 집계 범위 안내(예: "기준일", "선택 기간")."""
     kwargs = {"id": tid, "n_clicks": 0} if tid else {}
     return html.Div(
-        [html.Div([html.Span(label, style=LABEL_12)] + ([note(scope)] if scope else []),
-                   style={"height": "16px", "display": "flex", "justifyContent": "space-between", "gap": "8px"}),
-         html.Div(html.Span(value_text, style={"fontFamily": MONO, "fontSize": "22px",
-                                                 "fontWeight": "600", "color": INK}),
-                  style={"height": "32px", "display": "flex", "alignItems": "center"})],
-        style=style, **kwargs,
+        [html.Div([html.Span(label, className=f"pf-kpi__label {LABEL_12}")] + ([note(scope)] if scope else []),
+                  style={"display": "flex", "justifyContent": "space-between", "gap": "8px"}),
+         html.Span(value_text, className="pf-kpi__value value-28")],
+        className="pf-card pf-kpi" + (" pf-kpi--action" if tid else ""),
+        style={"width": f"{w}px", "height": f"{h}px", "flexShrink": "0"}, **kwargs,
     )
 
 
 def _spark_figure(values, theme):
-    """화면 ① "기계 상태" 타일의 미니 스파크라인(축·격자·여백 없는 라인)."""
-    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    """화면 ① "기계 상태" 타일의 미니 스파크라인 — series-1 2px, 축·격자·범례 없음."""
     fig = go.Figure(go.Scatter(y=values, mode="lines", hoverinfo="skip",
-                                line=dict(color=colors["ink2"], width=1.4)))
+                                line=dict(color=C("series-1", _theme(theme)), width=2)))
     fig.update_xaxes(visible=False)
     fig.update_yaxes(visible=False)
-    fig.update_layout(
-        height=32, margin=dict(l=0, r=0, t=2, b=2), showlegend=False,
-        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
-    )
+    fig.update_layout(template=_figure_template(theme), height=32, margin=dict(l=0, r=0, t=2, b=2))
     return fig
+
+
+# 히트맵 순차 파랑. 0은 색이 아니라 표면(surface-sunken)이다(DESIGN.md §2.1).
+_SEQ_BLUE = ["seq-blue-100", "seq-blue-200", "seq-blue-300", "seq-blue-400",
+             "seq-blue-500", "seq-blue-600", "seq-blue-700"]
 
 
 def _heatmap_figure(heat, theme):
     """화면 ① "고장 표시 히트맵" — 자산 × 월 그레인, 셀 = 그 달 고장 표시된
     부품-일 행 수. period는 이미 오름차순 CSV 순서라 그대로 pivot한다."""
-    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    theme = _theme(theme)
     pivot = heat.pivot(index="asset_tag", columns="period", values="failed_part_count")
+    zmax = max(int(pivot.to_numpy().max()), 1)
+    first = 1 / zmax  # 값 1의 위치 — 0만 표면색, 1 이상은 seq-blue-100부터
+    colorscale = ([[0, C("surface-sunken", theme)], [first * 0.999, C("surface-sunken", theme)]]
+                  + [[first + (1 - first) * i / (len(_SEQ_BLUE) - 1), C(name, theme)]
+                     for i, name in enumerate(_SEQ_BLUE)])
     fig = go.Figure(go.Heatmap(
         z=pivot.to_numpy(), x=pivot.columns.tolist(), y=pivot.index.tolist(),
-        colorscale=[[0, colors["card"]], [1, colors["ink"]]],
+        zmin=0, zmax=zmax, colorscale=colorscale, xgap=2, ygap=2,
         hovertemplate="%{y} · %{x}<br>%{z}건<extra></extra>",
         colorbar=dict(title=dict(text="건수", font=dict(size=10)), tickfont=dict(size=10)),
     ))
-    fig.update_xaxes(tickfont=dict(size=10), color=colors["muted"])
-    fig.update_yaxes(tickfont=dict(size=11), color=colors["muted"], autorange="reversed")
-    fig.update_layout(
-        height=300, margin=dict(l=8, r=8, t=8, b=8),
-        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
-        font=dict(size=11, color=colors["muted"]),
-    )
+    fig.update_xaxes(tickfont=dict(size=10), showgrid=False, tickformat="%Y-%m")
+    fig.update_yaxes(tickfont=dict(size=11), showgrid=False, autorange="reversed")
+    fig.update_layout(template=_figure_template(theme), height=270, margin=dict(l=8, r=8, t=8, b=8),
+                      hovermode="closest")
     return fig
 
 
 def _trend_figure(df, theme):
-    """화면 ⑤ "고장·위험 추세" 카드용 이중 y축 라인 차트. 새 색상 토큰 없이
-    FIGURE_COLORS(THEME_CSS 값의 사본)만 써서 그레이스케일로 그린다."""
-    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    """화면 ⑤ "고장·위험 추세" 카드용 라인 차트(참조 화면 전용)."""
+    theme = _theme(theme)
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig.add_trace(go.Scatter(x=df["transaction_date"], y=df["failure_days"],
                               name="고장 표시 건수", mode="lines",
-                              line=dict(color=colors["ink"], width=1.6)),
+                              line=dict(color=C("series-1", theme), width=2)),
                   secondary_y=False)
     fig.add_trace(go.Scatter(x=df["transaction_date"], y=df["high_risk_pct"],
                               name="위험 기준선 초과 비율 (%)", mode="lines",
-                              line=dict(color=colors["ink2"], width=1.6, dash="dash")),
+                              line=dict(color=C("series-2", theme), width=2)),
                   secondary_y=True)
-    fig.update_layout(
-        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
-        font=dict(color=colors["muted"], size=11),
-        margin=dict(l=48, r=48, t=8, b=32),
-        legend=dict(orientation="h", y=1.14, x=0),
-        hovermode="x unified",
-    )
-    fig.update_xaxes(showgrid=False, color=colors["muted"])
-    fig.update_yaxes(title_text="건수", gridcolor=colors["hair"], color=colors["muted"],
-                      secondary_y=False)
-    fig.update_yaxes(title_text="%", showgrid=False, color=colors["muted"],
-                      secondary_y=True)
+    fig.update_layout(template=_figure_template(theme), margin=dict(l=48, r=48, t=8, b=32),
+                      legend=dict(orientation="h", y=1.14, x=0), showlegend=True)
+    fig.update_yaxes(title_text="건수", secondary_y=False)
+    fig.update_yaxes(title_text="%", showgrid=False, secondary_y=True)
     return fig
 
 
@@ -824,107 +652,91 @@ def _band_shapes(dates, flags, color):
     return [dict(type="rect", xref="x", yref="paper", y0=0, y1=1,
                  x0=(dates.iloc[a] - half).isoformat(),
                  x1=(dates.iloc[b] + half).isoformat(),
-                 fillcolor=color, opacity=0.18, line_width=0, layer="below")
+                 fillcolor=color, line_width=0, layer="below")
             for a, b in _true_runs(flags)]
 
 
 def _smult_figure(df, theme):
-    """화면 ② "센서 8종 스몰 멀티플" — 센서 8종 스파크라인(축·격자·범례 없음,
-    맨 아래 공유 x축만) + 위험 기준선 초과일 세로 밴드. 밴드는 yref="paper"라
-    8개 패널과 그 사이 간격까지 하나로 관통한다."""
-    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    """화면 ② "센서 8종 스몰 멀티플" — 모든 패널 series-1 단색(축·격자·범례 없음,
+    맨 아래 공유 x축만) + 위험 기준선 초과일 세로 밴드(chart-band-critical).
+    밴드는 yref="paper"라 8개 패널과 그 사이 간격까지 하나로 관통한다."""
+    theme = _theme(theme)
     fig = make_subplots(rows=len(SMULT_SENSORS), cols=1, shared_xaxes=True,
                         vertical_spacing=SMULT_GAP / SMULT_PLOT_H)
     for r, (_, column) in enumerate(SMULT_SENSORS, start=1):
         fig.add_trace(go.Scatter(x=df["transaction_date"], y=df[column], mode="lines",
-                                  line=dict(color=colors["ink"], width=0.8),
+                                  line=dict(color=C("series-1", theme), width=1.5),
                                   showlegend=False, hoverinfo="skip"),
                       row=r, col=1)
     # 밴드는 shapes로 한 번에 넘긴다 — 구간마다 add_vrect()를 호출하면 호출마다
     # figure 전체를 다시 검증해 2분이 넘게 걸린다(일괄 할당은 30ms 수준).
     fig.update_layout(
-        height=SMULT_BODY_H, margin=dict(l=0, r=0, t=0, b=SMULT_AXIS_H),
-        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
-        font=dict(color=colors["muted"], size=11),
-        shapes=_band_shapes(df["transaction_date"], df["is_high_risk_day"], colors["muted"]),
+        template=_figure_template(theme), height=SMULT_BODY_H, margin=dict(l=0, r=0, t=0, b=SMULT_AXIS_H),
+        shapes=_band_shapes(df["transaction_date"], df["is_high_risk_day"], C("chart-band-critical", theme)),
     )
     fig.update_xaxes(visible=False)
     fig.update_yaxes(visible=False)
-    fig.update_xaxes(visible=True, showgrid=False, color=colors["muted"],
-                      row=len(SMULT_SENSORS), col=1)
+    fig.update_xaxes(visible=True, showgrid=False, tickformat="%Y-%m-%d", row=len(SMULT_SENSORS), col=1)
     return fig
 
 
 def _parts_figure(df, theme):
-    """화면 ② "부품 출고 이력" — 부품별 출고 금액 상위 10개 가로 막대.
+    """화면 ② "부품 출고 이력" — 부품별 출고 금액 상위 10개 가로 막대(series-1 단일 계열).
     금액 내림차순이 위로 오도록 autorange="reversed"."""
-    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    theme = _theme(theme)
     fig = go.Figure(go.Bar(
         x=df["total_issue_value_inr"], y=df["part_no"], orientation="h",
-        marker_color=colors["ink"],
+        marker_color=C("series-1", theme),
         text=[f"{v:,.0f}" for v in df["total_issue_value_inr"]],
-        textposition="outside", textfont=dict(color=colors["muted"], size=11),
+        textposition="outside", textfont=dict(size=11),
         cliponaxis=False,
         customdata=df["part_description"],
         hovertemplate="%{y} · %{customdata}<br>%{text} INR<extra></extra>",
     ))
     fig.update_yaxes(autorange="reversed", showgrid=False, tickfont=dict(size=11))
     fig.update_xaxes(visible=False, range=[0, df["total_issue_value_inr"].max() * 1.35])
-    fig.update_layout(
-        height=132, margin=dict(l=0, r=0, t=0, b=0),
-        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
-        font=dict(size=11, color=colors["muted"]), bargap=0.28, showlegend=False,
-    )
+    fig.update_layout(template=_figure_template(theme), height=132, margin=dict(l=0, r=0, t=0, b=0),
+                      bargap=0.28, hovermode="closest")
     return fig
 
 
 def _family_pr_figure(pr_cm, theme):
-    """화면 ③ "부품군 진단" 드릴다운 — 선택 자산·부품군의 PR곡선."""
-    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
+    """화면 ③ PR 곡선(series-1 단일 계열)."""
     fig = go.Figure(go.Scatter(
         x=pr_cm["recall_curve"], y=pr_cm["precision_curve"], mode="lines",
-        line=dict(color=colors["ink"], width=1.6),
+        line=dict(color=C("series-1", _theme(theme)), width=2),
     ))
-    fig.update_yaxes(title="정밀도", range=[0, 1.02], gridcolor=colors["hair"],
-                      tickfont=dict(size=11), color=colors["muted"])
-    fig.update_xaxes(title="재현율", range=[0, 1.02], showgrid=False,
-                      tickfont=dict(size=11), color=colors["muted"])
-    fig.update_layout(
-        height=392, margin=dict(l=48, r=16, t=8, b=40),
-        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
-        font=dict(size=11, color=colors["muted"]), showlegend=False,
-    )
+    fig.update_yaxes(title="정밀도", range=[0, 1.02], tickfont=dict(size=11))
+    fig.update_xaxes(title="재현율", range=[0, 1.02], tickfont=dict(size=11))
+    fig.update_layout(template=_figure_template(theme), height=392, margin=dict(l=48, r=16, t=8, b=40),
+                      hovermode="closest")
     return fig
 
 
 def _family_recur_figure(intervals, theme):
     """화면 ③ "부품군 진단" 드릴다운 — 선택 자산·부품군의 재발 간격(일) 분포."""
-    colors = FIGURE_COLORS.get(theme, FIGURE_COLORS["light"])
-    fig = go.Figure(go.Histogram(x=intervals, marker=dict(color=colors["ink"])))
-    fig.update_yaxes(title="빈도", gridcolor=colors["hair"], tickfont=dict(size=11), color=colors["muted"])
-    fig.update_xaxes(title="간격(일)", showgrid=False, tickfont=dict(size=11), color=colors["muted"])
-    fig.update_layout(
-        height=184, margin=dict(l=40, r=8, t=4, b=32), bargap=0.08,
-        paper_bgcolor=colors["card"], plot_bgcolor=colors["card"],
-        font=dict(size=11, color=colors["muted"]), showlegend=False,
-    )
+    fig = go.Figure(go.Histogram(x=intervals, marker=dict(color=C("series-1", _theme(theme)))))
+    fig.update_yaxes(title="빈도", tickfont=dict(size=11))
+    fig.update_xaxes(title="간격(일)", tickfont=dict(size=11))
+    fig.update_layout(template=_figure_template(theme), height=184, margin=dict(l=40, r=8, t=4, b=32),
+                      bargap=0.08, hovermode="closest")
     return fig
 
 
-def priority_table(cols, records, row_h, head_h=32, sort_col=None):
-    """table_placeholder()와 같은 헤더/셀 스타일을 쓰되, 자리표시 막대 대신
-    load_priority_table()이 만든 실제 자산별 값을 채운다. table_placeholder()
-    자체는 화면 ③·④에서도 쓰므로 건드리지 않는다."""
+def priority_table(cols, records, sort_col=None, direction="desc"):
+    """점검 우선순위 표(.pf-table) — load_priority_table()이 만든 자산별 값을 채운다.
+    숫자 열은 num-13 우측 정렬, 식별자(asset_tag·plant_code)는 code-12."""
+    arrow = " ▲" if direction == "asc" else " ▼"
     thead = html.Tr(
-        [html.Th(f"{l}{' ▼' if i == sort_col else (' ▲▼' if sort_col is not None else '')}",
-                 style={"width": f"{w}px", "boxSizing": "border-box", "padding": "0 8px",
-                        "textAlign": a, **LABEL_12, "whiteSpace": "nowrap", "overflow": "hidden",
-                        "borderBottom": f"1px solid {CTRL}"})
+        [html.Th(f"{l}{arrow if i == sort_col else ''}",
+                 className="label-12" + (" pf-th--num" if a == "right" else ""),
+                 style={"width": f"{w}px", "textAlign": a})
          for i, (l, w, a) in enumerate(cols)],
-        style={"height": f"{head_h}px", "background": CARD},
     )
     field_order = ["rank", "asset_tag", "machine_type", "plant_code", "failure_points",
                    "threshold_exceeded", "last_failure_date", "failed_part_count"]
+    num_fields = {"rank", "failure_points", "failed_part_count"}
+    code_fields = {"asset_tag", "plant_code", "last_failure_date"}
     body_rows = []
     for record in records:
         cells = []
@@ -938,15 +750,18 @@ def priority_table(cols, records, row_h, head_h=32, sort_col=None):
                 text = value or "—"
             else:
                 text = str(value)
-            cell_style = {"fontFamily": MONO, "fontSize": "12px", "color": MUTED} if field == "rank" else NUM_12
-            cells.append(html.Td(html.Span(text, style=cell_style),
-                                  style={"boxSizing": "border-box", "padding": "0 8px",
-                                         "textAlign": a, "borderBottom": f"1px solid {HAIR}"}))
-        body_rows.append(html.Tr(cells, style={"height": f"{row_h}px"}))
+            if field in num_fields:
+                cls = f"{NUM_13} pf-td--num" + (" pf-muted" if field == "rank" else "")
+            elif field in code_fields:
+                cls = CODE_12
+            else:
+                cls = BODY_13
+            cells.append(html.Td(text, className=cls, style={"textAlign": a}))
+        body_rows.append(html.Tr(cells))
     tw = sum(c[1] for c in cols)
     return html.Table(
-        [html.Thead(thead), html.Tbody(body_rows)],
-        style={"width": f"{tw}px", "tableLayout": "fixed", "borderCollapse": "collapse", "flexShrink": "0"},
+        [html.Thead(thead), html.Tbody(body_rows)], className="pf-table",
+        style={"width": f"{tw}px", "tableLayout": "fixed", "flexShrink": "0"},
     )
 
 
@@ -992,45 +807,32 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=N
                  else "정렬: 등급가중 고장점수 (기본)") + (" · 오름차순" if direction == "asc" else " · 내림차순")
     priority_records = load_priority_table(sort_by, direction, assets=assets)
     dir_btn = html.Button("▲ 오름차순" if direction == "asc" else "▼ 내림차순",
-                           id={"type": "prio-dir-btn", "index": "screen1"}, n_clicks=0, style=btn_style(w=96))
+                           id={"type": "prio-dir-btn", "index": "screen1"}, n_clicks=0,
+                           className="pf-btn label-12", style={"width": "96px"})
     prio = card("점검 우선순위", 1090, ROW_MAIN,
-                priority_table(prio_cols, priority_records, 32, head_h=32, sort_col=sort_idx),
+                priority_table(prio_cols, priority_records, sort_col=sort_idx, direction=direction),
                 right=html.Div([note(f"기준일 스냅샷 · 기간 미적용 · {sort_hint}"),
                                  dir_btn],
                                 style={"display": "flex", "alignItems": "center", "gap": "8px"}))
 
     def machine_tile(status_row):
-        grade = status_row["current_grade"]
-        emphasize = grade in ("위험", "경계")
-        badge = html.Span(
-            grade,
-            style={"height": "18px", "boxSizing": "border-box", "padding": "0 6px",
-                   "border": f"1px solid {CTRL if emphasize else HAIR}", "borderRadius": "2px",
-                   "fontSize": "11px", "lineHeight": "16px",
-                   "fontWeight": "600" if emphasize else "500",
-                   "color": INK if emphasize else MUTED, "display": "inline-flex",
-                   "alignItems": "center", "whiteSpace": "nowrap"},
-        )
         return html.Div(
-            [html.Div([html.Span(status_row["asset_tag"], style={"fontFamily": MONO, "fontSize": "13px",
-                                                                   "color": INK, "whiteSpace": "nowrap"}),
-                       html.Span(status_row["machine_type"], style={**MICRO_11, "whiteSpace": "nowrap",
-                                                                     "overflow": "hidden", "textOverflow": "ellipsis"})],
+            [html.Div([html.Span(status_row["asset_tag"], className=CODE_12, style={"whiteSpace": "nowrap"}),
+                       html.Span(status_row["machine_type"], className=MICRO_11,
+                                 style={"whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis"})],
                       style={"width": "96px", "flexShrink": "0", "display": "flex",
                              "flexDirection": "column", "gap": "4px", "overflow": "hidden"}),
              dcc.Graph(id={"type": "spark-chart", "index": status_row["asset_tag"]},
                        figure=_spark_figure(status_row["sparkline"], "light"),
                        config={"displayModeBar": False, "responsive": True},
                        style={"flexGrow": "1", "minWidth": "0", "height": "32px"}),
-             html.Div([html.Span(f"{status_row['risk_score']:,.0f}",
-                                  style={"fontFamily": MONO, "fontSize": "16px", "fontWeight": "600", "color": INK}),
-                       badge],
+             html.Div([html.Span(f"{status_row['risk_score']:,.0f}", className="value-20"),
+                       status_badge(status_row["current_grade"])],
                       style={"width": "88px", "flexShrink": "0", "display": "flex",
-                             "flexDirection": "column", "gap": "4px"})],
-            style={"width": "367px", "height": "72px", "flexShrink": "0", "boxSizing": "border-box",
-                   "outline": f"1px solid {HAIR}", "outlineOffset": "-1px", "borderRadius": "2px",
-                   "background": CARD, "padding": "10px 12px", "display": "flex", "alignItems": "center",
-                   "gap": "8px"},
+                             "flexDirection": "column", "alignItems": "flex-start", "gap": "2px"})],
+            className="pf-machinetile",
+            style={"width": "367px", "height": "72px", "flexShrink": "0", "padding": "8px 12px",
+                   "display": "flex", "alignItems": "center", "gap": "8px"},
         )
     machine_status_rows = load_screen1_machine_status(assets)
     tiles_grid = html.Div([machine_tile(r) for r in machine_status_rows],
@@ -1053,13 +855,15 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=N
 
     power_rows = load_screen1_power_by_machine(assets, start)
     max_power = max((r["avg_power_kw"] for r in power_rows), default=1.0) or 1.0
+    # 단일 계열 막대는 series-1 한 색이다 — 값에 따라 색을 바꾸지 않는다(.pf-risk).
     prows = html.Div(
-        [html.Div([html.Span(r["asset_tag"], style={"fontFamily": MONO, "fontSize": "12px", "color": INK,
-                                                      "width": "88px", "flexShrink": "0"}),
-                   html.Div(bar(r["avg_power_kw"] / max_power * 100, 6), style={"flexGrow": "1"}),
-                   html.Span(f"{r['avg_power_kw']:,.2f}",
-                             style={**NUM_12, "width": "56px", "flexShrink": "0", "textAlign": "right"})],
-                  style={"height": "25px", "display": "flex", "alignItems": "center", "gap": "8px"})
+        [html.Div([html.Span(r["asset_tag"], className=CODE_12, style={"width": "88px", "flexShrink": "0"}),
+                   html.Span(html.Span(className="pf-risk__fill",
+                                       style={"width": f"{r['avg_power_kw'] / max_power * 100:.1f}%"}),
+                             className="pf-risk__track"),
+                   html.Span(f"{r['avg_power_kw']:,.2f}", className=f"pf-risk__value {NUM_13}",
+                             style={"width": "56px", "flexShrink": "0"})],
+                  className="pf-risk", style={"height": "25px"})
          for r in power_rows],
     )
     power_body = html.Div([prows], style={"display": "flex", "flexDirection": "column"})
@@ -1075,20 +879,18 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=N
 # ============================================================
 
 def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=None):
-    def value_box(text, w, h=26, mono=False):
-        """slot()의 점선 테두리/치수 주석 대신 실제 값을 그대로 보여준다 —
-        strip 전용, screen_2() 안에서만 쓰인다."""
+    def value_box(content, w, h=26, cls=BODY_13):
+        """strip 전용 값 칸 — screen_2() 안에서만 쓰인다."""
         return html.Div(
-            html.Span(text, style={"fontFamily": MONO if mono else "inherit", "fontSize": "13px",
-                                    "color": INK, "whiteSpace": "nowrap", "overflow": "hidden",
-                                    "textOverflow": "ellipsis"}),
-            style={"width": f"{w}px", "height": f"{h}px", "boxSizing": "border-box",
+            html.Span(content, className=cls,
+                      style={"whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis"}),
+            style={"width": f"{w}px", "height": f"{h}px",
                    "display": "flex", "alignItems": "center", "overflow": "hidden"},
         )
 
-    def metric(label, w, value_text):
-        return html.Div([html.Span(label, style={**LABEL_12, "whiteSpace": "nowrap"}),
-                          value_box(value_text, w)],
+    def metric(label, w, value, cls=NUM_13):
+        return html.Div([html.Span(label, className=LABEL_12, style={"whiteSpace": "nowrap"}),
+                          value_box(value, w, cls=cls)],
                          style={"width": f"{w}px", "display": "flex", "flexDirection": "column", "gap": "4px"})
 
     def nav_btn(label, index):
@@ -1096,7 +898,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
         같이 반응해 '미구현' 문구를 띄운다. 여기서는 실제 기계 전환 콜백만
         반응하도록 다른 id 타입을 쓴다."""
         return html.Button(label, id={"type": "machine-nav-btn", "index": index},
-                            n_clicks=0, style=btn_style())
+                            n_clicks=0, className="pf-btn label-12")
 
     assets = load_asset_list()
     asset_tag = asset_tag if asset_tag in assets else assets[0]
@@ -1104,26 +906,27 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
 
     strip = html.Section(
         [nav_btn("‹ 이전 기계", "prev"),
-         html.Div([value_box(detail["asset_tag"], 220, mono=True),
-                   value_box(f"{detail['machine_type']} · {detail['plant_code']}", 220, h=22)],
+         html.Div([value_box(detail["asset_tag"], 220, cls=f"{CODE_12} title-14"),
+                   value_box(f"{detail['machine_type']} · {detail['plant_code']}", 220, h=22,
+                             cls=f"{BODY_13} pf-secondary")],
                   style={"display": "flex", "flexDirection": "column", "gap": "4px"}),
          nav_btn("다음 기계 ›", "next"),
          html.Div(style={"flexGrow": "1"}),
-         metric("현재 등급", 120, detail["current_grade"]),
+         metric("현재 등급", 120, status_badge(detail["current_grade"]), cls=""),
          metric("위험도", 120, f"{detail['risk_score']:,.0f}"),
-         metric("최근 고장 표시일", 140, detail["last_failure_date"] or "—"),
+         metric("최근 고장 표시일", 140, detail["last_failure_date"] or "—", cls=CODE_12),
          metric("고장 표시 일수 (일)", 140, f"{detail['failure_days_count']:,}"),
          metric("평균 소비 전력 (kW)", 140, f"{detail['avg_power_kw']:,.2f}")],
-        style={"width": "1880px", "height": "88px", "boxSizing": "border-box", "background": CARD,
-               "outline": f"1px solid {HAIR}", "outlineOffset": "-1px", "borderRadius": "4px",
-               "padding": "16px", "display": "flex", "alignItems": "center", "gap": "16px"},
+        className="pf-card",
+        style={"width": "1880px", "height": "88px", "flexDirection": "row",
+               "alignItems": "center", "gap": "16px"},
     )
 
     # 라벨 열은 HTML로 두고 오른쪽 차트만 Plotly로 그린다. 패널 높이·간격이
     # _smult_figure()의 subplot 치수(SMULT_*)와 같아야 1:1로 정렬된다.
     sensor_labels = html.Div(
-        [html.Div(label, style={"height": f"{SMULT_PANEL_H}px", "flexShrink": "0",
-                                 "display": "flex", "alignItems": "center", **LABEL_12})
+        [html.Div(label, className=LABEL_12, style={"height": f"{SMULT_PANEL_H}px", "flexShrink": "0",
+                                                     "display": "flex", "alignItems": "center"})
          for label, _ in SMULT_SENSORS]
         + [html.Div(style={"height": f"{SMULT_AXIS_H}px", "flexShrink": "0"})],
         style={"width": "160px", "flexShrink": "0", "display": "flex", "flexDirection": "column",
@@ -1173,39 +976,31 @@ def _model_comparison_table(rows, selected_key, width=742):
     cols = [("모델", 182, "left"), ("AP", 93, "right"), ("정밀도", 93, "right"),
             ("재현율", 93, "right"), ("F1", 93, "right"), ("선택", 72, "center")]
 
-    def cell(content, align="left", highlight=False):
-        return html.Td(content, style={"padding": "0 8px", "textAlign": align, "boxSizing": "border-box",
-                                        "background": SUNK if highlight else "none",
-                                        "borderBottom": f"1px solid {HAIR}"})
+    def num(value):
+        return html.Td(f"{value:.3f}", className=f"{NUM_13} pf-td--num")
 
     body_rows = []
     for r in rows:
         is_selected = r["key"] == selected_key
         body_rows.append(html.Tr([
-            cell(html.Span(r["label"], style={"fontSize": "13px", "color": INK}), highlight=is_selected),
-            cell(f"{r['average_precision']:.3f}", align="right", highlight=is_selected),
-            cell(f"{r['precision']:.3f}", align="right", highlight=is_selected),
-            cell(f"{r['recall']:.3f}", align="right", highlight=is_selected),
-            cell(f"{r['f1']:.3f}", align="right", highlight=is_selected),
-            cell("선택" if is_selected else "—", align="center", highlight=is_selected),
-        ], style={"height": "32px"}))
+            html.Td(r["label"], className=BODY_13),
+            num(r["average_precision"]), num(r["precision"]), num(r["recall"]), num(r["f1"]),
+            html.Td("선택" if is_selected else "—", className=BODY_13, style={"textAlign": "center"}),
+        ], **{"aria-selected": "true" if is_selected else "false"}))
 
     thead = html.Tr(
-        [html.Th(l, style={"width": f"{w}px", "padding": "0 8px", "textAlign": a, "boxSizing": "border-box",
-                            **LABEL_12, "whiteSpace": "nowrap", "borderBottom": f"1px solid {CTRL}"})
+        [html.Th(l, className="label-12" + (" pf-th--num" if a == "right" else ""),
+                 style={"width": f"{w}px", "textAlign": a})
          for l, w, a in cols],
-        style={"height": "32px"},
     )
-    return html.Table([html.Thead(thead), html.Tbody(body_rows)],
-                       style={"width": f"{width}px", "tableLayout": "fixed", "borderCollapse": "collapse"})
+    return html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table",
+                       style={"width": f"{width}px", "tableLayout": "fixed"})
 
 
-# 화면 ③ "주요 영향 변수" 막대 색 구분 — 새 색상 토큰이 아니라 이 카드
-# 전용으로 도입한 예외다(사용자 명시 지시). 파생 변수(_lag1/_median3/...)는
-# 전부 "<기본 센서명>_<변환>" 형태라 접두사만 봐도 분류된다 — 파생이 늘어나도
-# 매핑을 새로 추가할 필요가 없다.
-FEATURE_COLOR_HEALTH = "#0f766e"    # 건강 센서 — 청록
-FEATURE_COLOR_OPERATING = "#c2660d"  # 운전 조건 — 주황
+# 화면 ③ "주요 영향 변수" 막대 범주 — 범주색은 series 토큰을 고정 순서로 쓴다
+# (건강 센서 = series-1, 운전 조건 = series-2, 그 외 = chart-muted; 03-app.css
+# .pf-fi--*). 파생 변수(_lag1/_median3/...)는 전부 "<기본 센서명>_<변환>" 형태라
+# 접두사만 봐도 분류된다 — 파생이 늘어나도 매핑을 새로 추가할 필요가 없다.
 _HEALTH_SENSOR_PREFIXES = (
     "temp_bearing_degC", "temp_motor_degC", "vibration_h_mms", "vibration_v_mms", "oil_pressure_bar",
 )
@@ -1214,15 +1009,12 @@ _OPERATING_EXACT = {"day_of_week", "is_weekend"}
 
 
 def _feature_color_category(feature: str) -> str:
-    """건강 센서(청록) / 운전 조건(주황) / 장비·부품·날짜(회색, 그 외 전부)."""
+    """건강 센서 / 운전 조건 / 장비·부품·날짜(그 외 전부)."""
     if feature.startswith(_HEALTH_SENSOR_PREFIXES):
         return "health"
     if feature.startswith(_OPERATING_PREFIXES) or feature in _OPERATING_EXACT:
         return "operating"
     return "other"
-
-
-_FEATURE_CATEGORY_COLOR = {"health": FEATURE_COLOR_HEALTH, "operating": FEATURE_COLOR_OPERATING, "other": MUTED}
 
 
 def _interpretation_summary(actual_rate, ap, precision, recall):
@@ -1235,8 +1027,8 @@ def _interpretation_summary(actual_rate, ap, precision, recall):
              f"무작위 기준 대비 {multiplier:.1f}배")
     line2 = f"고장 100건 중 약 {found}건을 찾지만, 경고 100건 중 실제 고장은 약 {hit}건"
     return html.Div(
-        [html.Div(line1, style={"fontSize": "13px", "lineHeight": "20px", "fontWeight": "600", "color": INK}),
-         html.Div(line2, style={"fontSize": "12px", "lineHeight": "18px", "color": INK2})],
+        [html.Div(line1, className=f"{BODY_13} pf-strong"),
+         html.Div(line2, className=LABEL_12)],
         style={"width": "1880px", "flexShrink": "0"},
     )
 
@@ -1263,11 +1055,11 @@ def _threshold_metrics_body(metrics, threshold):
         ("오경보 건수", f"{metrics['false_alarms']:,}건"), ("놓친 고장 건수", f"{metrics['missed_failures']:,}건"),
     ]
     return html.Div(
-        [html.Div([html.Span(k, style={**LABEL_12, "width": "110px", "flexShrink": "0"}),
-                   html.Span(v, style={"fontSize": "13px", "fontWeight": "600", "color": INK})],
+        [html.Div([html.Span(k, className=LABEL_12, style={"width": "110px", "flexShrink": "0"}),
+                   html.Span(v, className=f"{NUM_13} pf-strong")],
                   style={"display": "flex", "alignItems": "center", "gap": "8px", "minHeight": "18px"})
          for k, v in rows]
-        + [html.Div(sentence, style={"fontSize": "12px", "lineHeight": "17px", "color": INK2, "marginTop": "6px"})],
+        + [html.Div(sentence, className=LABEL_12, style={"marginTop": "6px"})],
         style={"display": "flex", "flexDirection": "column", "gap": "2px"},
     )
 
@@ -1288,13 +1080,12 @@ def _operational_judgment_body(actual_rate, ap, precision, recall, confusion):
         ("현재 모델 판정", _judgment_verdict(multiplier)),
     ]
     return html.Div(
-        [html.Div([html.Span(k, style={**LABEL_12, "width": "152px", "flexShrink": "0"}),
-                   html.Span(v, style={"fontSize": "12px", "lineHeight": "15px", "color": INK,
-                                        "fontWeight": "600" if k == "현재 모델 판정" else "500"})],
+        [html.Div([html.Span(k, className=LABEL_12, style={"width": "152px", "flexShrink": "0"}),
+                   html.Span(v, className="label-12" + (" pf-strong" if k == "현재 모델 판정" else ""))],
                   style={"display": "flex", "alignItems": "center", "gap": "8px", "minHeight": "18px"})
          for k, v in rows]
-        + [html.Div("자동 부품 교체 판단에는 사용할 수 없습니다.",
-                    style={**MICRO_11, "marginTop": "4px"})],
+        + [html.Div("자동 부품 교체 판단에는 사용할 수 없습니다.", className=NOTE_12,
+                    style={"marginTop": "4px"})],
         style={"display": "flex", "flexDirection": "column", "gap": "3px"},
     )
 
@@ -1330,12 +1121,8 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
                         f"→ {SEG_GROUPS['threshold'][thr_sel]} 기준 모델" if thr_changed else ""))
         warn_emphasis = thr_changed
     warn_line = html.Div(
-        html.Span(warn_text,
-                  style={"fontSize": "11px", "lineHeight": "16px",
-                         "fontWeight": "600" if warn_emphasis else "500",
-                         "color": INK if warn_emphasis else MUTED, "whiteSpace": "nowrap",
-                         "boxSizing": "border-box", "padding": "0 6px",
-                         "border": f"1px solid {CTRL if warn_emphasis else HAIR}", "borderRadius": "2px"}),
+        html.Span(warn_text, className="pf-inline-note label-12" + (" pf-inline-note--emphasis" if warn_emphasis else ""),
+                  style={"whiteSpace": "nowrap"}),
         style={"height": "16px", "display": "flex", "alignItems": "center", "justifyContent": "flex-end"},
     )
 
@@ -1402,36 +1189,28 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
             ("양성률(%)", 80, "right"), ("정밀도", 82, "right"), ("재현율", 82, "right"),
             ("AP", 72, "right"), ("ROC-AUC", 82, "right"),
         ]
-        def family_cell(content, align="left", highlight=False):
-            # boxSizing 없이는 padding이 지정한 width 위에 더해져 8열이 카드
-            # 폭(742px)을 넘기고 overflow:hidden에 잘린다(기존 '모델 비교'
-            # 표에도 있던 문제이나, 그 표는 이번 범위 밖이라 손대지 않는다).
-            return html.Td(content, style={"width": "auto", "padding": "0 8px", "textAlign": align,
-                                            "boxSizing": "border-box", "background": SUNK if highlight else "none",
-                                            "borderBottom": f"1px solid {HAIR}"})
+        def family_num(text):
+            return html.Td(text, className=f"{NUM_13} pf-td--num")
         family_body_rows = [
             html.Tr([
-                family_cell(html.Span(fr["part_family"], style={"fontSize": "13px", "color": INK}),
-                            highlight=fr["part_family"] == family),
-                family_cell(html.Span(fr["model"], style={"fontSize": "13px", "color": INK}),
-                            highlight=fr["part_family"] == family),
-                family_cell(str(fr["support"]), align="right", highlight=fr["part_family"] == family),
-                family_cell(f"{fr['positive_rate'] * 100:.1f}%", align="right", highlight=fr["part_family"] == family),
-                family_cell(f"{fr['precision']:.3f}", align="right", highlight=fr["part_family"] == family),
-                family_cell(f"{fr['recall']:.3f}", align="right", highlight=fr["part_family"] == family),
-                family_cell(f"{fr['average_precision']:.3f}", align="right", highlight=fr["part_family"] == family),
-                family_cell(f"{fr['roc_auc']:.3f}", align="right", highlight=fr["part_family"] == family),
+                html.Td(fr["part_family"], className=BODY_13),
+                html.Td(fr["model"], className=BODY_13),
+                family_num(str(fr["support"])),
+                family_num(f"{fr['positive_rate'] * 100:.1f}"),
+                family_num(f"{fr['precision']:.3f}"),
+                family_num(f"{fr['recall']:.3f}"),
+                family_num(f"{fr['average_precision']:.3f}"),
+                family_num(f"{fr['roc_auc']:.3f}"),
             ], id={"type": "family-row", "index": fr["part_family"]}, n_clicks=0,
-               style={"height": "32px", "cursor": "pointer"})
+               style={"cursor": "pointer"},
+               **{"aria-selected": "true" if fr["part_family"] == family else "false"})
             for fr in family_rows
         ]
-        family_thead = html.Tr([html.Th(l, style={"width": f"{w}px", "padding": "0 8px", "textAlign": a,
-                                                    "boxSizing": "border-box",
-                                                    **LABEL_12, "whiteSpace": "nowrap",
-                                                    "borderBottom": f"1px solid {CTRL}"})
-                                 for l, w, a in family_cols], style={"height": "32px"})
-        family_table = html.Table([html.Thead(family_thead), html.Tbody(family_body_rows)],
-                                   style={"width": "742px", "tableLayout": "fixed", "borderCollapse": "collapse"})
+        family_thead = html.Tr([html.Th(l, className="label-12" + (" pf-th--num" if a == "right" else ""),
+                                        style={"width": f"{w}px", "textAlign": a})
+                                for l, w, a in family_cols])
+        family_table = html.Table([html.Thead(family_thead), html.Tbody(family_body_rows)], className="pf-table",
+                                   style={"width": "742px", "tableLayout": "fixed"})
         mcomp_body = html.Div([family_table])
         mcomp = card("부품군 진단", 774, ROW_MAIN, mcomp_body, right=note("행 = 부품군 · 열 = 지표 · 행 클릭 시 아래 카드 갱신"))
     else:
@@ -1470,23 +1249,21 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
     prc = card("PR 곡선", 616, ROW_MAIN, pr_body, right=note(prc_note))
 
     def cm_cell(value):
-        return html.Div(html.Span(str(value), style={"fontFamily": MONO, "fontSize": "24px",
-                                                       "fontWeight": "600", "color": INK}),
-                         style={"width": "169px", "height": "160px", "boxSizing": "border-box",
-                                "display": "flex", "alignItems": "center", "justifyContent": "center",
-                                "border": f"1px dashed {CTRL}", "background": SUNK})
+        return html.Div(html.Span(f"{value:,}", className="value-20"), className="pf-cm-cell",
+                         style={"width": "169px", "height": "160px",
+                                "display": "flex", "alignItems": "center", "justifyContent": "center"})
     c = pr_cm["confusion"]
     cm_body = html.Div([
         hstack([html.Div(style={"width": "72px"}),
-                html.Div("예측 고장 표시 있음", style={"width": "169px", "textAlign": "center", **LABEL_12}),
-                html.Div("예측 고장 표시 없음", style={"width": "169px", "textAlign": "center", **LABEL_12})],
+                html.Div("예측 고장 표시 있음", className=LABEL_12, style={"width": "169px", "textAlign": "center"}),
+                html.Div("예측 고장 표시 없음", className=LABEL_12, style={"width": "169px", "textAlign": "center"})],
                8, {"height": "24px", "alignItems": "center"}),
-        hstack([html.Div("실제 있음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
+        hstack([html.Div("실제 있음", className=LABEL_12, style={"width": "72px", "display": "flex", "alignItems": "center"}),
                 cm_cell(c["tp"]), cm_cell(c["fn"])], 8, {"height": "160px"}),
-        hstack([html.Div("실제 없음", style={"width": "72px", "display": "flex", "alignItems": "center", **LABEL_12}),
+        hstack([html.Div("실제 없음", className=LABEL_12, style={"width": "72px", "display": "flex", "alignItems": "center"}),
                 cm_cell(c["fp"]), cm_cell(c["tn"])], 8, {"height": "160px"}),
-        html.Div([html.Span("판정 임계값", style={**LABEL_12, "whiteSpace": "nowrap"}),
-                  html.Span(f"{pr_cm['cutoff']:.3f}", style=NUM_12)],
+        html.Div([html.Span("판정 임계값", className=LABEL_12, style={"whiteSpace": "nowrap"}),
+                  html.Span(f"{pr_cm['cutoff']:.3f}", className=NUM_13)],
                  style={"height": "32px", "display": "flex", "alignItems": "center", "gap": "8px"}),
     ])
     cmx = card("혼동행렬", 458, ROW_MAIN, cm_body)
@@ -1497,29 +1274,30 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
         max_importance = max(r["importance_mean"] for r in fi_rows)
         fi_list = html.Div(
             [html.Div([
-                html.Div(r["feature"], style={"width": "220px", "flexShrink": "0", "fontSize": "12px",
-                                               "color": INK, "whiteSpace": "nowrap", "overflow": "hidden",
-                                               "textOverflow": "ellipsis"}),
-                html.Div(style={"flexGrow": "1", "height": "7px", "borderRadius": "2px",
-                                "width": f"{r['importance_mean'] / max_importance * 100}%",
-                                "background": _FEATURE_CATEGORY_COLOR[_feature_color_category(r["feature"])]}),
-                html.Div(f"{r['importance_mean']:.3f}",
-                         style={**NUM_12, "width": "56px", "textAlign": "right", "flexShrink": "0"}),
+                html.Div(r["feature"], className=CODE_12,
+                         style={"width": "220px", "flexShrink": "0", "whiteSpace": "nowrap",
+                                "overflow": "hidden", "textOverflow": "ellipsis"}),
+                html.Div(html.Div(className=f"pf-fi-bar pf-fi--{_feature_color_category(r['feature'])}",
+                                  style={"width": f"{r['importance_mean'] / max_importance * 100:.1f}%"}),
+                         style={"flexGrow": "1"}),
+                html.Div(f"{r['importance_mean']:.3f}", className=f"{NUM_13} pf-muted",
+                         style={"width": "56px", "textAlign": "right", "flexShrink": "0"}),
              ], style={"height": "12px", "display": "flex", "alignItems": "center", "gap": "8px", "flexShrink": "0"})
              for r in fi_rows],
             style={"display": "flex", "flexDirection": "column", "gap": "3px"},
         )
-        legend_dot = lambda color: html.Span(style={"width": "7px", "height": "7px", "borderRadius": "2px",
-                                                      "background": color, "display": "inline-block"})
+        def legend_item(category, label):
+            return html.Span([html.Span(className=f"pf-legend__key pf-legend__key--dot pf-fi--{category}"), label],
+                             className="pf-legend__item")
         fi_footer = html.Div(
-            [html.Div([legend_dot(FEATURE_COLOR_HEALTH), html.Span("건강 센서", style=MICRO_11),
-                       legend_dot(FEATURE_COLOR_OPERATING), html.Span("운전 조건", style=MICRO_11),
-                       legend_dot(MUTED), html.Span("장비·부품·날짜", style=MICRO_11)],
-                      style={"display": "flex", "alignItems": "center", "gap": "4px", "flexShrink": "0"}),
+            [html.Div([legend_item("health", "건강 센서"), legend_item("operating", "운전 조건"),
+                       legend_item("other", "장비·부품·날짜")],
+                      className="pf-legend label-12", style={"flexShrink": "0"}),
              note("중요도는 고장 원인이 아니라 고장과 함께 변화한 운전 상태를 뜻한다.",
                   {"whiteSpace": "normal", "textAlign": "right"})],
+            className="pf-divider-top",
             style={"display": "flex", "alignItems": "center", "justifyContent": "space-between",
-                   "gap": "12px", "marginTop": "8px", "paddingTop": "6px", "borderTop": f"1px solid {HAIR}"},
+                   "gap": "12px", "marginTop": "8px", "paddingTop": "6px"},
         )
         feat_body = html.Div([fi_list, fi_footer], style={"display": "flex", "flexDirection": "column"})
         feat = card("주요 영향 변수 상위 10", 774, 252, feat_body, right=note("10행 · 부품군 자체 속성(자산 무관)"))
@@ -1547,7 +1325,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
         threshold_basis = None
 
     slider = html.Div(
-        [html.Label("판정 임계값", htmlFor="thr-slider", style={**LABEL_12, "whiteSpace": "nowrap"}),
+        [html.Label("판정 임계값", htmlFor="thr-slider", className=LABEL_12, style={"whiteSpace": "nowrap"}),
          dcc.Slider(id={"type": "thr-slider", "index": "screen3"}, min=0, max=100, marks=None,
                     value=round(default_threshold * 100) if default_threshold is not None else 50,
                     tooltip={"placement": "bottom"}),
@@ -1622,6 +1400,10 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None)
     page0 = load_table_page(dataset_key, None, "asc", 0, assets=assets, start=start)
     columns_prop = [{"name": c["label"], "id": c["id"]} for c in page0["columns"]]
     right_align_ids = [c["id"] for c in page0["columns"] if c["align"] == "right"]
+    # 숫자 열(우측 정렬)과 식별자 열은 고정폭 글꼴 — 색·글꼴은 03-app.css(.pf-dtable)와
+    # 아래 css 규칙이 토큰으로 입힌다. style_* 에는 치수·정렬만 둔다.
+    mono_ids = right_align_ids + [c["id"] for c in page0["columns"]
+                                  if c["id"] in ("transaction_date", "asset_tag", "plant_code", "part_no")]
     table = dash_table.DataTable(
         id={"type": "dtable", "index": dataset_key},
         columns=columns_prop,
@@ -1633,15 +1415,11 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None)
         # 섞여 나옴) 포기하고 가로 스크롤만 남긴다(사용자 승인 — 이 문제에
         # 시간을 더 쓰지 않음).
         style_table={"overflowX": "auto", "width": "1840px"},
-        style_header={"backgroundColor": CARD, "fontFamily": SANS, "fontSize": "12px",
-                      "fontWeight": "500", "color": INK2, "borderBottom": f"1px solid {CTRL}",
-                      "height": "32px", "minHeight": "32px", "maxHeight": "32px"},
-        style_cell={"backgroundColor": CARD, "border": "none", "borderBottom": f"1px solid {HAIR}",
-                    "padding": "0 8px", "height": "24px", "minHeight": "24px", "maxHeight": "24px",
-                    "lineHeight": "16px", "fontFamily": SANS, "fontSize": "12px", "textAlign": "left"},
-        style_data={"backgroundColor": CARD},
+        style_header={"height": "32px", "minHeight": "32px", "maxHeight": "32px"},
+        style_cell={"padding": "0 8px", "height": "24px", "minHeight": "24px", "maxHeight": "24px",
+                    "textAlign": "left"},
         style_cell_conditional=[
-            {"if": {"column_id": cid}, "textAlign": "right", "fontFamily": MONO}
+            {"if": {"column_id": cid}, "textAlign": "right"}
             for cid in right_align_ids
         ],
         # 내장 페이저 padding·여백을 줄여 카드 높이(524px) 예산에 맞춘다
@@ -1650,7 +1428,7 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None)
             {"selector": ".previous-next-container", "rule": "padding:2px 0; margin:0;"},
             {"selector": ".previous-next-container button", "rule": "padding:2px 4px; margin:0 2px;"},
             {"selector": ".page-number, .current-page-container",
-             "rule": f"font-family:{MONO}; font-size:11px; color:{INK2}; margin:0 2px;"},
+             "rule": "font-family:var(--font-mono); font-size:11px; color:var(--ink-secondary); margin:0 2px;"},
             # 진단으로 특정한 진짜 원인: dash_table 기본 번들 스타일시트의
             # ".dash-spreadsheet-inner tr { height:30px; min-height:30px; }"가
             # style_cell의 24px 지정을 무시하고 행 높이를 30px로 고정한다
@@ -1658,16 +1436,17 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None)
             # 이 표에만 재정의한다.
             {"selector": ".dash-spreadsheet-inner tr",
              "rule": "height:24px; min-height:24px;"},
-        ],
+        ] + [{"selector": f'td[data-dash-column="{cid}"]',
+              "rule": "font-family:var(--font-mono); font-variant-numeric:tabular-nums;"} for cid in mono_ids],
     )
     footer = html.Div(
         html.Span(_dtable_footer_text(page0["total_rows"], 0, 16),
-                  id={"type": "dtable-footer", "index": dataset_key}, style=LABEL_12),
+                  id={"type": "dtable-footer", "index": dataset_key}, className=LABEL_12),
         style={"height": "20px", "display": "flex", "alignItems": "center"},
     )
-    dtable_body = html.Div([table, footer])
+    dtable_body = html.Div([table, footer], className="pf-dtable")
     csv_btn = html.Button("CSV 내보내기", id={"type": "csv-export-btn", "index": dataset_key},
-                          n_clicks=0, style=btn_style())
+                          n_clicks=0, className="pf-btn label-12")
 
     toolbar = html.Div(
         [seg("dataset", "데이터셋", SEG_GROUPS["dataset"], sel=dataset_index),
@@ -1683,14 +1462,11 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None)
                  ("결측률 (%)", 72, "right"), ("설명", 120, "left")]
 
     def dict_table(records):
-        """table_placeholder()와 같은 헤더 스타일이되, "설명" 칸만 말줄임+title
-        툴팁을 쓴다 — screen_4 전용, table_placeholder() 자체는 건드리지 않는다."""
+        """데이터 사전 표(.pf-table, 행 22px) — "컬럼명"·"설명" 칸은 말줄임 + title 툴팁."""
         thead = html.Tr(
-            [html.Th(l, style={"width": f"{w}px", "boxSizing": "border-box", "padding": "0 8px",
-                                "textAlign": a, **LABEL_12, "whiteSpace": "nowrap", "overflow": "hidden",
-                                "borderBottom": f"1px solid {CTRL}"})
+            [html.Th(l, className="label-12" + (" pf-th--num" if a == "right" else ""),
+                     style={"width": f"{w}px", "height": "24px", "padding": "0 8px", "textAlign": a})
              for l, w, a in dict_cols],
-            style={"height": "24px", "background": CARD},
         )
         body_rows = []
         for record in records:
@@ -1700,19 +1476,13 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None)
                       missing_text, record["description"]]
             cells = []
             for (l, w, a), text in zip(dict_cols, values):
-                if l in ("컬럼명", "설명"):
-                    span_style = {**NUM_12, "whiteSpace": "nowrap", "overflow": "hidden",
-                                  "textOverflow": "ellipsis", "display": "block"}
-                    span = html.Span(text, style=span_style, title=text)
-                else:
-                    span = html.Span(text, style=NUM_12)
-                cells.append(html.Td(span, style={"boxSizing": "border-box", "padding": "0 8px",
-                                                   "textAlign": a, "borderBottom": f"1px solid {HAIR}"}))
-            body_rows.append(html.Tr(cells, style={"height": "22px"}))
+                cls = {"컬럼명": CODE_12, "결측률 (%)": f"{NUM_13} pf-td--num"}.get(l, "label-12")
+                cells.append(html.Td(text, className=cls, title=text if l in ("컬럼명", "설명") else None,
+                                     style={"height": "22px", "padding": "0 8px", "textAlign": a}))
+            body_rows.append(html.Tr(cells))
         tw = sum(c[1] for c in dict_cols)
-        return html.Table([html.Thead(thead), html.Tbody(body_rows)],
-                           style={"width": f"{tw}px", "tableLayout": "fixed",
-                                  "borderCollapse": "collapse", "flexShrink": "0"})
+        return html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table",
+                           style={"width": f"{tw}px", "tableLayout": "fixed", "flexShrink": "0"})
 
     def dict_half(records):
         return html.Div(dict_table(records), style={"width": "442px"})
@@ -1725,18 +1495,15 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None)
     def info_box(text, w, h=94):
         """slot()의 점선 테두리 대신 실제 문장을 보여준다 — screen_4 전용."""
         return html.Div(
-            html.Span(text, style={"fontSize": "12px", "lineHeight": "16px", "color": INK,
-                                    "whiteSpace": "pre-line", "wordBreak": "keep-all"}),
-            style={"width": f"{w}px", "height": f"{h}px", "boxSizing": "border-box", "overflow": "hidden"},
+            html.Span(text, className="label-12", style={"whiteSpace": "pre-line", "wordBreak": "keep-all"}),
+            style={"width": f"{w}px", "height": f"{h}px", "overflow": "hidden"},
         )
 
     q = load_data_quality_summary()
     period_tile = html.Div(
-        [html.Span(f"기간: {q['period_days']:,}일",
-                    style={"fontSize": "12px", "lineHeight": "16px", "color": INK}),
-         html.Span(f"{q['period_start']} ~ {q['period_end']}",
-                    style={"fontSize": "12px", "lineHeight": "16px", "color": INK, "whiteSpace": "nowrap"})],
-        style={"width": "213px", "height": "94px", "boxSizing": "border-box", "overflow": "hidden",
+        [html.Span(f"기간: {q['period_days']:,}일", className="label-12"),
+         html.Span(f"{q['period_start']} ~ {q['period_end']}", className=CODE_12, style={"whiteSpace": "nowrap"})],
+        style={"width": "213px", "height": "94px", "overflow": "hidden",
                "display": "flex", "flexDirection": "column"},
     )
     quality_tiles = [
@@ -1807,10 +1574,10 @@ def screen_5(seg_state=None, audience=DEFAULT_AUDIENCE):
     caveat_bot = html.Div(
         html.Span("합성 데이터 · 교육용 — 이 보고서의 모든 수치는 실제 설비 이력이 아니다 "
                   "(헤더 배지와 동일 문구를 보고서 산출물에도 유지)",
-                  style={**LABEL_12, "textAlign": "center"}),
-        style={"width": "900px", "height": "78px", "boxSizing": "border-box", "border": f"1px dashed {CTRL}",
-               "background": SUNK, "display": "flex", "alignItems": "center", "justifyContent": "center",
-               "padding": "8px 16px"},
+                  className=LABEL_12, style={"textAlign": "center"}),
+        className="pf-placeholder",
+        style={"width": "900px", "height": "78px", "display": "flex", "alignItems": "center",
+               "justifyContent": "center", "padding": "8px 16px"},
     )
     caveat_card = card("데이터·모델 신뢰도 고지", 932, ROW_SUB,
                        html.Div([caveat_top, caveat_bot],
@@ -1941,6 +1708,11 @@ def _section_rows(cols):
     return [[NO_DATA_MARK] * len(cols)]
 
 
+def _print_color(name):
+    """PDF·Excel 산출물 색 — 화면과 같은 토큰(라이트 테마)에서 가져온다."""
+    return C(name, "light")
+
+
 def build_report_pdf(filters, seg_state, audience):
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_LEFT
@@ -1964,24 +1736,24 @@ def build_report_pdf(filters, seg_state, audience):
     h2 = ParagraphStyle("h2", fontName=FONT, fontSize=11.5, leading=15, spaceBefore=9, spaceAfter=3)
     body = ParagraphStyle("body", fontName=FONT, fontSize=8.5, leading=12)
     small = ParagraphStyle("small", fontName=FONT, fontSize=7.5, leading=10.5,
-                           textColor=colors.HexColor("#68665f"))
+                           textColor=colors.HexColor(_print_color("ink-muted")))
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=landscape(A4),
         leftMargin=14 * mm, rightMargin=14 * mm, topMargin=12 * mm, bottomMargin=12 * mm,
-        title=f"설비 모니터링 보고서 — {aud['label']}", author="설비 모니터링 대시보드 (와이어프레임)",
+        title=f"설비 모니터링 보고서 — {aud['label']}", author="설비 모니터링 대시보드",
     )
 
     grid = TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), FONT),
         ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#c9c8c2")),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f0efec")),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor(_print_color("chart-axis"))),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(_print_color("surface-sunken"))),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ("TEXTCOLOR", (0, 1), (-1, -1), colors.HexColor("#68665f")),
+        ("TEXTCOLOR", (0, 1), (-1, -1), colors.HexColor(_print_color("ink-muted"))),
     ])
 
     flow = [
@@ -1997,8 +1769,8 @@ def build_report_pdf(filters, seg_state, audience):
                      colWidths=[34 * mm, 205 * mm])
     meta_tbl.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), FONT),
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#c9c8c2")),
-        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0efec")),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor(_print_color("chart-axis"))),
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor(_print_color("surface-sunken"))),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
     ]))
@@ -2045,11 +1817,14 @@ def build_report_xlsx(filters, seg_state, audience):
     ctxd = _report_context(filters, seg_state, audience)
     aud = ctxd["aud"]
 
-    thin = Side(style="thin", color="C9C8C2")
+    def xl(name):  # openpyxl은 '#' 없는 RRGGBB를 받는다.
+        return _print_color(name).lstrip("#").upper()
+
+    thin = Side(style="thin", color=xl("chart-axis"))
     edge = Border(left=thin, right=thin, top=thin, bottom=thin)
-    head_fill = PatternFill("solid", fgColor="F0EFEC")
+    head_fill = PatternFill("solid", fgColor=xl("surface-sunken"))
     bold = Font(bold=True, size=10)
-    muted = Font(size=10, color="68665F")
+    muted = Font(size=10, color=xl("ink-muted"))
 
     wb = Workbook()
     used = set()
@@ -2113,27 +1888,38 @@ def build_report_xlsx(filters, seg_state, audience):
 # 앱 조립
 # ============================================================
 
-app = Dash(__name__)
+app = Dash(__name__, assets_folder=str(Path(__file__).resolve().parents[1] / "assets"))
 app.title = "설비 모니터링 대시보드"
 app.index_string = INDEX_STRING
 if not DEMO_MODE:
     install_auth(app.server)
-ADMIN_INPUT_STYLE = {"display": "block", "width": "100%", "boxSizing": "border-box",
-                     "marginBottom": "8px", "padding": "7px", "fontSize": "13px"}
+ADMIN_INPUT_STYLE = {"display": "block", "width": "100%", "marginBottom": "8px"}
 
-# 별도 /assets 요청을 하지 않는 내장 SVG입니다. 로그인 보호 과정에서 아이콘 파일이
-# 401로 막혀 깨진 이미지로 보이는 문제를 피하기 위해 화면 코드에 직접 포함합니다.
-SESSION_REFRESH_ICON = (
-    "data:image/svg+xml;base64,"
-    "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgd2lkdGg9"
-    "IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxMTExMTEiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tl"
-    "LWxpbmVjYXA9ImJ1dHQiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiPjxkZWZzPjxtYXJrZXIgaWQ9ImFycm93LWhlYWQi"
-    "IG1hcmtlcldpZHRoPSIxNiIgbWFya2VySGVpZ2h0PSIxNiIgcmVmWD0iMTMiIHJlZlk9IjgiIG9yaWVudD0iYXV0byIg"
-    "bWFya2VyVW5pdHM9InVzZXJTcGFjZU9uVXNlIj48cGF0aCBkPSJNMCAwIDE2IDggMCAxNloiIGZpbGw9IiMxMTExMTEi"
-    "IHN0cm9rZT0ibm9uZSIvPjwvbWFya2VyPjwvZGVmcz48cGF0aCBkPSJNNTIgMjVDNDcgMTMgMzQgOSAyNCAxNCAxNiAx"
-    "OCAxMSAyNSAxMSAzNCIgbWFya2VyLWVuZD0idXJsKCNhcnJvdy1oZWFkKSIvPjxwYXRoIGQ9Ik0xMiA0MEMxNyA1MiAz"
-    "MCA1NiA0MCA1MSA0OCA0NyA1MyA0MCA1MyAzMSIgbWFya2VyLWVuZD0idXJsKCNhcnJvdy1oZWFkKSIvPjwvc3ZnPg=="
-)
+
+def _scrim_style(visible, z_index):
+    """모달 레이어의 인라인 스타일 — 표시 여부와 쌓임 순서만. 모양은 .pf-scrim/.pf-modal."""
+    return {"display": "flex" if visible else "none", "zIndex": z_index}
+
+
+def _modal(modal_id, z_index, width, title, body, actions):
+    """확인 모달(DESIGN.md §7.6) — 제목 title-16, 본문 body-14, 버튼은 우측 정렬로
+    [취소 = --ghost] [실행 = --primary 또는 --danger]."""
+    return html.Div(
+        html.Div([html.H3(title, className="pf-modal__title title-16"),
+                  *body,
+                  html.Div(actions, className="pf-modal__actions")],
+                 className="pf-modal", style={"width": f"{width}px", "maxWidth": "calc(100vw - 32px)"}),
+        id=modal_id, className="pf-scrim", style=_scrim_style(False, z_index),
+    )
+
+
+def _modal_text(text=None, **kwargs):
+    return html.P(text, className="pf-modal__body body-14", **kwargs)
+
+
+def _modal_btn(label, btn_id, variant="ghost", **kwargs):
+    return html.Button(label, id=btn_id, n_clicks=0, className=f"pf-btn pf-btn--{variant} label-12", **kwargs)
+
 
 app.layout = html.Div(
     [
@@ -2159,171 +1945,75 @@ app.layout = html.Div(
         # 이전 콜백의 State 식별자는 유지하되 사용자 입력은 제거한다.
         # 실제 actor_id는 audit_service가 검증된 Flask 세션에서 읽는다.
         dcc.Input(id="actor-id-input", type="hidden", value=""),
-        # 로그아웃 확인 창과 같은 형식의 중앙 비밀번호 변경 팝업입니다.
-        html.Div(id="password-panel", children=[
-            html.Div([
-                html.H3("비밀번호 변경", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
-                html.P("현재 비밀번호를 확인한 뒤 새 비밀번호로 바꿉니다.",
-                       style={"marginBottom": "18px", "textAlign": "center"}),
-                dcc.Input(id="password-current", type="password", placeholder="현재 비밀번호", style=ADMIN_INPUT_STYLE),
-                dcc.Input(id="password-new", type="password", placeholder="새 비밀번호 (4자 이상)", style=ADMIN_INPUT_STYLE),
-                dcc.Input(id="password-confirm", type="password", placeholder="새 비밀번호 다시 입력", style=ADMIN_INPUT_STYLE),
-                html.Div([
-                    html.Button("변경", id="password-save-btn", n_clicks=0,
-                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
-                                       "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
-                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
-                    html.Button("닫기", id="password-close-btn", n_clicks=0,
-                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
-                                       "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
-                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
-                ], style={"display": "flex", "justifyContent": "center", "gap": "10px", "marginTop": "18px"}),
-                html.Div(id="password-result", role="status",
-                         style={"marginTop": "12px", "minHeight": "18px", "textAlign": "center", "color": "#b42318"}),
-            ], style={"width": "360px", "background": "#fff", "color": "#222", "padding": "22px",
-                      "borderRadius": "10px", "boxShadow": "0 12px 40px #0005"}),
-        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 300,
-                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
-        html.Div(id="session-expiry-modal", children=[
-            html.Div([
-                html.H3("로그인 시간 연장", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
-                html.P("로그인 시간이 곧 만료됩니다. 계속 사용하시겠습니까?",
-                       style={"marginBottom": "26px", "textAlign": "center"}),
-                html.Div([
-                    html.Button("예 (10초)", id="session-modal-extend-btn", n_clicks=0,
-                                style={"minWidth": "128px", "padding": "11px 18px", "border": "1px solid #2563eb",
-                                       "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
-                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
-                    html.Button("아니오", id="session-modal-logout-btn", n_clicks=0,
-                                style={"minWidth": "110px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
-                                       "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
-                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
-                ], style={"display": "flex", "justifyContent": "center", "gap": "10px"}),
-            ], style={"width": "360px", "background": "#fff", "color": "#222", "padding": "22px",
-                      "borderRadius": "10px", "boxShadow": "0 12px 40px #0005", "textAlign": "center"}),
-        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 300,
-                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
-        html.Div(id="logout-confirm-modal", children=[
-            html.Div([
-                html.H3("로그아웃", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
-                html.P("로그아웃하시겠습니까?", style={"marginBottom": "26px", "textAlign": "center"}),
-                html.Div([
-                    html.Button("예", id="logout-confirm-yes-btn", n_clicks=0,
-                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
-                                       "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
-                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
-                    html.Button("아니오", id="logout-confirm-no-btn", n_clicks=0,
-                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
-                                       "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
-                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
-                ], style={"display": "flex", "justifyContent": "center", "gap": "10px"}),
-            ], style={"width": "330px", "background": "#fff", "color": "#222", "padding": "22px",
-                      "borderRadius": "10px", "boxShadow": "0 12px 40px #0005", "textAlign": "center"}),
-        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 310,
-                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
-        html.Div(id="password-success-modal", children=[
-            html.Div([
-                html.H3("비밀번호 변경 완료", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
-                html.P("비밀번호가 변경되었습니다. 다시 로그인해 주세요.",
-                       style={"marginBottom": "26px", "textAlign": "center"}),
-                html.Button("확인", id="password-success-confirm-btn", n_clicks=0,
-                            style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
-                                   "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
-                                   "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
-            ], style={"width": "360px", "background": "#fff", "color": "#222", "padding": "22px",
-                      "borderRadius": "10px", "boxShadow": "0 12px 40px #0005", "textAlign": "center"}),
-        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 320,
-                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
+        # 비밀번호 변경 팝업
+        _modal("password-panel", 300, 360, "비밀번호 변경", [
+            _modal_text("현재 비밀번호를 확인한 뒤 새 비밀번호로 바꿉니다."),
+            dcc.Input(id="password-current", type="password", placeholder="현재 비밀번호",
+                      className="pf-control", style=ADMIN_INPUT_STYLE),
+            dcc.Input(id="password-new", type="password", placeholder="새 비밀번호 (4자 이상)",
+                      className="pf-control", style=ADMIN_INPUT_STYLE),
+            dcc.Input(id="password-confirm", type="password", placeholder="새 비밀번호 다시 입력",
+                      className="pf-control", style=ADMIN_INPUT_STYLE),
+            html.Div(id="password-result", role="status", className="pf-field__error label-12",
+                     style={"minHeight": "18px", "marginBottom": "12px"}),
+        ], [_modal_btn("닫기", "password-close-btn"),
+            _modal_btn("변경", "password-save-btn", "primary")]),
+        _modal("session-expiry-modal", 300, 360, "로그인 시간 연장",
+               [_modal_text("로그인 시간이 곧 만료됩니다. 계속 사용하시겠습니까?")],
+               [_modal_btn("아니오", "session-modal-logout-btn"),
+                _modal_btn("예 (10초)", "session-modal-extend-btn", "primary")]),
+        _modal("logout-confirm-modal", 310, 330, "로그아웃", [_modal_text("로그아웃하시겠습니까?")],
+               [_modal_btn("아니오", "logout-confirm-no-btn"),
+                _modal_btn("예", "logout-confirm-yes-btn", "primary")]),
+        _modal("password-success-modal", 320, 360, "비밀번호 변경 완료",
+               [_modal_text("비밀번호가 변경되었습니다. 다시 로그인해 주세요.")],
+               [_modal_btn("확인", "password-success-confirm-btn", "primary")]),
         # ADMIN 역할에서만 열 수 있는 일반 계정 목록입니다. 이름은 서버에서만 복호화합니다.
-        html.Div(id="account-management-modal", children=[
+        html.Div(id="account-management-modal", className="pf-scrim", style=_scrim_style(False, 330), children=[
             html.Div([
                 html.Div([
-                    html.H3("계정 관리", style={"margin": 0, "textAlign": "left"}),
-                    html.Button("계정 삭제", id="account-delete-mode-btn", n_clicks=0,
-                                style={"padding": "7px 11px", "border": "1px solid #b42318",
-                                       "borderRadius": "6px", "background": "#fff", "color": "#b42318",
-                                       "fontWeight": "700", "cursor": "pointer"}),
+                    html.H3("계정 관리", className="title-16", style={"margin": 0}),
+                    html.Button("계정 삭제", id="account-delete-mode-btn", n_clicks=0, className="pf-btn label-12"),
                 ], style={"display": "flex", "alignItems": "center", "justifyContent": "space-between",
-                          "marginBottom": "18px"}),
-                html.Div(id="account-list-body"),
-                html.Div(id="account-delete-header", children=[
-                    html.Span("아이디", style={"fontWeight": "700"}),
-                    html.Span("이름", style={"fontWeight": "700"}),
-                    html.Span("접속 상태", style={"fontWeight": "700", "textAlign": "right"}),
-                    html.Span("선택", style={"fontWeight": "700", "textAlign": "right"}),
-                ], style={"display": "none", "gridTemplateColumns": "1fr 1fr 90px 38px",
-                          "gap": "8px", "padding": "8px 4px", "borderBottom": "1px solid #d7dde3"}),
-                dcc.Checklist(id="account-delete-selection", options=[], value=[],
+                          "marginBottom": "16px"}),
+                html.Div(id="account-list-body", className=BODY_13),
+                html.Div(id="account-delete-header", className="pf-list-head label-12", children=[
+                    html.Span("아이디"),
+                    html.Span("이름"),
+                    html.Span("접속 상태", style={"textAlign": "right"}),
+                    html.Span("선택", style={"textAlign": "right"}),
+                ], style={"display": "none"}),
+                dcc.Checklist(id="account-delete-selection", options=[], value=[], className=BODY_13,
                               style={"display": "none"},
                               inputStyle={"marginLeft": "8px", "cursor": "pointer"},
+                              labelClassName="pf-check-row",
                               labelStyle={"display": "flex", "flexDirection": "row-reverse", "width": "100%",
-                                          "alignItems": "center", "padding": "10px 4px",
-                                          "borderBottom": "1px solid #eef0f2", "cursor": "pointer"}),
-                html.Div(id="account-delete-feedback", role="status",
-                         style={"minHeight": "18px", "fontSize": "13px", "color": "#b42318",
-                                "textAlign": "center", "marginTop": "12px"}),
+                                          "alignItems": "center", "padding": "10px 4px"}),
+                html.Div(id="account-delete-feedback", role="status", className=LABEL_12,
+                         style={"minHeight": "18px", "textAlign": "center", "marginTop": "12px"}),
                 html.Div([
-                    html.Button("닫기", id="account-management-close-btn", n_clicks=0,
-                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
-                                       "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
-                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
-                    html.Button("확인", id="account-delete-confirm-btn", n_clicks=0,
-                                style={"display": "none", "minWidth": "120px", "padding": "11px 18px",
-                                       "border": "1px solid #2563eb", "borderRadius": "6px",
-                                       "background": "#2563eb", "color": "#fff", "fontSize": "15px",
-                                       "fontWeight": "700", "cursor": "pointer", "marginLeft": "auto"}),
-                ], style={"display": "flex", "justifyContent": "center", "marginTop": "20px"}),
-            ], style={"width": "520px", "maxWidth": "calc(100vw - 32px)", "background": "#fff", "color": "#222",
-                      "padding": "22px", "borderRadius": "10px", "boxShadow": "0 12px 40px #0005"}),
-        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 330,
-                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
-        html.Div(id="account-delete-confirm-modal", children=[
-            html.Div([
-                html.H3("계정 삭제", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
-                html.P(id="account-delete-confirm-message",
-                       style={"marginBottom": "26px", "textAlign": "center"}),
-                html.Div([
-                    html.Button("예", id="account-delete-yes-btn", n_clicks=0,
-                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
-                                       "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
-                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
-                    html.Button("아니오", id="account-delete-no-btn", n_clicks=0,
-                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #b8c0ca",
-                                       "borderRadius": "6px", "background": "#fff", "color": "#1f2937",
-                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
-                ], style={"display": "flex", "justifyContent": "center", "gap": "10px"}),
-            ], style={"width": "380px", "maxWidth": "calc(100vw - 32px)", "background": "#fff",
-                      "color": "#222", "padding": "22px", "borderRadius": "10px",
-                      "boxShadow": "0 12px 40px #0005"}),
-        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 340,
-                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
+                    _modal_btn("닫기", "account-management-close-btn"),
+                    _modal_btn("확인", "account-delete-confirm-btn", "primary", style={"display": "none"}),
+                ], className="pf-modal__actions", style={"marginTop": "20px"}),
+            ], className="pf-modal", style={"width": "520px", "maxWidth": "calc(100vw - 32px)"}),
+        ]),
+        _modal("account-delete-confirm-modal", 340, 380, "계정 삭제",
+               [_modal_text(id="account-delete-confirm-message")],
+               [_modal_btn("아니오", "account-delete-no-btn"),
+                _modal_btn("예", "account-delete-yes-btn", "danger")]),
         # 일반 계정이 PDF·Excel을 누르면 파일 생성 없이 이 안내만 보여 준다.
-        html.Div(id="export-access-modal", children=[
-            html.Div([
-                html.H3("접근 권한", style={"marginTop": 0, "marginBottom": "18px", "textAlign": "left"}),
-                html.P("접근 권한이 필요합니다.",
-                       style={"marginBottom": "26px", "textAlign": "center"}),
-                html.Div([
-                    html.Button("확인", id="export-access-modal-close", n_clicks=0,
-                                style={"minWidth": "120px", "padding": "11px 18px", "border": "1px solid #2563eb",
-                                       "borderRadius": "6px", "background": "#2563eb", "color": "#fff",
-                                       "fontSize": "15px", "fontWeight": "700", "cursor": "pointer"}),
-                ], style={"display": "flex", "justifyContent": "center"}),
-            ], style={"width": "330px", "background": "#fff", "color": "#222", "padding": "22px",
-                      "borderRadius": "10px", "boxShadow": "0 12px 40px #0005", "textAlign": "center"}),
-        ], style={"display": "none", "position": "fixed", "inset": 0, "zIndex": 340,
-                  "background": "#0006", "alignItems": "center", "justifyContent": "center"}),
+        _modal("export-access-modal", 340, 330, "접근 권한", [_modal_text("접근 권한이 필요합니다.")],
+               [_modal_btn("확인", "export-access-modal-close", "primary")]),
         app_header(),
         filter_bar(),
         html.Main(
             id="screen-content",
             style={"width": f"{CANVAS_W}px", "height": f"{CANVAS_H - HEADER_H - FILTERBAR_H}px",
-                   "boxSizing": "border-box", "padding": f"{MARGIN}px", "overflow": "hidden"},
+                   "padding": f"{MARGIN}px", "overflow": "hidden"},
         ),
     ],
-    id="root", className="theme-light",
-    style={"width": f"{CANVAS_W}px", "minHeight": f"{CANVAS_H}px", "background": PAGE, "color": INK,
-           "fontFamily": SANS, "margin": "0 auto"},
+    id="root", className="pf-app",
+    style={"width": f"{CANVAS_W}px", "minHeight": f"{CANVAS_H}px", "margin": "0 auto"},
 )
 
 
@@ -2444,7 +2134,7 @@ def recompute_threshold_metrics(slider_values, seg_state):
 
 
 # ------------------------------------------------------------
-# 테마 전환 — 루트 className만 갈아끼우면 CSS 변수가 전부 따라 바뀐다
+# 테마 전환 — <html data-theme>만 바꾸면 00-tokens.css의 변수가 전부 따라 바뀐다
 # ------------------------------------------------------------
 @app.callback(
     Output("theme-store", "data"),
@@ -2458,15 +2148,6 @@ def toggle_theme(_n, current, actor_id):
     record_action("ACT_THEME_CHANGE", "테마 전환", actor_id=actor_id,
                   target_type="theme", target_id=new_theme)
     return new_theme
-
-
-@app.callback(
-    Output("root", "className"),
-    Input("theme-store", "data"),
-)
-def apply_theme(theme):
-    theme = theme if theme in ("light", "dark") else "light"
-    return f"theme-{theme}"
 
 
 # 화면⑤ "고장·위험 추세" 차트 전용 재색칠 — render_screen과 무관한 별도
@@ -2598,11 +2279,10 @@ def recolor_partfail_pr_chart(theme, _active_tab):
     return [_family_pr_figure(pr_cm, theme or "light")]
 
 
-# <html>에도 같은 클래스를 얹는다. #root는 1920 고정폭이라 넓은 화면에서
-# 좌우 여백(body)이 남는데, 변수가 html에 있어야 그 여백까지 테마를 따라간다.
+# DESIGN.md §1.3 — Python 콜백으로 CSS 변수를 바꾸지 않고 <html data-theme>만 토글한다.
 app.clientside_callback(
-    "function(theme){ document.documentElement.className = 'theme-' + "
-    "((theme === 'dark') ? 'dark' : 'light'); return window.dash_clientside.no_update; }",
+    "function(theme){ document.documentElement.setAttribute('data-theme', "
+    "(theme === 'dark') ? 'dark' : 'light'); return window.dash_clientside.no_update; }",
     Output("theme-store", "data", allow_duplicate=True),
     Input("theme-store", "data"),
     prevent_initial_call="initial_duplicate",
@@ -2704,20 +2384,20 @@ def apply_filter_scope(active, seg_state):
 # (prevent_initial_call 없음: localStorage에서 복원된 값도 첫 렌더에 반영된다)
 # ------------------------------------------------------------
 @app.callback(
-    Output({"type": "period-btn", "index": ALL}, "style"),
+    Output({"type": "period-btn", "index": ALL}, "aria-pressed"),
     Output("filter-echo", "children"),
     Input("filter-store", "data"),
 )
 def render_filters(data):
     data = data or DEFAULT_FILTERS
     pi = _period_index(data)
-    styles = [period_btn_style(i == pi) for i in range(len(PERIOD_PRESETS))]
+    pressed = ["true" if i == pi else "false" for i in range(len(PERIOD_PRESETS))]
     label, days = PERIOD_PRESETS[pi]
     start = period_start(days)
     period_text = label if start is None else f"{label} {start:%Y-%m-%d}~{load_data_reference_date()}"
     echo = (f"공장={data.get('plant') or '전체'} · 종류={data.get('machine_type') or '전체'} · "
             f"기계={data.get('machine') or '전체'} · 기간={period_text}")
-    return styles, echo
+    return pressed, echo
 
 
 # ------------------------------------------------------------
@@ -2841,10 +2521,8 @@ def export_report(_run, _close, export_value, filters, seg_state, actor_id):
         record_action("ACT_EXPORT_ACCESS_BLOCKED", "파일 내보내기 접근 차단", actor_id=actor_id,
                       target_type="export", target_id=audit_format, status="BLOCKED",
                       block_reason="관리자 역할이 필요합니다.")
-        return no_update, "파일 내보내기는 관리자 계정만 사용할 수 있습니다.", {
-            "display": "flex", "position": "fixed", "inset": 0, "zIndex": 340,
-            "background": "#0006", "alignItems": "center", "justifyContent": "center",
-        }
+        return (no_update, "파일 내보내기는 관리자 계정만 사용할 수 있습니다.",
+                _scrim_style(True, 340))
     aud = REPORT_AUDIENCES[audience]
     stamp = datetime.now().strftime("%Y%m%d-%H%M")
     base = f"설비모니터링_보고서_{audience}_{stamp}"
@@ -2952,9 +2630,7 @@ def toggle_password_panel(_open, _close, style):
 def display_profile(_active_tab):
     login_id = str(session.get("admin_id", "관리자"))
     role = str(session.get("role", "UNKNOWN")).upper()
-    account_button = {"display": "block", "width": "100%", "padding": "8px", "marginBottom": "5px"}
-    if role != "ADMIN":
-        account_button["display"] = "none"
+    account_button = {"display": "block" if role == "ADMIN" else "none"}
     return login_id[:2].upper(), login_id, current_session_state(), account_button
 
 
@@ -2973,29 +2649,29 @@ def toggle_account_management(open_clicks, close_clicks, refresh):
     rows = list_user_accounts()
     record_action("ACT_ACCOUNT_LIST_VIEW", "일반 계정 목록 조회", target_type="account", target_id="USER")
     if not rows:
-        return ({"display": "flex", "position": "fixed", "inset": 0, "zIndex": 330,
-                 "background": "#0006", "alignItems": "center", "justifyContent": "center"},
+        return (_scrim_style(True, 330),
                 html.P("생성된 일반 계정이 없습니다.", style={"textAlign": "center", "margin": "12px 0"}))
     header = html.Div([
-        html.Span("아이디", style={"fontWeight": "700"}),
-        html.Span("이름", style={"fontWeight": "700"}),
-        html.Span("접속 상태", style={"fontWeight": "700", "textAlign": "right"}),
-    ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 90px", "gap": "12px",
-              "padding": "8px 4px", "borderBottom": "1px solid #d7dde3"})
+        html.Span("아이디"),
+        html.Span("이름"),
+        html.Span("접속 상태", style={"textAlign": "right"}),
+    ], className="pf-list-head label-12",
+       style={"display": "grid", "gridTemplateColumns": "1fr 1fr 90px", "gap": "12px", "padding": "8px 4px"})
     items = [header]
     for row in rows:
-        online_badge = html.Span(
-            "● 접속 중" if row["is_online"] else "○ 미접속",
-            style={"color": "#15803d" if row["is_online"] else "#6b7280", "fontSize": "12px",
-                   "fontWeight": "700", "textAlign": "right",
-                   "textShadow": "0 0 7px #86efac" if row["is_online"] else "none"},
-        )
         items.append(html.Div([
-            html.Span(row["login_id"]), html.Span(row["name"]), online_badge,
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 90px", "gap": "12px",
-                  "padding": "10px 4px", "borderBottom": "1px solid #eef0f2"}))
-    return ({"display": "flex", "position": "fixed", "inset": 0, "zIndex": 330,
-             "background": "#0006", "alignItems": "center", "justifyContent": "center"}, items)
+            html.Span(row["login_id"], className=CODE_12), html.Span(row["name"]),
+            html.Span(_online_badge(row["is_online"]), style={"textAlign": "right"}),
+        ], className="pf-list-row",
+           style={"display": "grid", "gridTemplateColumns": "1fr 1fr 90px", "gap": "12px",
+                  "padding": "10px 4px", "alignItems": "center"}))
+    return _scrim_style(True, 330), items
+
+
+def _online_badge(online):
+    """접속 상태 배지 — 접속 중은 status-good, 미접속은 중립. 점 + 글자를 함께 둔다."""
+    return html.Span([html.Span(className="pf-badge__dot"), "접속 중" if online else "미접속"],
+                     className="pf-badge micro-11 " + ("pf-badge--good" if online else "pf-badge--neutral"))
 
 
 @app.callback(Output("account-delete-selection", "options"),
@@ -3009,11 +2685,9 @@ def load_account_delete_options(open_clicks, refresh):
     for row in list_user_accounts():
         online = bool(row["is_online"])
         label = html.Div([
-            html.Span(row["login_id"]),
+            html.Span(row["login_id"], className=CODE_12),
             html.Span(row["name"]),
-            html.Span("● 접속 중" if online else "○ 미접속",
-                      style={"color": "#15803d" if online else "#6b7280", "fontSize": "12px",
-                             "fontWeight": "700", "textAlign": "right"}),
+            html.Span(_online_badge(online), style={"textAlign": "right"}),
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 90px", "gap": "8px",
                   "alignItems": "center", "width": "100%"})
         options.append({"label": label, "value": row["login_id"]})
@@ -3040,13 +2714,9 @@ def toggle_account_delete_mode(_open, _close, _mode_click, _refresh, current_mod
               Output("account-delete-mode-btn", "children"),
               Input("account-delete-mode", "data"))
 def show_account_delete_mode(enabled):
-    confirm_style = {"display": "inline-block" if enabled else "none", "minWidth": "120px",
-                     "padding": "11px 18px", "border": "1px solid #2563eb", "borderRadius": "6px",
-                     "background": "#2563eb", "color": "#fff", "fontSize": "15px", "fontWeight": "700",
-                     "cursor": "pointer", "marginLeft": "auto"}
+    confirm_style = {"display": "inline-block" if enabled else "none"}
     header_style = {"display": "grid" if enabled else "none",
-                    "gridTemplateColumns": "1fr 1fr 90px 38px", "gap": "8px",
-                    "padding": "8px 4px", "borderBottom": "1px solid #d7dde3"}
+                    "gridTemplateColumns": "1fr 1fr 90px 38px", "gap": "8px", "padding": "8px 4px"}
     return ({"display": "none" if enabled else "block"}, header_style,
             {"display": "block" if enabled else "none"}, confirm_style,
             "선택 취소" if enabled else "계정 삭제")
@@ -3079,8 +2749,7 @@ def confirm_account_delete(_confirm, _no, _yes, _open, _close, selected, refresh
         if not selected:
             return hidden, "", no_update, "삭제할 계정을 선택해 주세요."
         session["pending_account_delete"] = selected
-        return ({"display": "flex", "position": "fixed", "inset": 0, "zIndex": 340,
-                 "background": "#0006", "alignItems": "center", "justifyContent": "center"},
+        return (_scrim_style(True, 340),
                 f"선택한 일반 계정 {len(selected)}개를 정말로 삭제하시겠습니까?",
                 no_update, "")
     if triggered != "account-delete-yes-btn":
@@ -3122,9 +2791,7 @@ app.clientside_callback(
         }
         const shown = Boolean(promptState && promptState.shown);
         if (remaining <= 10) {
-            const modalStyle = shown ? window.dash_clientside.no_update :
-                {display: 'flex', position: 'fixed', inset: 0, zIndex: 300,
-                 background: '#0006', alignItems: 'center', justifyContent: 'center'};
+            const modalStyle = shown ? window.dash_clientside.no_update : {display: 'flex', zIndex: 300};
             return [label, modalStyle, {shown: true}, window.dash_clientside.no_update,
                     '예 (' + remaining + '초)'];
         }
@@ -3169,8 +2836,7 @@ def toggle_logout_confirmation(logout_clicks, cancel_clicks):
         return no_update
     if ctx.triggered_id == "logout-confirm-no-btn":
         return {"display": "none"}
-    return {"display": "flex", "position": "fixed", "inset": 0, "zIndex": 310,
-            "background": "#0006", "alignItems": "center", "justifyContent": "center"}
+    return _scrim_style(True, 310)
 
 
 @app.callback(Output("audit-audience-event", "data"),
@@ -3221,8 +2887,7 @@ def update_admin_password(n_clicks, current, new, confirm):
             record_action("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", status="BLOCKED",
                           block_reason="현재 비밀번호 불일치")
             return "현재 비밀번호가 올바르지 않습니다.", "", "", "", no_update
-        return "", "", "", "", {"display": "flex", "position": "fixed", "inset": 0, "zIndex": 320,
-                                      "background": "#0006", "alignItems": "center", "justifyContent": "center"}
+        return "", "", "", "", _scrim_style(True, 320)
     except ValueError as exc:
         record_action("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", status="BLOCKED",
                       block_reason=type(exc).__name__)

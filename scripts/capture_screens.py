@@ -1,10 +1,10 @@
 """데모 모드 앱을 띄워 화면 4개 × 3개 해상도를 캡처하고 점검 결과를 표로 출력한다.
 
-    python -m scripts.capture_screens [--out docs/images] [--port 8073]
+    python -m scripts.capture_screens [--out docs/images] [--port 8073] [--theme dark]
 
 필요: pip install -r requirements-dev.txt && playwright install chromium
 점검: 화면별 innerText의 금지 패턴 건수, 문서 가로 스크롤(scrollWidth > clientWidth) 여부,
-      서버 로그의 DB 접속 오류·401·503.
+      /assets CSS 응답 코드·순서, 서버 로그의 DB 접속 오류·401·503.
 """
 import argparse
 import os
@@ -49,6 +49,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default=str(ROOT / "docs" / "images"))
     parser.add_argument("--port", type=int, default=8073)
+    parser.add_argument("--theme", choices=["light", "dark"], default="light")
     args = parser.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -61,18 +62,30 @@ def main() -> int:
     server = subprocess.Popen([sys.executable, "-m", "src.wireframe_app", "--demo"], cwd=ROOT, env=env,
                               stdout=log_file, stderr=subprocess.STDOUT)
     rows = []
+    css_responses = []
+    css_link_order = []
+    suffix = "_dark" if args.theme == "dark" else ""
     try:
         wait_until_up(url)
         with sync_playwright() as p:
             browser = p.chromium.launch()
             for w, h in SIZES:
                 page = browser.new_page(viewport={"width": w, "height": h})
+                if not css_responses:
+                    page.on("response", lambda r: css_responses.append((r.status, r.url.split("?")[0]))
+                            if "/assets/" in r.url and r.url.split("?")[0].endswith(".css") else None)
                 page.goto(url)
                 page.wait_for_selector("#screen-content *", timeout=30000)
+                if not css_link_order:
+                    css_link_order = page.eval_on_selector_all(
+                        "link[rel=stylesheet]", "ls => ls.map(l => l.href.split('?')[0].split('/').pop())")
+                if args.theme == "dark":
+                    page.click("#theme-btn")
+                    page.wait_for_timeout(800)
                 for sid in SCREENS:
                     page.locator("#screen-tabs .tab").nth(int(sid) - 1).click()
                     page.wait_for_timeout(1500)
-                    page.screenshot(path=str(out / f"screen{sid}_{w}x{h}.png"), full_page=False)
+                    page.screenshot(path=str(out / f"screen{sid}_{w}x{h}{suffix}.png"), full_page=False)
                     text = page.inner_text("body")
                     counts = {k: len(re.findall(pat, text)) for k, pat in FORBIDDEN.items()}
                     hscroll = page.evaluate(
@@ -92,6 +105,9 @@ def main() -> int:
     print("화면 | 해상도 | " + " | ".join(names) + " | 가로스크롤")
     for sid, size, counts, hscroll in rows:
         print(f"{sid} | {size} | " + " | ".join(str(counts[n]) for n in names) + f" | {'예' if hscroll else '아니오'}")
+    print("\n/assets CSS 응답:", ", ".join(f"{css_url.rsplit('/', 1)[-1]}={status}"
+                                         for status, css_url in sorted(css_responses, key=lambda r: r[1])))
+    print("<head> 스타일시트 적용 순서:", " → ".join(css_link_order))
     bad_log = [line for line in log_text.splitlines() if LOG_ERRORS.search(line)]
     print(f"\n서버 로그 오류 줄: {len(bad_log)}건")
     for line in bad_log[:10]:

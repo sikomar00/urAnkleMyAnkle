@@ -38,7 +38,7 @@ def _probe(env_extra):
 
 def test_demo_mode_serves_layout_without_db_or_login():
     out, result = _probe({"DASHBOARD_MODE": "demo"})
-    assert result["demo"] and result["status"] == 200 and result["noop"] and result["badge"] == "inline-block", out.stderr
+    assert result["demo"] and result["status"] == 200 and result["noop"] and result["badge"] == "inline-flex", out.stderr
 
 
 def test_default_mode_is_not_demo():
