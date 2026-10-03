@@ -21,10 +21,10 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 try:
     from .data_huijae2 import (HISTORY, MODEL_PARAMS, PART_CATEGORICAL,
                                PART_NUMERIC)
-    from .prepare_machine_data import PART_KEYS, SENSORS, prepare
+    from .prepare_machine_data import SENSORS, prepare
 except ImportError:
     from data_huijae2 import HISTORY, MODEL_PARAMS, PART_CATEGORICAL, PART_NUMERIC
-    from prepare_machine_data import PART_KEYS, SENSORS, prepare
+    from prepare_machine_data import SENSORS, prepare
 
 
 ROOT = Path(__file__).resolve().parents[1]

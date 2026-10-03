@@ -11,7 +11,7 @@ paths = ([Path(os.environ['MACHINE_DATA_PATH'])] if os.environ.get('MACHINE_DATA
 if not any(path.is_file() for path in paths):
     pytest.skip('화면 ⑤ 데이터 로더 검증용 원본 CSV가 없습니다.', allow_module_level=True)
 
-from src import dashboard_data as dd
+from src import dashboard_data as dd  # noqa: E402 — 원본 CSV가 없으면 위에서 건너뛴다
 
 
 def test_screen5_kpis_share_values_with_screen1():

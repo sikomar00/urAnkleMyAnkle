@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import threading
-from datetime import date, datetime
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from uuid import uuid4
@@ -14,7 +14,7 @@ from sqlalchemy import create_engine, desc, func, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-from .db_models import AdminInfo, Base, FailureAlert, SystemLog, utc_now
+from .db_models import AdminInfo, FailureAlert, SystemLog, utc_now
 from .security_service import (
     decrypt_personal_data,
     encrypt_personal_data,

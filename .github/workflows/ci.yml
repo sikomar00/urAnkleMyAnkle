@@ -13,7 +13,8 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt ruff==0.16.10
+      - run: ruff check .                     # 문법·정의되지 않은 이름·쓰지 않는 import (pyproject.toml [tool.ruff])
       - run: python -c "import src.wireframe_app"   # 데모 모드로 대시보드 앱 import 가능한지
         env:
           DASHBOARD_MODE: demo

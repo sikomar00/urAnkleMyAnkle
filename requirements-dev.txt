@@ -1,3 +1,4 @@
 # 개발·검증 도구 — 앱 실행에는 필요 없다.
 -r requirements.txt
 playwright==1.63.0  # scripts/capture_screens.py (설치 후 `playwright install chromium`)
+ruff==0.16.10       # 린트 (CI와 같은 버전)

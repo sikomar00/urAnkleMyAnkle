@@ -86,7 +86,7 @@ def test_login_events_are_not_written_to_action_logs(monkeypatch):
 
 
 def test_account_list_returns_decrypted_name_and_online_state(monkeypatch):
-    engine = _engine(monkeypatch)
+    _engine(monkeypatch)
     audit_service.register_account(
         role="USER", login_id="user01", password="user-password", password_confirm="user-password",
         name="일반 사용자", phone="010-0000-0000", email="user@example.com",

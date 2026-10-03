@@ -13,7 +13,6 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.inspection import permutation_importance
-from sklearn.metrics import average_precision_score
 
 from .asset_anomaly_features import HISTORY_FEATURES
 from .family_features import (
