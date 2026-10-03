@@ -172,4 +172,5 @@ AI 도구: 대시보드 보완 커밋 일부는 Claude와 함께 작성했습니
 - [`docs/troubleshooting_log.md`](docs/troubleshooting_log.md) — 트러블슈팅 기록
 - [`docs/DESIGN.md`](docs/DESIGN.md) — 디자인 시스템 규칙
 - [`docs/a11y/summary.md`](docs/a11y/summary.md) — 접근성 검사 결과
+- [`docs/dashboard-improvement-plan.txt`](docs/dashboard-improvement-plan.txt) — 화면 구성 전면 개선안(조사 결과와 단계별 계획, 이 저장소에서는 미실행)
 - [`archive/legacy/README.md`](archive/legacy/README.md) — 지금은 쓰지 않는 이전 단계 파일
