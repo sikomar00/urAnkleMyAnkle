@@ -31,17 +31,11 @@
 .pf-field__error { color: var(--status-critical-text); }      /* micro-11 */
 .pf-field__hint  { color: var(--ink-muted); }                 /* micro-11 */
 
-/* ── 권한 배지 (7.4) ─────────────────────────────────────────────── */
-/* 역할은 상태가 아니라 정체성이다. status-* 를 쓰지 않고 계열색을 글자에 입히지도
-   않는다. 역할별로 색을 다르게 주지 않는다 — 글자만으로 구분한다. */
-
-/* 기간 직접 지정 — 네이티브 날짜 칸. 필터바 한 줄에 들어가도록 폭을 줄인다. */
+/* ── 기간 직접 지정 ───────────────────────────────────────────────── */
+/* 네이티브 날짜 칸. 필터바 한 줄에 들어가도록 폭을 줄인다. */
 .pf-date { width: 128px; flex-shrink: 0; }
 /* 달력 아이콘은 브라우저가 그리므로 다크 테마에서는 반전시켜야 보인다. */
 :root[data-theme="dark"] .pf-date::-webkit-calendar-picker-indicator { filter: invert(1); }
-
-.pf-badge--role { background: var(--surface-sunken); border-color: var(--border-control); color: var(--ink-secondary); }
-.pf-badge--role .pf-badge__dot { display: none; }   /* 상태가 아니므로 점을 쓰지 않는다 */
 
 /* ── 알림 (7.5) ──────────────────────────────────────────────────── */
 /* 조작의 결과는 그 조작이 일어난 자리 근처에 .pf-notice 로 띄운다. 토스트는 화면을

@@ -50,12 +50,11 @@ from .dashboard_data import (  # noqa: E402
 from .ui.base import (  # noqa: E402
     _filter_scope, _focus_asset, _period_dates, _period_index, CANVAS_H, DEFAULT_AUDIENCE,
     DEFAULT_FILTERS, DEFAULT_POWER_SORT, DEFAULT_PRIO_SORT, DEFAULT_SEG, empty_state, FILTERBAR_H,
-    HEATMAP_UNITS,
-    HEADER_H,
+    FOOTER_H, HEATMAP_UNITS, HEADER_H,
     INDEX_STRING, MARGIN, NO_DATA_MARK, PERIOD_PRESETS, REPORT_AUDIENCES,
 )
 from .ui.shell import (  # noqa: E402
-    app_header, filter_bar,
+    app_header, filter_bar, page_footer,
 )
 from .ui.figures import (  # noqa: E402
     _family_recur_figure, _heatmap_figure, _parts_figure, _pr_figure, _smult_figure, _spark_figure,
@@ -112,9 +111,11 @@ app.layout = html.Div(
         filter_bar(),
         html.Main(
             id="screen-content",
-            style={"height": f"{CANVAS_H - HEADER_H - FILTERBAR_H}px",
-                   "padding": f"{MARGIN}px", "overflow": "hidden"},
+            # 아래쪽 여백은 푸터가 대신한다 — 화면 ①~④가 쓰는 본문 예산은 928px 그대로다.
+            style={"height": f"{CANVAS_H - HEADER_H - FILTERBAR_H - FOOTER_H}px",
+                   "padding": f"{MARGIN}px {MARGIN}px 0", "overflow": "hidden"},
         ),
+        page_footer(),
     ],
     # 폭 1280~1920px에서 12열 그리드가 늘고 준다(03-app.css .pf-app). 높이는 레이아웃 토큰 고정.
     id="root", className="pf-app",

@@ -4,9 +4,9 @@ from dash import dcc, html
 
 from ..dashboard_data import load_data_reference_date, load_data_start_date
 from .base import (
-    CODE_12, date_range_inputs, DEFAULT_AUDIENCE, filter_dropdown, FILTERBAR_H, HEADER_H, LABEL_12,
-    MACHINE_OPTIONS, MACHINE_TYPE_OPTIONS, NOTE_12, period_toggle, PLANT_OPTIONS, REPORT_AUDIENCES,
-    SCREENS,
+    date_range_inputs, DEFAULT_AUDIENCE, filter_dropdown, FILTERBAR_H, FOOTER_H, HEADER_H,
+    MACHINE_OPTIONS, MACHINE_TYPE_OPTIONS, MARGIN, NOTE_12, period_toggle, PLANT_OPTIONS,
+    REPORT_AUDIENCES, SCREENS,
 )
 
 
@@ -15,16 +15,10 @@ from .base import (
 # ============================================================
 
 def app_header():
-    """좌: 시스템명·전체 데이터 기간 / 중앙: 화면 탭 4개(dcc.Tabs) / 우: 내보내기·테마 토글."""
+    """좌: 시스템명 / 중앙: 화면 탭 4개(dcc.Tabs) / 우: 내보내기·테마 토글.
+    프로젝트명·데이터 기간·합성 데이터 고지는 조작 대상이 아니라서 page_footer()로 내렸다."""
     left = html.Div(
-        [html.H1("산업 기계 센서 기반 고장 위험 예측", className="pf-header__brand title-16"),
-         html.Div([html.Span("전체 데이터 기간", className=LABEL_12),
-                   html.Span(f"{load_data_start_date()} ~ {load_data_reference_date()}",
-                             className=f"{CODE_12} pf-muted")],
-                  style={"display": "flex", "alignItems": "center", "gap": "6px", "whiteSpace": "nowrap"}),
-         # .pf-badge--role = 상태가 아닌 "정체성"을 적는 중립 칩(DESIGN.md §7.4). 프로젝트명이 그 쓰임이다.
-         html.Span("LS-JumpUp 프로젝트", className="pf-badge pf-badge--role micro-11"),
-         html.Span("합성 데이터 · 교육용", className="pf-chip-synthetic micro-11")],
+        html.H1("산업 기계 센서 기반 고장 위험 예측", className="pf-header__brand title-16"),
         style={"display": "flex", "alignItems": "center", "gap": "12px", "minWidth": "0"},
     )
     center = dcc.Tabs(
@@ -95,4 +89,19 @@ def filter_bar():
                "flexWrap": "nowrap",
                # app_header()와 같은 이유 — 필터바를 main보다 항상 위에 둔다.
                "position": "relative", "zIndex": 20},
+    )
+
+
+def page_footer():
+    """화면 하단 오른쪽 안내 한 줄 — 프로젝트명·전체 데이터 기간·합성 데이터 고지.
+
+    조작 대상이 아니라 배경 정보이므로 타원 칩이 아니라 평문으로 둔다. <footer>는
+    보조기술에 contentinfo 영역으로 잡혀 따로 이름을 붙이지 않아도 된다."""
+    return html.Footer(
+        f"LS-JumpUp 프로젝트 · 전체 데이터 기간 {load_data_start_date()} ~ {load_data_reference_date()}"
+        " · 합성 데이터로 만든 교육용 화면이다",
+        className="micro-11 pf-muted",
+        style={"height": f"{FOOTER_H}px", "padding": f"0 {MARGIN}px", "display": "flex",
+               "alignItems": "center", "justifyContent": "flex-end", "whiteSpace": "nowrap",
+               "overflow": "hidden", "textOverflow": "ellipsis"},
     )

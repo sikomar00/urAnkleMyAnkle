@@ -21,7 +21,10 @@ INDEX_STRING = """<!DOCTYPE html>
   <head>
     {%metas%}<title>{%title%}</title>{%favicon%}{%css%}
   </head>
-  <body>{%app_entry%}<footer>{%config%}{%scripts%}{%renderer%}</footer></body>
+  <!-- Dash 기본 템플릿은 설정·스크립트를 <footer>로 감싸지만, 그러면 page_footer()와 함께
+       contentinfo 랜드마크가 둘이 된다(axe landmark-no-duplicate-contentinfo). 내용이 아니라
+       스크립트 자리이므로 div로 둔다. -->
+  <body>{%app_entry%}<div>{%config%}{%scripts%}{%renderer%}</div></body>
 </html>
 """
 
@@ -56,6 +59,7 @@ def status_badge(label):
 # 레이아웃 토큰
 CANVAS_H = 1080  # 폭은 1280~1920px 유동(12열 그리드), 높이는 행 높이 토큰 합으로 고정
 HEADER_H, FILTERBAR_H = 56, 56
+FOOTER_H = 20  # 화면 하단 오른쪽 안내 한 줄
 MARGIN, GUTTER = 20, 16
 ROW_KPI, ROW_MAIN, ROW_SUB = 96, 460, 340
 
