@@ -2,7 +2,10 @@
 
 from dash import dcc, html
 
-from ..dashboard_data import filter_assets, load_asset_list, load_priority_table, period_start
+from ..dashboard_data import (
+    filter_assets, load_asset_list, load_data_reference_date, load_data_start_date, load_priority_table,
+    parse_date, period_start,
+)
 
 # ============================================================
 # 디자인 토큰 — assets/00-tokens.css(design/tokens.json에서 생성)가 정본이다.
@@ -76,20 +79,43 @@ PERIOD_PRESETS = [("최근 30일", 30), ("최근 90일", 90), ("최근 1년", 36
 
 DEFAULT_FILTERS = {
     # 기본 기간은 최근 90일 — 센서 추이를 읽을 수 있는 폭이다(전체 3년은 한 화면에 뭉개진다).
+    # period_index = 눌린 기간 버튼. 시작일·종료일 칸을 직접 고치면 None이 되고 start·end가 정본이 된다.
     "plant": None, "machine_type": None, "machine": None, "period_index": 1,
+    "start": None, "end": None,
 }
 
 
 def _period_index(filters):
-    pi = (filters or DEFAULT_FILTERS).get("period_index", DEFAULT_FILTERS["period_index"])
-    return pi if isinstance(pi, int) and 0 <= pi < len(PERIOD_PRESETS) else DEFAULT_FILTERS["period_index"]
+    """눌린 기간 버튼의 인덱스. 날짜를 직접 지정한 상태면 None(눌린 버튼이 없다)."""
+    pi = (filters or DEFAULT_FILTERS).get("period_index")
+    return pi if isinstance(pi, int) and 0 <= pi < len(PERIOD_PRESETS) else None
+
+
+def _period_range(filters):
+    """filter-store 값 → (시작일, 종료일) Timestamp. None은 그쪽 끝이 열려 있다는 뜻이다."""
+    f = filters or DEFAULT_FILTERS
+    pi = _period_index(f)
+    if pi is not None:
+        return period_start(PERIOD_PRESETS[pi][1]), None
+    return parse_date(f.get("start")), parse_date(f.get("end"))
+
+
+def _period_dates(filters):
+    """시작일·종료일 칸에 표시할 (시작, 종료) 문자열 — 기간 버튼이 눌려 있으면 그 버튼이 뜻하는 구간."""
+    f = filters or DEFAULT_FILTERS
+    pi = _period_index(f)
+    if pi is None:
+        return f.get("start"), f.get("end")
+    start = period_start(PERIOD_PRESETS[pi][1])
+    return (load_data_start_date() if start is None else f"{start:%Y-%m-%d}"), load_data_reference_date()
 
 
 def _filter_scope(filters):
-    """filter-store 값 → (대상 기계 태그 목록, 기간 시작일 또는 None)."""
+    """filter-store 값 → (대상 기계 태그 목록, 기간 시작일, 기간 종료일)."""
     f = filters or DEFAULT_FILTERS
     assets = filter_assets(f.get("plant"), f.get("machine_type"), f.get("machine"))
-    return assets, period_start(PERIOD_PRESETS[_period_index(f)][1])
+    start, end = _period_range(f)
+    return assets, start, end
 
 
 def _focus_asset(filters, machine_only=False):
@@ -98,7 +124,7 @@ def _focus_asset(filters, machine_only=False):
     f = filters or DEFAULT_FILTERS
     if machine_only:
         f = {"machine": f.get("machine")}
-    assets, _ = _filter_scope(f)
+    assets, _, _ = _filter_scope(f)
     return load_priority_table("grade", "desc", assets=assets or None)[0]["asset_tag"]
 
 # ------------------------------------------------------------
@@ -319,6 +345,24 @@ def period_toggle():
         [html.Span("기간", className=LABEL_12, style={"whiteSpace": "nowrap"}),
          html.Div(buttons, id="period-btn-group", className="pf-seg")],
         style={"display": "flex", "alignItems": "center", "gap": "8px", "flexShrink": "0"},
+    )
+
+
+def date_range_inputs():
+    """기간을 직접 지정하는 시작일·종료일 칸. 값을 고치면 기간 버튼 선택이 풀리고,
+    버튼을 누르면 그 버튼이 뜻하는 구간이 이 칸에 채워진다(write_filters)."""
+    data_start, data_end = load_data_start_date(), load_data_reference_date()
+
+    # dcc.Input은 aria-* 속성을 받지 않는다 — 접근 이름은 assets/04-a11y.js가 붙인다.
+    def box(input_id):
+        return dcc.Input(id=input_id, type="date", debounce=True, className="pf-control pf-date",
+                         min=data_start, max=data_end)
+
+    return html.Div(
+        [box("start-date"),
+         html.Span("~", className=f"{LABEL_12} pf-muted"),
+         box("end-date")],
+        style={"display": "flex", "alignItems": "center", "gap": "6px", "flexShrink": "0"},
     )
 
 

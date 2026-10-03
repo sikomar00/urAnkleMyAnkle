@@ -70,7 +70,7 @@ def priority_table(cols, records, sort_col=None, direction="desc"):
                         "점검 우선순위 표")
 
 
-def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=None, start=None):
+def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=None, start=None, end=None):
     # KPI 4개는 판단에 쓰는 값만 둔다(관측 기계 수·평균 소비 전력은 뺐다).
     #   고위험일(기계·일)·고위험일 비율(%) — 선택 기간. 비율 옆에 직전 같은 길이 기간 값을 둔다.
     #   기준일 고위험 기계(대) — 하루치 스냅샷. 비율(1대 = 10.0%)로 쓰면 정밀해 보이기만 해서 건수로 둔다.
@@ -84,7 +84,7 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=N
     # 일반 문자열 id로 Input을 걸면 그 화면들에서 "ID not found in layout"
     # 콘솔 경고가 뜬다 — 패턴 매칭 id({"type":...})를 쓰면 Dash가 "지금 이
     # id를 가진 컴포넌트가 0개일 수 있다"를 정상 상태로 취급해 경고가 안 뜬다.
-    kpis = load_screen1_kpis(assets, start)
+    kpis = load_screen1_kpis(assets, start, end)
     # "최고 베어링 온도"·"부품 출고 금액(누적)"은 삭제한다 — 남은 4개가 같은
     # 458px 폭(4×458 + 3×16 = 1880)으로 행 전체를 균등 분배한다.
     # 네 번째 값은 (label, value, 클릭 id, 집계 범위 안내).
@@ -149,7 +149,8 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=N
 
     heat_body = html.Div(
         dcc.Graph(id={"type": "heatmap-chart", "index": "screen1"},
-                  figure=_heatmap_figure(load_asset_failure_heatmap(assets, start), load_month_coverage(start), "light"),
+                  figure=_heatmap_figure(load_asset_failure_heatmap(assets, start, end),
+                                       load_month_coverage(start, end), "light"),
                   config={"displayModeBar": False, "responsive": True},
                   style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
         style={"height": "100%", "display": "flex", "flexDirection": "column"},
@@ -157,7 +158,7 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=N
     heat = card("고장 표시 히트맵", 1248, ROW_SUB, heat_body,
                 right=note("셀 = 그 달 고장 표시된 부품-일 행 수 합계 · 부분 = 관측 일수가 그 달보다 적은 달"))
 
-    power_rows = load_screen1_power_by_machine(assets, start)
+    power_rows = load_screen1_power_by_machine(assets, start, end)
     max_power = max((r["avg_power_kw"] for r in power_rows), default=1.0) or 1.0
     # 단일 계열 막대는 series-1 한 색이다 — 값에 따라 색을 바꾸지 않는다(.pf-risk).
     prows = html.Div(

@@ -40,23 +40,20 @@ from .dashboard_data import (  # noqa: E402
     load_asset_family_diagnosis,
     load_asset_parts_history,
     load_asset_sensor_series,
-    load_data_reference_date,
-    load_data_start_date,
     load_month_coverage,
     load_failure_trend,
     load_family_pr_curve_and_confusion,
     load_family_recurrence_intervals,
     load_screen1_machine_status,
     load_table_page,
-    period_start,
 )
 from .ui.base import (  # noqa: E402
-    _filter_scope, _focus_asset, _period_index, CANVAS_H, DEFAULT_AUDIENCE,
+    _filter_scope, _focus_asset, _period_dates, _period_index, CANVAS_H, DEFAULT_AUDIENCE,
     DEFAULT_FILTERS, DEFAULT_PRIO_SORT, DEFAULT_SEG, empty_state, FILTERBAR_H, HEADER_H,
     INDEX_STRING, MARGIN, NO_DATA_MARK, PERIOD_PRESETS, REPORT_AUDIENCES,
 )
 from .ui.shell import (  # noqa: E402
-    app_header, filter_bar, FILTER_ECHO_STYLE,
+    app_header, filter_bar,
 )
 from .ui.figures import (  # noqa: E402
     _family_recur_figure, _heatmap_figure, _parts_figure, _pr_figure, _smult_figure, _spark_figure,
@@ -135,19 +132,19 @@ app.layout = html.Div(
     Input("selected-family-store", "data"),
 )
 def render_screen(active, seg_state, prio_sort, filters, selected_family):
-    assets, start = _filter_scope(filters)
+    assets, start, end = _filter_scope(filters)
     if active in ("1", "2", "4") and not assets:
         return empty_state("조건에 맞는 기계 없음",
                            "선택한 공장·기계 종류·기계 조합에 해당하는 기계가 없다", 400)
     kwargs = {"seg_state": seg_state, "audience": DEFAULT_AUDIENCE}
     if active == "1":
-        kwargs.update(prio_sort=prio_sort or DEFAULT_PRIO_SORT, assets=assets, start=start)
+        kwargs.update(prio_sort=prio_sort or DEFAULT_PRIO_SORT, assets=assets, start=start, end=end)
     if active == "2":
-        kwargs.update(asset_tag=_focus_asset(filters), start=start)
+        kwargs.update(asset_tag=_focus_asset(filters), start=start, end=end)
     if active == "3":
         kwargs.update(asset_tag=_focus_asset(filters, machine_only=True), family=selected_family)
     if active == "4":
-        kwargs.update(assets=assets, start=start)
+        kwargs.update(assets=assets, start=start, end=end)
     try:
         return SCREEN_BUILDERS[active](**kwargs)
     except Exception:
@@ -268,8 +265,9 @@ def recolor_trend_chart(theme, _active_tab):
     State("filter-store", "data"),
 )
 def recolor_heatmap_chart(theme, _active_tab, filters):
-    assets, start = _filter_scope(filters)
-    return [_heatmap_figure(load_asset_failure_heatmap(assets, start), load_month_coverage(start), theme or "light")]
+    assets, start, end = _filter_scope(filters)
+    return [_heatmap_figure(load_asset_failure_heatmap(assets, start, end),
+                            load_month_coverage(start, end), theme or "light")]
 
 
 # 화면① "기계 상태" 타일 10개의 스파크라인도 같은 방식으로 재색칠한다.
@@ -282,7 +280,7 @@ def recolor_heatmap_chart(theme, _active_tab, filters):
     State("filter-store", "data"),
 )
 def recolor_spark_charts(theme, _active_tab, filters):
-    assets, _ = _filter_scope(filters)
+    assets, _, _ = _filter_scope(filters)
     rows = load_screen1_machine_status(assets)
     return [_spark_figure(r["sparkline"], theme or "light") for r in rows]
 
@@ -297,8 +295,8 @@ def recolor_spark_charts(theme, _active_tab, filters):
     State("filter-store", "data"),
 )
 def recolor_smult_chart(theme, _active_tab, filters):
-    _, start = _filter_scope(filters)
-    return [_smult_figure(load_asset_sensor_series(_focus_asset(filters), start), theme or "light")]
+    _, start, end = _filter_scope(filters)
+    return [_smult_figure(load_asset_sensor_series(_focus_asset(filters), start, end), theme or "light")]
 
 
 # 화면② "부품 출고 이력" 막대차트도 같은 방식으로 재색칠한다. smult-chart와
@@ -310,8 +308,8 @@ def recolor_smult_chart(theme, _active_tab, filters):
     State("filter-store", "data"),
 )
 def recolor_parts_chart(theme, _active_tab, filters):
-    _, start = _filter_scope(filters)
-    return [_parts_figure(load_asset_parts_history(_focus_asset(filters), start), theme or "light")]
+    _, start, end = _filter_scope(filters)
+    return [_parts_figure(load_asset_parts_history(_focus_asset(filters), start, end), theme or "light")]
 
 
 # ③ "부품군 진단" 드릴다운의 PR곡선·재발간격 차트도 같은 방식으로 재색칠한다.
@@ -397,28 +395,42 @@ app.clientside_callback(
     Output("plant-dd", "value"),
     Output("machine-type-dd", "value"),
     Output("machine-dd", "value"),
+    Output("start-date", "value"),
+    Output("end-date", "value"),
     Input("plant-dd", "value"),
     Input("machine-type-dd", "value"),
     Input("machine-dd", "value"),
     Input({"type": "period-btn", "index": ALL}, "n_clicks"),
     Input("reset-btn", "n_clicks"),
+    Input("start-date", "value"),
+    Input("end-date", "value"),
     State("filter-store", "data"),
 )
-def write_filters(plant, machine_type, machine, _period_clicks, _reset_clicks, current):
+def write_filters(plant, machine_type, machine, _period_clicks, _reset_clicks, start_date, end_date, current):
     trigger = ctx.triggered_id
     current = current or DEFAULT_FILTERS
     new = dict(current)
     dd_values = (no_update, no_update, no_update)
+    # 날짜 칸은 이 콜백만 쓴다 — 기간 버튼을 누르면 그 버튼이 뜻하는 구간을 여기서 되돌려 준다.
+    date_values = (no_update, no_update)
 
     # 첫 렌더에 no_update를 돌려주면 filter-store만 입력으로 받는 콜백
     # (render_filters·sync_filter_options)의 첫 호출을 Dash가 건너뛴다 — 값을 그대로 다시 쓴다.
     if trigger is None:
-        return new, new.get("plant"), new.get("machine_type"), new.get("machine")
+        return (new, new.get("plant"), new.get("machine_type"), new.get("machine"), *_period_dates(new))
     if trigger == "reset-btn":
         new = dict(DEFAULT_FILTERS)
         dd_values = (None, None, None)
+        date_values = _period_dates(new)
     elif isinstance(trigger, dict) and trigger.get("type") == "period-btn":
-        new["period_index"] = trigger["index"]
+        new.update(period_index=trigger["index"], start=None, end=None)
+        date_values = _period_dates(new)
+    elif trigger in ("start-date", "end-date"):
+        # 기간 버튼이 채워 넣은 값이 Input으로 되돌아온 것이면 버튼 선택을 풀지 않는다.
+        if (start_date, end_date) == _period_dates(current):
+            return no_update, *dd_values, *date_values
+        # 직접 고친 날짜가 정본이 된다 — 눌린 기간 버튼을 푼다.
+        new.update(period_index=None, start=start_date, end=end_date)
     else:
         new.update(plant=plant, machine_type=machine_type, machine=machine)
         # 공장·기계 종류를 바꿔 선택한 기계가 범위를 벗어나면 기계 선택을 푼다.
@@ -427,8 +439,8 @@ def write_filters(plant, machine_type, machine, _period_clicks, _reset_clicks, c
             dd_values = (no_update, no_update, None)
 
     if new == current:
-        return no_update, *dd_values
-    return new, *dd_values
+        return no_update, *dd_values, *date_values
+    return new, *dd_values, *date_values
 
 
 # 공장·기계 종류가 서로의 선택지를, 둘이 함께 기계 선택지를 좁힌다 —
@@ -461,38 +473,34 @@ def sync_filter_options(data):
     Output("machine-type-dd", "disabled"),
     Output("machine-dd", "disabled"),
     Output({"type": "period-btn", "index": ALL}, "disabled"),
+    Output("start-date", "disabled"),
+    Output("end-date", "disabled"),
     Output("filter-scope-note", "children"),
-    Output("filter-echo-wrap", "style"),
     Input("screen-tabs", "value"),
     Input("seg-store", "data"),
 )
 def apply_filter_scope(active, seg_state):
     period_count = len(PERIOD_PRESETS)
     if active != "3":
-        return False, False, False, [False] * period_count, "", FILTER_ECHO_STYLE
+        return False, False, False, [False] * period_count, False, False, ""
     family_task = (seg_state or DEFAULT_SEG).get("task", 0) == SCREEN3_FAMILY_INDEX
     note_text = ("모델 지표는 평가 구간 전체 기준 · "
                  + ("부품군 진단은 기계 필터만 적용" if family_task else "필터 미적용"))
-    return True, True, not family_task, [True] * period_count, note_text, {"display": "none"}
+    return True, True, not family_task, [True] * period_count, True, True, note_text
 
 
 # ------------------------------------------------------------
-# 필터 읽기 — filter-store → 기간 버튼 눌린 상태 + echo
+# 필터 읽기 — filter-store → 기간 버튼 눌린 상태
 # (prevent_initial_call 없음: localStorage에서 복원된 값도 첫 렌더에 반영된다)
+# 실제 구간은 시작일·종료일 칸이 그대로 보여 주므로 따로 되풀이하지 않는다.
 # ------------------------------------------------------------
 @app.callback(
     Output({"type": "period-btn", "index": ALL}, "aria-pressed"),
-    Output("filter-echo", "children"),
     Input("filter-store", "data"),
 )
 def render_filters(data):
-    data = data or DEFAULT_FILTERS
     pi = _period_index(data)
-    pressed = ["true" if i == pi else "false" for i in range(len(PERIOD_PRESETS))]
-    start = period_start(PERIOD_PRESETS[pi][1])
-    # 공장·기계 종류·기계는 드롭다운이 이미 보여 주므로 기간 버튼이 뜻하는 실제 날짜만 적는다.
-    start_text = load_data_start_date() if start is None else f"{start:%Y-%m-%d}"
-    return pressed, f"{start_text} ~ {load_data_reference_date()}"
+    return ["true" if i == pi else "false" for i in range(len(PERIOD_PRESETS))]
 
 
 # ------------------------------------------------------------
@@ -633,8 +641,8 @@ def update_dtable_page(page_current, sort_by, filters):
     sort_dir = sort_by[0]["direction"] if sort_by else "asc"
     triggered_prop = ctx.triggered[0]["prop_id"].rsplit(".", 1)[-1] if ctx.triggered else None
     page = 0 if triggered_prop == "sort_by" else (page_current or 0)
-    assets, start = _filter_scope(filters)
-    result = load_table_page(dataset_key, sort_col, sort_dir, page, assets=assets, start=start)
+    assets, start, end = _filter_scope(filters)
+    result = load_table_page(dataset_key, sort_col, sort_dir, page, assets=assets, start=start, end=end)
     footer_text = _dtable_footer_text(result["total_rows"], result["page"], 16)
     return result["data"], result["page_count"], result["page"], footer_text
 
@@ -655,8 +663,8 @@ def export_dtable_csv(_clicks, filters):
     if dataset_key not in ("raw", "daily"):
         return no_update
     try:
-        assets, start = _filter_scope(filters)
-        csv_bytes, filename = export_table_csv(dataset_key, assets=assets, start=start)
+        assets, start, end = _filter_scope(filters)
+        csv_bytes, filename = export_table_csv(dataset_key, assets=assets, start=start, end=end)
     except Exception:
         app.server.logger.exception("CSV 내보내기 실패: %s", dataset_key)
         return no_update

@@ -2,10 +2,11 @@
 
 from dash import dcc, html
 
-from ..dashboard_data import load_data_reference_date
+from ..dashboard_data import load_data_reference_date, load_data_start_date
 from .base import (
-    CODE_12, DEFAULT_AUDIENCE, filter_dropdown, FILTERBAR_H, HEADER_H, LABEL_12, MACHINE_OPTIONS,
-    MACHINE_TYPE_OPTIONS, NOTE_12, period_toggle, PLANT_OPTIONS, REPORT_AUDIENCES, SCREENS,
+    CODE_12, date_range_inputs, DEFAULT_AUDIENCE, filter_dropdown, FILTERBAR_H, HEADER_H, LABEL_12,
+    MACHINE_OPTIONS, MACHINE_TYPE_OPTIONS, NOTE_12, period_toggle, PLANT_OPTIONS, REPORT_AUDIENCES,
+    SCREENS,
 )
 
 
@@ -14,12 +15,15 @@ from .base import (
 # ============================================================
 
 def app_header():
-    """좌: 시스템명·기준일 / 중앙: 화면 탭 4개(dcc.Tabs) / 우: 내보내기·테마 토글·계정 메뉴."""
+    """좌: 시스템명·전체 데이터 기간 / 중앙: 화면 탭 4개(dcc.Tabs) / 우: 내보내기·테마 토글."""
     left = html.Div(
         [html.H1("산업 기계 센서 기반 고장 위험 예측", className="pf-header__brand title-16"),
-         html.Div([html.Span("데이터 기준일", className=LABEL_12),
-                   html.Span(load_data_reference_date(), className=f"{CODE_12} pf-muted")],
+         html.Div([html.Span("전체 데이터 기간", className=LABEL_12),
+                   html.Span(f"{load_data_start_date()} ~ {load_data_reference_date()}",
+                             className=f"{CODE_12} pf-muted")],
                   style={"display": "flex", "alignItems": "center", "gap": "6px", "whiteSpace": "nowrap"}),
+         # .pf-badge--role = 상태가 아닌 "정체성"을 적는 중립 칩(DESIGN.md §7.4). 프로젝트명이 그 쓰임이다.
+         html.Span("LS-JumpUp 프로젝트", className="pf-badge pf-badge--role micro-11"),
          html.Span("합성 데이터 · 교육용", className="pf-chip-synthetic micro-11")],
         style={"display": "flex", "alignItems": "center", "gap": "12px", "minWidth": "0"},
     )
@@ -66,9 +70,6 @@ def app_header():
     )
 
 
-FILTER_ECHO_STYLE = {"display": "flex", "alignItems": "center", "gap": "6px", "flexShrink": "0"}
-
-
 def filter_bar():
     """공장 / 기계 종류 / 기계 / 기간 / 초기화 · 우측 현재 필터 상태와 적용 범위 안내.
     dcc.Store(id="filter-store")가 화면 전환과 무관하게 값을 들고 있어 화면을
@@ -78,15 +79,13 @@ def filter_bar():
          filter_dropdown("machine-type-dd", "기계 종류", MACHINE_TYPE_OPTIONS, 150),
          filter_dropdown("machine-dd", "기계", MACHINE_OPTIONS, 130),
          period_toggle(),
+         date_range_inputs(),
          html.Button("초기화", id="reset-btn", n_clicks=0, className="pf-btn label-12",
                      style={"flexShrink": "0"}),
          html.Div(style={"flexGrow": "1"}),
          # 화면 ③에서는 적용 기간 대신 필터 적용 범위 안내를 보여 준다(apply_filter_scope).
          html.Span(id="filter-scope-note", className=NOTE_12,
                    style={"whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis", "minWidth": "0"}),
-         html.Div([html.Span("적용 기간", className=LABEL_12, style={"whiteSpace": "nowrap"}),
-                   html.Span(id="filter-echo", className=f"{CODE_12} pf-muted", style={"whiteSpace": "nowrap"})],
-                  id="filter-echo-wrap", style=FILTER_ECHO_STYLE),
          html.Span("", id="action-echo", className=NOTE_12,
                    style={"maxWidth": "208px", "minWidth": "0", "textAlign": "right",
                           "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis"})],

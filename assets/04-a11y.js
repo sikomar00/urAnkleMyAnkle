@@ -5,6 +5,8 @@
 (function () {
   // 라벨 요소가 옆에 없는 드롭다운의 이름. 필터바 드롭다운은 바로 앞 라벨 글자를 쓴다.
   var DROPDOWN_NAMES = { "export-dd": "보고서 형식과 대상" };
+  // dcc.Input은 aria-* 속성을 받지 않아 Python 쪽에서 이름을 줄 수 없다.
+  var INPUT_NAMES = { "start-date": "시작일", "end-date": "종료일" };
   var PAGER_NAMES = {
     "first-page": "첫 페이지", "previous-page": "이전 페이지",
     "next-page": "다음 페이지", "last-page": "마지막 페이지"
@@ -44,6 +46,12 @@
     document.querySelectorAll('.Select-value-label[role="option"]').forEach(function (el) {
       el.removeAttribute("role");
       el.removeAttribute("aria-selected");
+    });
+    Object.keys(INPUT_NAMES).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && el.getAttribute("aria-label") !== INPUT_NAMES[id]) {
+        el.setAttribute("aria-label", INPUT_NAMES[id]);
+      }
     });
     document.querySelectorAll(".rc-slider-handle:not([aria-label])").forEach(function (el) {
       el.setAttribute("aria-label", nearestLabel(el.closest(".rc-slider")) || "값 조절");

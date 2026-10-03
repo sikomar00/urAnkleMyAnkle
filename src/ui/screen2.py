@@ -19,7 +19,7 @@ from .figures import (
 # 화면 ② 기계 상세 — 행 88 / 520 / 288
 # ============================================================
 
-def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=None):
+def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=None, end=None):
     def value_box(content, w, h=26, cls=BODY_13):
         """strip 전용 값 칸 — screen_2() 안에서만 쓰인다."""
         return html.Div(
@@ -43,7 +43,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
 
     assets = load_asset_list()
     asset_tag = asset_tag if asset_tag in assets else assets[0]
-    detail = load_asset_detail_kpis(asset_tag, start)
+    detail = load_asset_detail_kpis(asset_tag, start, end)
 
     strip = html.Section(
         [nav_btn("‹ 이전 기계", "prev"),
@@ -76,7 +76,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
     sm_body = hstack(
         [sensor_labels,
          dcc.Graph(id={"type": "smult-chart", "index": "screen2"},
-                   figure=_smult_figure(load_asset_sensor_series(asset_tag, start), "light"),
+                   figure=_smult_figure(load_asset_sensor_series(asset_tag, start, end), "light"),
                    config={"displayModeBar": False, "responsive": True},
                    style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"})],
         8, style={"height": f"{SMULT_BODY_H}px"},
@@ -91,7 +91,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
     # 없다 — 대시보드는 모델을 재실행하지 않는다는 공통 제약과 충돌해 새로
     # 만들지 않았다(별도 오프라인 클러스터링 스크립트가 먼저 필요).
     # "부품 출고 이력"만 남아 오른쪽 칸(616 × 520)을 그대로 채운다.
-    parts_history = load_asset_parts_history(asset_tag, start)
+    parts_history = load_asset_parts_history(asset_tag, start, end)
     if parts_history.empty:
         parts_body = empty_state("기간 내 부품 출고 없음", "선택한 기간에 이 기계의 부품 출고 금액이 0이다")
     else:

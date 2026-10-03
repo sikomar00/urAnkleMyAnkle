@@ -116,6 +116,16 @@ def _daily() -> pd.DataFrame:
     return add_asset_severity(daily, high_risk_threshold=HIGH_RISK_THRESHOLD)
 
 
+def parse_date(text: str | None) -> pd.Timestamp | None:
+    """필터바 날짜 칸 값("YYYY-MM-DD") → Timestamp. 비었거나 날짜가 아니면 None(그쪽 끝을 연다)."""
+    if not text:
+        return None
+    try:
+        return pd.Timestamp(str(text)[:10])
+    except ValueError:
+        return None
+
+
 def period_start(days: int | None) -> pd.Timestamp | None:
     """필터바 기간 — 데이터 최신일을 포함한 최근 ``days``일의 시작일. None이면 전체 기간."""
     if days is None:
@@ -145,12 +155,15 @@ def filter_assets(plant: str | None = None, machine_type: str | None = None,
 
 
 def _scoped(frame: pd.DataFrame, assets: list[str] | None = None,
-            start: pd.Timestamp | None = None) -> pd.DataFrame:
-    """``assets``(None = 전체 기계)·``start``(None = 전체 기간)로 행을 거른다."""
+            start: pd.Timestamp | None = None, end: pd.Timestamp | None = None) -> pd.DataFrame:
+    """``assets``(None = 전체 기계)·``start``~``end``(None = 열린 쪽 끝)로 행을 거른다.
+    start·end는 모두 그 날짜를 포함한다."""
     if assets is not None:
         frame = frame[frame[ASSET_COLUMN].isin(assets)]
     if start is not None:
         frame = frame[frame[DATE_COLUMN] >= start]
+    if end is not None:
+        frame = frame[frame[DATE_COLUMN] <= end]
     return frame
 
 
@@ -160,28 +173,30 @@ def _last_failure_date_by_asset(daily: pd.DataFrame) -> pd.Series:
     return failed_days.groupby(ASSET_COLUMN)[DATE_COLUMN].max()
 
 
-def load_screen1_kpis(assets: list[str] | None = None, start: pd.Timestamp | None = None) -> dict:
+def load_screen1_kpis(assets: list[str] | None = None, start: pd.Timestamp | None = None,
+                      end: pd.Timestamp | None = None) -> dict:
     """화면 ① KPI 타일 값을 계산한다.
 
-    ``assets``는 모든 값에, ``start``는 고장 표시 기계·일·고위험일·부품 출고 금액에만
-    적용한다. ``prev_high_risk_rate_pct``는 선택 기간 바로 앞의 같은 길이 기간 값이며
-    ``start``가 None(전체 기간)이면 None이다. 나머지는 데이터 최신일(기준일) 스냅샷이다.
+    ``assets``는 모든 값에, ``start``~``end``는 고장 표시 기계·일·고위험일·부품 출고
+    금액에만 적용한다. ``prev_high_risk_rate_pct``는 선택 기간 바로 앞의 같은 길이 기간
+    값이며 ``start``가 None(열린 시작)이면 None이다. 나머지는 기준일 스냅샷이고, 기준일은
+    선택 기간의 마지막 관측일이다(기간을 좁히지 않으면 데이터 최신일과 같다).
     고위험일 = 등급 high_risk(고장점수 HIGH_RISK_THRESHOLD 이상)인 기계·일.
     """
     raw = _scoped(_load_raw(), assets)
     daily = _scoped(_daily(), assets)
 
     observed_machines = int(raw[ASSET_COLUMN].nunique())
-    failure_machine_days = int((_scoped(daily, start=start)["failure_points"] > 0).sum())
+    period = _scoped(daily, start=start, end=end)
+    failure_machine_days = int((period["failure_points"] > 0).sum())
 
-    latest_date = daily[DATE_COLUMN].max()
+    latest_date = period[DATE_COLUMN].max() if not period.empty else daily[DATE_COLUMN].max()
     latest = daily[daily[DATE_COLUMN].eq(latest_date)]
     high_risk_count = int((latest["severity_level"] == "high_risk").sum())
     failure_rate_pct = (
         high_risk_count / observed_machines * 100 if observed_machines else 0.0
     )
 
-    period = _scoped(daily, start=start)
     high_risk_days = int((period["severity_level"] == "high_risk").sum())
     prev_rate = None
     if start is not None:
@@ -200,7 +215,7 @@ def load_screen1_kpis(assets: list[str] | None = None, start: pd.Timestamp | Non
         "failure_rate_pct": failure_rate_pct,
         "avg_power_kw": float(latest["power_consumption_kw"].mean()),
         "max_bearing_temp": float(latest["temp_bearing_degC"].max()),
-        "parts_issue_value_inr": float(_scoped(raw, start=start)["issue_value_inr"].sum()),
+        "parts_issue_value_inr": float(_scoped(raw, start=start, end=end)["issue_value_inr"].sum()),
     }
 
 
@@ -440,11 +455,12 @@ def load_screen1_machine_status(assets: list[str] | None = None) -> list[dict]:
 
 
 def load_screen1_power_by_machine(assets: list[str] | None = None,
-                                  start: pd.Timestamp | None = None) -> list[dict]:
-    """화면 ① "기계별 평균 소비 전력" — 기간(``start`` 이후, None이면 전체 기간)
+                                  start: pd.Timestamp | None = None,
+                                  end: pd.Timestamp | None = None) -> list[dict]:
+    """화면 ① "기계별 평균 소비 전력" — 기간(``start``~``end``, None이면 열린 쪽 끝)
     자산별 평균 소비전력(kW), 내림차순.
     """
-    daily = _scoped(_daily(), assets, start)
+    daily = _scoped(_daily(), assets, start, end)
     avg_power = daily.groupby(ASSET_COLUMN)["power_consumption_kw"].mean()
     avg_power = avg_power.sort_values(ascending=False)
     return [
@@ -454,7 +470,8 @@ def load_screen1_power_by_machine(assets: list[str] | None = None,
 
 
 def load_asset_failure_heatmap(assets: list[str] | None = None,
-                               start: pd.Timestamp | None = None) -> pd.DataFrame:
+                               start: pd.Timestamp | None = None,
+                               end: pd.Timestamp | None = None) -> pd.DataFrame:
     """화면 ① "고장 표시 히트맵" — 자산 × 월(YYYY-MM) 그레인, 셀 값은 그 달에
     고장 표시된 부품-일 행 수 합계(CURRENT_TARGET == 1인 원자료 행 수).
 
@@ -465,7 +482,7 @@ def load_asset_failure_heatmap(assets: list[str] | None = None,
         asset_tag, period("YYYY-MM"), failed_part_count 3열. 데이터가 없는
         자산×월 조합도 0으로 채워 히트맵 격자에 빈 칸이 생기지 않게 한다.
     """
-    raw = _scoped(_load_raw(), start=start)
+    raw = _scoped(_load_raw(), start=start, end=end)
     periods = sorted(raw[DATE_COLUMN].dt.to_period("M").astype(str).unique())
     assets = [a for a in load_asset_list() if assets is None or a in assets]
 
@@ -481,10 +498,11 @@ def load_asset_failure_heatmap(assets: list[str] | None = None,
     return heat[["asset_tag", "period", "failed_part_count"]]
 
 
-def load_month_coverage(start: pd.Timestamp | None = None) -> dict[str, tuple[int, int]]:
+def load_month_coverage(start: pd.Timestamp | None = None,
+                        end: pd.Timestamp | None = None) -> dict[str, tuple[int, int]]:
     """히트맵 월별 (관측 일수, 그 달의 일수). 관측 일수가 더 적으면 '부분 월'이다 —
     합계 건수가 작게 나와도 그 달이 덜 위험했다는 뜻이 아니다."""
-    dates = pd.Series(_scoped(_load_raw(), start=start)[DATE_COLUMN].unique())
+    dates = pd.Series(_scoped(_load_raw(), start=start, end=end)[DATE_COLUMN].unique())
     months = dates.dt.to_period("M")
     observed = dates.groupby(months).size()
     return {str(month): (int(count), int(month.days_in_month)) for month, count in observed.items()}
@@ -496,7 +514,8 @@ def load_asset_list() -> list[str]:
     return sorted(raw[ASSET_COLUMN].unique().tolist())
 
 
-def load_asset_detail_kpis(asset_tag: str, start: pd.Timestamp | None = None) -> dict:
+def load_asset_detail_kpis(asset_tag: str, start: pd.Timestamp | None = None,
+                           end: pd.Timestamp | None = None) -> dict:
     """화면 ② 상단 스트립의 값을 계산한다 (선택된 자산 1개 기준).
 
     고장 표시 일수·평균 소비 전력은 기간(``start`` 이후, None이면 전체 기간)
@@ -523,7 +542,7 @@ def load_asset_detail_kpis(asset_tag: str, start: pd.Timestamp | None = None) ->
         last_failure_date.strftime("%Y-%m-%d") if pd.notna(last_failure_date) else None
     )
 
-    period_daily = _scoped(asset_daily, start=start)
+    period_daily = _scoped(asset_daily, start=start, end=end)
 
     return {
         "asset_tag": asset_tag,
@@ -539,7 +558,8 @@ def load_asset_detail_kpis(asset_tag: str, start: pd.Timestamp | None = None) ->
     }
 
 
-def load_asset_sensor_series(asset_tag: str, start: pd.Timestamp | None = None) -> pd.DataFrame:
+def load_asset_sensor_series(asset_tag: str, start: pd.Timestamp | None = None,
+                             end: pd.Timestamp | None = None) -> pd.DataFrame:
     """화면 ② "센서 8종 스몰 멀티플" — 선택 자산의 기간(``start`` 이후, None이면
     전체 기간) 센서 시계열.
 
@@ -555,7 +575,7 @@ def load_asset_sensor_series(asset_tag: str, start: pd.Timestamp | None = None) 
     if asset_tag not in assets:
         raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
 
-    daily = _scoped(_daily(), [asset_tag], start)
+    daily = _scoped(_daily(), [asset_tag], start, end)
     asset_daily = daily.sort_values(DATE_COLUMN)
 
     series = asset_daily[[DATE_COLUMN, *SENSOR_COLUMNS]].reset_index(drop=True)
@@ -564,7 +584,8 @@ def load_asset_sensor_series(asset_tag: str, start: pd.Timestamp | None = None) 
     return series
 
 
-def load_asset_parts_history(asset_tag: str, start: pd.Timestamp | None = None) -> pd.DataFrame:
+def load_asset_parts_history(asset_tag: str, start: pd.Timestamp | None = None,
+                             end: pd.Timestamp | None = None) -> pd.DataFrame:
     """화면 ② "부품 출고 이력" — 선택 자산의 기간(``start`` 이후, None이면 전체
     기간) 부품별 출고 금액 합계 상위 10개.
 
@@ -579,7 +600,7 @@ def load_asset_parts_history(asset_tag: str, start: pd.Timestamp | None = None) 
     if asset_tag not in assets:
         raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
 
-    asset_raw = _scoped(_load_raw(), [asset_tag], start)
+    asset_raw = _scoped(_load_raw(), [asset_tag], start, end)
 
     totals = (
         asset_raw.groupby([PART_COLUMN, "part_description"])["issue_value_inr"]
@@ -1006,6 +1027,7 @@ def _format_table_value(kind: str, value) -> str:
 def load_table_page(
     dataset: str, sort_col: str | None, sort_dir: str, page: int, page_size: int = 16,
     assets: list[str] | None = None, start: pd.Timestamp | None = None,
+    end: pd.Timestamp | None = None,
 ) -> dict:
     """화면 ④ "데이터 조회" 표의 한 페이지를 계산한다.
 
@@ -1026,7 +1048,7 @@ def load_table_page(
     if dataset not in _TABLE_SOURCES:
         raise ValueError(f"알 수 없는 dataset입니다: {dataset}")
     loader, columns = _TABLE_SOURCES[dataset]
-    frame = _scoped(loader(), assets, start)
+    frame = _scoped(loader(), assets, start, end)
 
     if sort_col:
         sort_field = _SORT_FIELD_OVERRIDE.get(sort_col, sort_col)
@@ -1056,7 +1078,8 @@ def load_table_page(
 
 
 def export_table_csv(dataset: str, assets: list[str] | None = None,
-                     start: pd.Timestamp | None = None) -> tuple[bytes, str]:
+                     start: pd.Timestamp | None = None,
+                     end: pd.Timestamp | None = None) -> tuple[bytes, str]:
     """화면 ④ CSV 내보내기 — 선택한 데이터셋에서 필터(``assets``·``start``)에
     맞는 행 전체(정렬·페이지 무관)를 만든다.
 
@@ -1069,7 +1092,7 @@ def export_table_csv(dataset: str, assets: list[str] | None = None,
     if dataset not in _TABLE_SOURCES:
         raise ValueError(f"알 수 없는 dataset입니다: {dataset}")
     loader, columns = _TABLE_SOURCES[dataset]
-    frame = _scoped(loader(), assets, start)
+    frame = _scoped(loader(), assets, start, end)
 
     export_cols = [col_id for col_id, _, _, _ in columns]
     export_frame = frame[export_cols].copy()

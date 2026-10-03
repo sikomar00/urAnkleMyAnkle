@@ -32,7 +32,7 @@ def _dtable_footer_text(total_rows, page, page_size=16):
     return f"{total_rows:,}행 중 {start:,}–{end:,}행 표시"
 
 
-def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None):
+def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None, end=None):
     seg_state = seg_state or DEFAULT_SEG
     dataset_index = seg_state.get("dataset", 0)
     # 예전에 저장된 선택(없어진 데이터셋 인덱스)은 원자료로 되돌린다.
@@ -40,7 +40,7 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None)
         dataset_index = 0
     dataset_key = DATASET_KEY_BY_SEG_INDEX[dataset_index]
 
-    page0 = load_table_page(dataset_key, None, "asc", 0, assets=assets, start=start)
+    page0 = load_table_page(dataset_key, None, "asc", 0, assets=assets, start=start, end=end)
     columns_prop = [{"name": c["label"], "id": c["id"]} for c in page0["columns"]]
     right_align_ids = [c["id"] for c in page0["columns"] if c["align"] == "right"]
     # 숫자 열(우측 정렬)과 식별자 열은 고정폭 글꼴 — 색·글꼴은 03-app.css(.pf-dtable)와
