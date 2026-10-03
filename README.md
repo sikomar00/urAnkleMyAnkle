@@ -10,7 +10,7 @@ python -m src.wireframe_app --demo       # DB·로그인 없이 읽기 전용으
 # → http://127.0.0.1:8052
 ```
 
-데모 모드는 MySQL 없이 4개 화면을 모두 보여 줍니다. 로그인·계정 메뉴·계정 관리까지 확인하려면 `python -m scripts.local_login_preview`를 실행합니다(로컬 SQLite, 실행할 때마다 관리자·일반 계정을 새로 만들어 터미널에 출력). 다른 해상도·다크 테마 화면은 [`docs/images/`](docs/images/)에 있습니다.
+데모 모드는 MySQL 없이 4개 화면을 모두 보여 줍니다. 로그인·계정 메뉴·계정 관리까지 확인하려면 `python -m scripts.local_login_preview`를 실행하고 관리자 `admin` / `admin1234` 또는 일반 `user` / `user1234`로 로그인합니다(MySQL 대신 로컬 SQLite를 쓰고, 이 실행에서만 쓰는 계정). 다른 해상도·다크 테마 화면은 [`docs/images/`](docs/images/)에 있습니다.
 
 ## 1. 문제 정의와 과제 전환
 
