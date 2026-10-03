@@ -3,9 +3,10 @@
 import io
 from datetime import datetime
 
+from ..dashboard_data import load_data_reference_date, load_data_start_date
 from ..theme import C
 from .base import (
-    _period_index, DEFAULT_AUDIENCE, DEFAULT_FILTERS, DEFAULT_SEG, NO_DATA_MARK, PERIOD_PRESETS,
+    _period_dates, _period_index, DEFAULT_AUDIENCE, DEFAULT_FILTERS, DEFAULT_SEG, NO_DATA_MARK, PERIOD_PRESETS,
     REPORT_AUDIENCES, SEG_GROUPS,
 )
 
@@ -88,6 +89,15 @@ class PdfFontMissing(RuntimeError):
     pass
 
 
+def _period_text(filters):
+    """보고서 '기간' 칸 — 눌린 기간 버튼 이름(날짜를 직접 지정했으면 "직접 지정")과 실제 날짜 구간.
+    직접 지정에서 비워 둔 쪽 끝은 데이터의 처음·마지막 날이다."""
+    start, end = _period_dates(filters)
+    pi = _period_index(filters)
+    name = PERIOD_PRESETS[pi][0] if pi is not None else "직접 지정"
+    return f"{name} ({start or load_data_start_date()} ~ {end or load_data_reference_date()})"
+
+
 def _report_context(filters, seg_state, audience):
     filters = filters or DEFAULT_FILTERS
     seg_state = seg_state or DEFAULT_SEG
@@ -104,7 +114,7 @@ def _report_context(filters, seg_state, audience):
             ("공장", filters.get("plant") or "전체"),
             ("기계 종류", filters.get("machine_type") or "전체"),
             ("기계", filters.get("machine") or "전체"),
-            ("기간", PERIOD_PRESETS[_period_index(filters)][0]),
+            ("기간", _period_text(filters)),
             ("모델 과제", SEG_GROUPS["task"][seg_state.get("task", 0)]),
             ("위험 기준선", SEG_GROUPS["threshold"][seg_state.get("threshold", 0)]),
             ("제외 섹션", aud["excludes"]),

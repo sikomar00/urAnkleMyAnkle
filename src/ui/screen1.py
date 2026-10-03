@@ -35,6 +35,19 @@ def kpi_value_tile(label, value_text, w=300, h=96, scope=None, help_text=None, s
     )
 
 
+def rate_change(now, prev):
+    """고위험일 비율의 직전 같은 기간 대비 변화 — 추세 글리프(▲▼, DESIGN §6) + 증가·감소 글자.
+    고위험일 비율은 오를수록 나쁘므로 증가는 status-critical-text, 감소는 status-good-text로 쓴다
+    (색만으로 뜻을 나르지 않도록 "증가·감소" 글자를 함께 둔다). 차이는 화면에 보이는 소수 첫째 자리 값끼리 뺀다."""
+    diff = round(round(now, 1) - round(prev, 1), 1)
+    if diff == 0:
+        return f"직전 같은 기간과 같음 ({prev:.1f})"
+    worse = diff > 0
+    return [html.Span(f"{'▲' if worse else '▼'} {abs(diff):.1f}%p {'증가' if worse else '감소'}",
+                      className=f"pf-delta pf-delta--{'worse' if worse else 'better'}"),
+            f" · 직전 같은 기간 {prev:.1f}"]
+
+
 # (열 라벨, 정렬, 열 id). 열 id는 record의 키이자 load_priority_table()의 정렬 열 이름이다.
 PRIO_COLS = [
     ("순위", "right", "rank"),
@@ -149,7 +162,7 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, table_sort=None, assets=
     kpi_specs = [
         ("고위험일 (기계·일)", f"{kpis['high_risk_days']:,}", "high_risk_days", None),
         ("고위험일 비율 (%)", f"{kpis['high_risk_rate_pct']:.1f}", "high_risk_rate_pct",
-         f"직전 같은 기간 {prev:.1f}" if prev is not None else None),
+         rate_change(kpis["high_risk_rate_pct"], prev) if prev is not None else None),
         ("기준일 고위험 기계 (대)", f"{kpis['latest_high_risk_machines']:,}", "latest_high_risk_machines", None),
         ("고장 표시 기계·일", f"{kpis['failure_machine_days']:,}", "failure_machine_days", None),
     ]
@@ -165,12 +178,13 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, table_sort=None, assets=
                     style={"display": "flex", "alignItems": "center", "gap": "8px"}))
 
     def machine_tile(status_row):
+        # 기계 종류는 자르지 않는다(DESIGN §8) — 가장 긴 "Screw Compressor"가 한 줄에 들어가는 폭이고,
+        # 좁은 화면에서는 어절 단위로 줄을 바꾼다.
         return html.Div(
             [html.Div([html.Span(status_row["asset_tag"], className=CODE_12, style={"whiteSpace": "nowrap"}),
-                       html.Span(status_row["machine_type"], className=MICRO_11,
-                                 style={"whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis"})],
-                      style={"width": "84px", "flexShrink": "0", "display": "flex",
-                             "flexDirection": "column", "gap": "4px", "overflow": "hidden"}),
+                       html.Span(status_row["machine_type"], className=f"{MICRO_11} pf-sentence")],
+                      style={"width": "104px", "flexShrink": "0", "display": "flex",
+                             "flexDirection": "column", "gap": "4px"}),
              dcc.Graph(id={"type": "spark-chart", "index": status_row["asset_tag"]},
                        figure=_spark_figure(status_row["sparkline"], "light"),
                        config={"displayModeBar": False, "responsive": True},

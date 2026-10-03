@@ -241,3 +241,25 @@ def test_sensor_card_marks_outside_days_and_drops_old_note():
     counts = [int(t.split('경계 밖 ')[1].rstrip('일')) for t in
               (_text(n) for n in _walk(layout) if isinstance(n, html.Span)) if t.startswith('경계 밖 ') and t != '경계 밖 없음']
     assert sum(len(t.x) for t in markers) == sum(counts) == 16
+
+
+def test_report_export_works_with_custom_date_range():
+    """날짜를 직접 지정하면 눌린 기간 버튼이 없다(period_index=None) — 보고서의 '기간' 칸이 날짜로 적힌다."""
+    from src.ui.report import _report_context, build_report_pdf, build_report_xlsx
+    custom = _filters(period_index=None, start='2024-01-01', end='2024-03-31')
+    meta = dict(_report_context(custom, w.DEFAULT_SEG, 'mgr')['meta'])
+    assert meta['기간'] == '직접 지정 (2024-01-01 ~ 2024-03-31)'
+    preset = dict(_report_context(_filters(period_index=LAST_30_DAYS), w.DEFAULT_SEG, 'mgr')['meta'])
+    assert preset['기간'] == f"최근 30일 ({' ~ '.join(_period_dates(_filters(period_index=LAST_30_DAYS)))})"
+    assert build_report_xlsx(custom, w.DEFAULT_SEG, 'mgr')[:2] == b'PK'
+    assert build_report_pdf(custom, w.DEFAULT_SEG, 'mgr')[:4] == b'%PDF'
+
+
+def test_rate_change_shows_trend_glyph_with_words_not_color_only():
+    from src.ui.screen1 import rate_change
+    worse = rate_change(13.33, 9.74)
+    assert _text(worse[0]) == '▲ 3.6%p 증가' and 'pf-delta--worse' in worse[0].className
+    assert worse[1] == ' · 직전 같은 기간 9.7'
+    better = rate_change(9.7, 13.3)
+    assert _text(better[0]) == '▼ 3.6%p 감소' and 'pf-delta--better' in better[0].className
+    assert rate_change(9.71, 9.68) == '직전 같은 기간과 같음 (9.7)'

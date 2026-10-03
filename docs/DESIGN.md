@@ -339,12 +339,12 @@ Dash에서는 `index_string`의 `<html>` 태그에 `data-theme`를 넣고, clien
 | 컴포넌트 | 루트 클래스 | 시각 규칙 핵심 |
 |---|---|---|
 | AppHeader | `.pf-header` | `surface-card` 바탕 + 하단 hairline. 로고 이미지 없음. **시계·실시간 갱신 표시 금지**(데이터가 일 단위 정적 파일이다) |
-| FilterBar | `.pf-filterbar` | `surface-sunken` 바탕. 컨트롤 높이 32px. 적용 버튼 없음(즉시 반영) |
+| FilterBar | `.pf-filterbar` | `surface-sunken` 바탕. 컨트롤 높이 32px. 적용 버튼 없음(즉시 반영). **필터를 쓰지 않는 화면(③ 모델·예측)에서는 숨기고** 그 56px을 본문에 준다(본문 984px) — 끈 컨트롤을 늘어놓지 않는다 |
 | Card / ChartCard | `.pf-card` | `surface-card` + hairline + `radius-md` + **그림자 없음**. 제목 줄 `.pf-card__head` |
 | KpiTile | `.pf-kpi` | 값 `value-28` + `proportional-nums`, 라벨 `label-12`/`ink-secondary`, 보조 `micro-11`/`ink-muted`. **왼쪽 색 테두리 금지, 타일 하나만 크게 만들지 않는다** |
 | StatusBadge | `.pf-badge--{good\|warning\|serious\|critical\|neutral}` | 8px 점 + 글자. 글자색은 마크색이 아니라 `status-*-text`. 다크에서는 `status-*-border` 1px 필수. **배지 안에 숫자를 넣지 않는다** |
 | RiskBar | `.pf-risk` | 채움은 `series-1` **단색**. 값에 따라 상태색으로 바꾸거나 그라데이션을 넣지 않는다 — 연속량에 상태색을 쓰면 임계값이 어디인지 화면이 거짓말한다. 숫자를 항상 같이 둔다 |
-| Table (공통) | `.pf-table` | 헤더 `surface-sunken` sticky, 행 구분선 hairline. 행 하이라이트는 **한 종류만**(`status-critical-tint`). 정렬 화살표는 `▲▼` 글리프 |
+| Table (공통) | `.pf-table` | 헤더 `surface-sunken` sticky, 행 구분선 hairline. 행 하이라이트는 **한 종류만**(`status-critical-tint`). 정렬 화살표는 `▲▼` 글리프. **정렬은 열 제목 자체를 누른다** — 오름차순 → 내림차순 → 기본 순서를 돌고, 정렬 중인 열만 굵게 + 화살표. 따로 놓인 정렬 버튼을 두지 않는다(DataTable도 같은 동작으로 맞춘다) |
 | AssetTile | `.pf-assettile` | **타일 배경을 상태색으로 칠하지 않는다** — 10개가 동시에 칠해지면 화면이 신호를 잃는다. 스파크라인은 `series-1` 2px, 축·범례 없음 |
 | SensorStack | `.pf-sensorstack` | **모든 패널 `series-1` 단색.** 패널 높이 동일. 패널마다 범례 금지 |
 | Legend | `.pf-legend` | 계열 2개 이상이면 **범례 필수**, 1개면 **범례 금지**(제목이 계열명이다) |

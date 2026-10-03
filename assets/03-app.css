@@ -78,6 +78,9 @@
 .pf-strong { font-weight: 600; }
 .pf-seg { flex-shrink: 0; }
 .pf-seg__item { white-space: nowrap; }
+/* 다크 테마에서 accent-text는 accent-subtle 위 대비가 3.85:1이라 12px 글자에 모자란다.
+   토큰 설명("그 위 텍스트는 accent-text 또는 ink")대로 눌린 세그먼트 글자만 ink로 바꾼다(8.1:1). */
+:root[data-theme="dark"] .pf-seg__item[aria-pressed="true"] { color: var(--ink); }
 .pf-app button:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
 
 /* 헤더 탭 — dcc.Tabs 기본 스타일(styled-jsx)보다 구체적이어야 해서 id를 쓴다. */
@@ -179,11 +182,15 @@
 }
 .pf-insight__label { flex-shrink: 0; color: var(--ink); }
 .pf-insight__text { margin: 0; color: var(--ink); }
+/* KPI 보조 비교의 추세 — 글리프와 증가·감소 글자를 함께 쓴다. 나빠짐 = critical, 좋아짐 = good. */
+.pf-delta { font-weight: 600; }
+.pf-delta--worse  { color: var(--status-critical-text); }
+.pf-delta--better { color: var(--status-good-text); }
 /* 한국어 문장은 어절 단위로 줄을 바꾼다(단어 중간에서 끊지 않는다). */
 .pf-sentence { word-break: keep-all; overflow-wrap: anywhere; }
 
 /* 혼동행렬 — 4×4 격자(머리 줄·칸 2×2·행 합계·각주). 칸은 결과 이름 글자 + 상태 tint:
-   맞게 판정 = good, 오경보 = warning, 놓친 고장 = critical(pf-notice와 같은 tint·border·text 조합). */
+   맞게 판정 = good, 오경보 = warning, 놓친 고장 = critical(이름 글자는 status-*-text). */
 .pf-cm {
   display: grid; height: 100%; gap: var(--space-2);
   grid-template-columns: 64px 1fr 1fr 56px; grid-template-rows: 24px 1fr 1fr auto;
@@ -192,12 +199,12 @@
 .pf-cm-side { align-self: center; }
 .pf-cm-cell {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-1);
-  border: var(--stroke-hairline) solid var(--border-hairline); border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
+  border-radius: var(--radius-sm); background: var(--surface-sunken);
 }
-.pf-cm-cell--good     { background: var(--status-good-tint);     border-color: var(--status-good-border); }
-.pf-cm-cell--warning  { background: var(--status-warning-tint);  border-color: var(--status-warning-border); }
-.pf-cm-cell--critical { background: var(--status-critical-tint); border-color: var(--status-critical-border); }
+/* 칸 둘레에 구분용 테두리를 그리지 않는다(DESIGN §8) — 칸 사이 간격과 tint로만 나눈다. */
+.pf-cm-cell--good     { background: var(--status-good-tint); }
+.pf-cm-cell--warning  { background: var(--status-warning-tint); }
+.pf-cm-cell--critical { background: var(--status-critical-tint); }
 .pf-cm-cell--good .pf-cm-cell__name     { color: var(--status-good-text); }
 .pf-cm-cell--warning .pf-cm-cell__name  { color: var(--status-warning-text); }
 .pf-cm-cell--critical .pf-cm-cell__name { color: var(--status-critical-text); }
@@ -267,6 +274,19 @@
 .pf-dtable .previous-next-container .current-page,
 .pf-dtable .previous-next-container input.current-page {
   background: var(--surface-card); color: var(--ink); border-color: var(--border-control);
+}
+/* DataTable 기본 규칙(.dash-table-container … .current-page-container input.current-page { color: black })이
+   위 규칙보다 우선해 다크 테마에서 쪽 번호가 검은 글자(대비 1.2:1)로 남는다. 같은 경로에 .pf-dtable을 더해
+   우선순위를 넘긴다. 쪽 번호는 입력칸의 placeholder로 보이므로 placeholder 색까지 덮는다. */
+.pf-dtable .dash-table-container .previous-next-container .page-number .current-page-container input.current-page {
+  color: var(--ink); background: var(--surface-card);
+}
+.pf-dtable .dash-table-container .previous-next-container .page-number .current-page-container input.current-page::placeholder {
+  color: var(--ink); opacity: 1;
+}
+/* 입력 중에는 DataTable 기본처럼 placeholder를 감춘다(위 규칙이 기본 :focus 규칙을 덮지 않게). */
+.pf-dtable .dash-table-container .previous-next-container .page-number .current-page-container input.current-page:focus::placeholder {
+  opacity: 0;
 }
 .pf-divider-top { border-top: var(--stroke-hairline) solid var(--border-hairline); }
 
