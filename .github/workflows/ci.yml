@@ -14,8 +14,9 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: python -m scripts.make_dummy     # 더미 생성이 깨지지 않는지
-      - run: python -c "import app.app"       # Dash 앱 import 가능한지
+      - run: python -c "import src.wireframe_app"   # 데모 모드로 대시보드 앱 import 가능한지
+        env:
+          DASHBOARD_MODE: demo
       - run: pytest -q
       - run: python -m scripts.check_env      # prophet이 설치만으로 도는지 (윈도우/맥 실제 동일 조건 검증)
         continue-on-error: true               # prophet 검증은 우선 관찰만; 실패해도 CI 전체를 막지 않음
