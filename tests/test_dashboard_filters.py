@@ -123,19 +123,34 @@ def test_date_boxes_render_as_native_date_inputs():
 
 
 
-def test_priority_table_sorts_by_every_column_and_reverses():
-    """열 머리 ▲▼가 보내는 정렬 축 전부가 동작하고, 오름차순은 내림차순의 역순이다."""
+def test_priority_table_sorts_by_every_column():
+    """열 제목이 보내는 열 id 전부가 정렬 키로 동작한다. 기본 순서·모르는 열은 우선순위 순."""
     from src.dashboard_data import PRIORITY_SORT_KEYS, load_priority_table
-    from src.ui.screen1 import PRIO_COLS, PRIO_SORT_AXIS
+    from src.ui.screen1 import PRIO_COLS
+    default = [r['asset_tag'] for r in load_priority_table()]
     for _label, _align, field in PRIO_COLS:
-        axis = PRIO_SORT_AXIS.get(field, field)
-        assert axis in PRIORITY_SORT_KEYS, field
-        desc = load_priority_table(axis, 'desc')
-        asc = load_priority_table(axis, 'asc')
-        assert [r['asset_tag'] for r in asc] == [r['asset_tag'] for r in desc][::-1], field
-        assert [r['rank'] for r in asc] == list(range(1, 11)), field
-    # 모르는 축은 기본(등급가중 고장점수)으로 떨어진다.
-    assert load_priority_table('없는열') == load_priority_table('grade')
+        assert field in PRIORITY_SORT_KEYS, field
+        for direction in ('asc', 'desc'):
+            values = [r[field] for r in load_priority_table(field, direction)]
+            assert values == sorted(values, reverse=direction == 'desc'), (field, direction)
+    assert [r['asset_tag'] for r in load_priority_table('없는열', 'asc')] == default
+    assert [r['asset_tag'] for r in load_priority_table('plant_code', None)] == default
+
+
+def test_sort_cycle_is_asc_then_desc_then_default():
+    """같은 열을 누를 때마다 오름차순 → 내림차순 → 기본, 다른 열을 누르면 오름차순부터."""
+    from src.ui.base import next_sort, table_sort
+    store = {}
+    seen = []
+    for _ in range(4):
+        store = next_sort(store, 'priority', 'plant_code')
+        seen.append(table_sort(store, 'priority'))
+    assert seen == [('plant_code', 'asc'), ('plant_code', 'desc'), (None, None), ('plant_code', 'asc')]
+    store = next_sort(store, 'priority', 'asset_tag')
+    assert table_sort(store, 'priority') == ('asset_tag', 'asc')
+    # 다른 표의 정렬은 건드리지 않는다.
+    store = next_sort(store, 'power', 'avg_power_kw')
+    assert table_sort(store, 'priority') == ('asset_tag', 'asc')
 
 
 def test_screen1_kpi_cards_explain_scope_with_help_icon_not_label():
@@ -145,7 +160,7 @@ def test_screen1_kpi_cards_explain_scope_with_help_icon_not_label():
     assert len(KPI_HELP) == 4 and '선택 기간' in ' '.join(KPI_HELP.values())
     icons = [n for n in _walk(layout)
              if getattr(n, 'className', None) and 'pf-help' in str(n.className)]
-    assert len(icons) == 5          # KPI 4개 + 히트맵 설명 1개
+    assert len(icons) == 6          # KPI 4개 + 점검 우선순위·히트맵 설명 각 1개
     assert all(i.title and i.title == _prop(i, 'aria-label') for i in icons)
     # 라벨 줄에는 제목과 물음표만 남는다 — 예전 "선택 기간"·"기준일" note가 없어야 한다.
     cards = [n for n in _walk(layout) if getattr(n, 'className', '') == 'pf-card pf-kpi']
@@ -155,14 +170,19 @@ def test_screen1_kpi_cards_explain_scope_with_help_icon_not_label():
         assert kinds == ['pf-kpi__label', 'pf-help'], kinds
 
 
-def test_screen1_sort_buttons_mark_only_the_active_one():
-    layout = w.screen_1(prio_sort={'sort_by': 'plant_code', 'direction': 'asc'}, power_sort='asc')
-    buttons = [n for n in _walk(layout)
-               if getattr(n, 'className', None) == 'pf-sort__btn']
-    assert len(buttons) == 2 * 8 + 2          # 표 8열 × ▲▼ + 전력 ▲▼
-    pressed = [b.id for b in buttons if _prop(b, 'aria-pressed') == 'true']
-    assert pressed == [{'type': 'prio-sort-btn', 'index': 'plant_code', 'dir': 'asc'},
-                       {'type': 'power-sort-btn', 'index': 'screen1', 'dir': 'asc'}]
+def test_screen1_column_titles_are_sort_buttons_marking_only_the_active_column():
+    store = {'priority': {'col': 'plant_code', 'direction': 'asc'},
+             'power': {'col': 'avg_power_kw', 'direction': 'desc'}}
+    layout = w.screen_1(table_sort=store)
+    heads = [n for n in _walk(layout) if 'pf-th--sortable' in str(getattr(n, 'className', ''))]
+    assert len(heads) == 8 + 2                    # 우선순위 8열 + 전력 2열
+    sorted_heads = {h.children.id['col']: _prop(h, 'aria-sort') for h in heads if _prop(h, 'aria-sort') != 'none'}
+    assert sorted_heads == {'plant_code': 'ascending', 'avg_power_kw': 'descending'}
+    arrows = [h.children.children[1].children for h in heads]
+    assert sorted(a for a in arrows if a) == ['▲', '▼']
+    # 기준선을 넘은 기계의 행만 붉게 강조한다.
+    rows = [n for n in _walk(layout) if isinstance(n, html.Tr) and getattr(n, 'className', None) == 'pf-tr--flagged']
+    assert [_text(r.children[1]) for r in rows] == ['AST-2031']
 
 
 def test_heatmap_units_keep_the_same_total_and_mark_partial_periods():

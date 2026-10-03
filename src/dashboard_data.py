@@ -351,27 +351,29 @@ def load_failure_trend() -> pd.DataFrame:
     return trend.sort_values(DATE_COLUMN).reset_index(drop=True)
 
 
-# "점검 우선순위" 표의 정렬 축 → 내림차순 정렬 키. 동률은 등급가중 고장점수로 가른다.
-# "grade"·"threshold"는 표에 열 머리 정렬 버튼이 생기기 전부터 쓰던 이름이다.
+# "점검 우선순위" 표의 열 id → 그 열의 값. 정렬은 안정 정렬이라 값이 같은 기계끼리는
+# 방향과 상관없이 우선순위(rank) 순서를 지킨다.
+# "grade"·"threshold"는 표에 열 제목 정렬이 생기기 전부터 쓰던 이름이다(같은 열).
 PRIORITY_SORT_KEYS = {
-    "grade": lambda row: (row["failure_points"],),
-    "threshold": lambda row: (row["threshold_exceeded"], row["failure_points"]),
-    "asset_tag": lambda row: (row["asset_tag"],),
-    "machine_type": lambda row: (row["machine_type"], row["failure_points"]),
-    "plant_code": lambda row: (row["plant_code"], row["failure_points"]),
-    "high_risk_days_30d": lambda row: (row["high_risk_days_30d"], row["failure_points"]),
-    "failed_part_count": lambda row: (row["failed_part_count"], row["failure_points"]),
+    column: (lambda column: lambda row: row[column])(column)
+    for column in ("rank", "asset_tag", "machine_type", "plant_code", "failure_points",
+                   "threshold_exceeded", "high_risk_days_30d", "failed_part_count")
 }
+PRIORITY_SORT_KEYS["grade"] = PRIORITY_SORT_KEYS["failure_points"]
+PRIORITY_SORT_KEYS["threshold"] = PRIORITY_SORT_KEYS["threshold_exceeded"]
 
 
-def load_priority_table(sort_by: str = "grade", direction: str = "desc",
+def load_priority_table(sort_by: str | None = None, direction: str | None = None,
                         assets: list[str] | None = None) -> list[dict]:
     """"점검 우선순위" 표의 행 데이터를 만든다.
 
+    기본 순서는 등급가중 고장점수 내림차순이고, ``rank``는 언제나 이 기본 순서상의 순위다
+    (다른 열로 정렬해도 각 기계의 우선순위 번호는 바뀌지 않는다).
+
     Args:
-        sort_by: ``PRIORITY_SORT_KEYS``의 정렬 축. 모르는 값이면 ``"grade"``를 쓴다.
-        direction: ``"desc"``(기본) 또는 ``"asc"`` — sort_by 기준으로 정렬한
-            뒤 전체 순서를 뒤집는다. rank는 이 최종 순서 기준으로 매긴다.
+        sort_by: ``PRIORITY_SORT_KEYS``의 열 id. None이거나 모르는 값이면 기본 순서.
+        direction: ``"desc"`` 또는 ``"asc"``. None이면 기본 순서. 값이 같은 기계끼리는
+            두 방향 모두 우선순위 순서를 지킨다.
         assets: 대상 기계 태그 목록. None이면 전체 기계.
     """
     raw = _scoped(_load_raw(), assets)
@@ -427,12 +429,11 @@ def load_priority_table(sort_by: str = "grade", direction: str = "desc",
             }
         )
 
-    rows.sort(key=PRIORITY_SORT_KEYS.get(sort_by, PRIORITY_SORT_KEYS["grade"]), reverse=True)
-    if direction == "asc":
-        rows.reverse()
-
+    rows.sort(key=PRIORITY_SORT_KEYS["grade"], reverse=True)
     for rank, row in enumerate(rows, start=1):
         row["rank"] = rank
+    if sort_by in PRIORITY_SORT_KEYS and direction in ("asc", "desc"):
+        rows.sort(key=PRIORITY_SORT_KEYS[sort_by], reverse=direction == "desc")
     return rows
 
 
@@ -465,14 +466,13 @@ def load_screen1_machine_status(assets: list[str] | None = None) -> list[dict]:
 
 def load_screen1_power_by_machine(assets: list[str] | None = None,
                                   start: pd.Timestamp | None = None,
-                                  end: pd.Timestamp | None = None,
-                                  direction: str = "desc") -> list[dict]:
+                                  end: pd.Timestamp | None = None) -> list[dict]:
     """화면 ① "기계별 평균 소비 전력" — 기간(``start``~``end``, None이면 열린 쪽 끝)
-    자산별 평균 소비전력(kW). ``direction``은 ``"desc"``(기본) 또는 ``"asc"``.
+    자산별 평균 소비전력(kW), 내림차순(표의 기본 순서). 다른 정렬은 화면이 한다.
     """
     daily = _scoped(_daily(), assets, start, end)
     avg_power = daily.groupby(ASSET_COLUMN)["power_consumption_kw"].mean()
-    avg_power = avg_power.sort_values(ascending=direction == "asc")
+    avg_power = avg_power.sort_values(ascending=False)
     return [
         {"asset_tag": asset_tag, "avg_power_kw": float(value)}
         for asset_tag, value in avg_power.items()

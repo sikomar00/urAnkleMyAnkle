@@ -3,13 +3,13 @@
 from dash import dcc, html
 
 from ..dashboard_data import (
-    load_asset_failure_heatmap, load_period_coverage, load_priority_table, load_screen1_kpis,
+    load_asset_failure_heatmap, load_asset_list, load_period_coverage, load_priority_table, load_screen1_kpis,
     load_screen1_machine_status, load_screen1_power_by_machine,
 )
 from .base import (
-    _span, BODY_13, card, CODE_12, DEFAULT_AUDIENCE, DEFAULT_POWER_SORT, DEFAULT_PRIO_SORT, DEFAULT_SEG,
-    direction_buttons, GUTTER, help_icon, HEATMAP_UNITS, LABEL_12, MICRO_11, note, NUM_13, row, ROW_KPI,
-    ROW_MAIN, ROW_SUB, seg, SEG_GROUPS, status_badge, table_scroll,
+    _span, BODY_13, card, CODE_12, DEFAULT_AUDIENCE, DEFAULT_SEG, GUTTER, help_icon, HEATMAP_UNITS,
+    LABEL_12, MICRO_11, note, NUM_13, row, ROW_KPI, ROW_MAIN, ROW_SUB, seg, SEG_GROUPS, sort_header,
+    sort_rows, sortable, status_badge, table_scroll, table_sort,
 )
 from .figures import _heatmap_figure, _spark_figure
 
@@ -35,7 +35,7 @@ def kpi_value_tile(label, value_text, w=300, h=96, scope=None, help_text=None, s
     )
 
 
-# (열 라벨, 정렬, 열 id). 열 id는 record의 키이자 정렬 축 이름이다.
+# (열 라벨, 정렬, 열 id). 열 id는 record의 키이자 load_priority_table()의 정렬 열 이름이다.
 PRIO_COLS = [
     ("순위", "right", "rank"),
     ("대상", "left", "asset_tag"),
@@ -46,30 +46,15 @@ PRIO_COLS = [
     ("최근 30일 고위험일 수", "right", "high_risk_days_30d"),
     ("당일 고장 표시 부품 수", "right", "failed_part_count"),
 ]
-# 열 id → load_priority_table()의 정렬 축. 순위는 기본 우선순위(등급가중 고장점수) 순이고,
-# 기준선 초과는 "초과한 기계 먼저, 동률이면 고장점수" 축을 쓴다.
-PRIO_SORT_AXIS = {"rank": "grade", "failure_points": "grade", "threshold_exceeded": "threshold"}
-ARIA_SORT = {"asc": "ascending", "desc": "descending"}
 
 
-def priority_table(records, sort_by, direction):
+def priority_table(records, store):
     """점검 우선순위 표(.pf-table) — load_priority_table()이 만든 자산별 값을 채운다.
-    숫자 열은 num-13 우측 정렬, 식별자(asset_tag·plant_code)는 code-12.
-    열 머리마다 ▲▼ 버튼이 있어 그 열 기준으로 오름차/내림차순 정렬한다.
+    숫자 열은 num-13 우측 정렬, 식별자(asset_tag·plant_code)는 code-12. 열 제목을 누르면
+    그 열로 오름차순 → 내림차순 → 기본(우선순위) 순서로 돈다. 기준선을 넘은 기계의 행은
+    status-critical-tint로 칠한다(DESIGN §6 — 표의 행 강조는 이 한 종류뿐이다).
     열 폭은 내용에 맞추고(자동 배치), 카드보다 넓으면 카드 안에서만 가로 스크롤한다."""
-    align_items = {"right": "flex-end", "center": "center"}
-    head_cells = []
-    for label, align, field in PRIO_COLS:
-        active = direction if field == sort_by else None
-        head_cells.append(html.Th(
-            html.Div([html.Span(label), direction_buttons("prio-sort-btn", label, active, field)],
-                     style={"display": "flex", "alignItems": "center", "gap": "4px",
-                            "justifyContent": align_items.get(align, "flex-start")}),
-            className="label-12 pf-th--sortable" + (" pf-th--num" if align == "right" else ""),
-            style={"textAlign": align},
-            **{"aria-sort": ARIA_SORT[active] if active else "none"},
-        ))
-    thead = html.Tr(head_cells)
+    thead = html.Tr([sort_header(label, "priority", field, store, align) for label, align, field in PRIO_COLS])
     num_fields = {"rank", "failure_points", "high_risk_days_30d", "failed_part_count"}
     code_fields = {"asset_tag", "plant_code"}
     body_rows = []
@@ -89,10 +74,49 @@ def priority_table(records, sort_by, direction):
                 cls = CODE_12
             else:
                 cls = BODY_13
+            if field == "threshold_exceeded" and value:
+                cls += " pf-strong"
             cells.append(html.Td(text, className=cls, style={"textAlign": a}))
-        body_rows.append(html.Tr(cells))
+        body_rows.append(html.Tr(cells, className="pf-tr--flagged" if record["threshold_exceeded"] else None))
     return table_scroll(html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table"),
                         "점검 우선순위 표")
+
+
+def priority_block(store, assets):
+    """정렬 콜백과 screen_1()이 함께 쓰는 "점검 우선순위" 표."""
+    col, direction = table_sort(store, "priority")
+    return sortable("priority", priority_table(load_priority_table(col, direction, assets=assets), store))
+
+
+# "기계별 평균 소비 전력" 표 — (열 라벨, 정렬, 열 id). 기본 순서는 평균 소비 전력 내림차순.
+POWER_COLS = [("기계", "left", "asset_tag"), ("평균 소비 전력", "left", "avg_power_kw")]
+
+
+def power_block(store, assets, start, end):
+    """기계별 평균 소비 전력 — 막대가 든 압축 표. 단일 계열 막대는 series-1 한 색이고
+    값에 따라 색을 바꾸지 않는다(.pf-risk). 열 제목을 누르면 다른 표와 같은 순서로 정렬된다."""
+    col, direction = table_sort(store, "power")
+    power_rows = load_screen1_power_by_machine(assets, start, end)
+    max_power = max((r["avg_power_kw"] for r in power_rows), default=1.0) or 1.0
+    if col:
+        power_rows = sort_rows(power_rows, lambda r, c=col: r[c], direction)
+    body = [
+        html.Tr([
+            html.Td(r["asset_tag"], className=CODE_12, style={"width": "88px"}),
+            html.Td(html.Div(
+                [html.Span(html.Span(className="pf-risk__fill",
+                                     style={"width": f"{r['avg_power_kw'] / max_power * 100:.1f}%"}),
+                           className="pf-risk__track"),
+                 html.Span(f"{r['avg_power_kw']:,.2f}", className=f"pf-risk__value {NUM_13}",
+                           style={"width": "56px", "flexShrink": "0"})],
+                className="pf-risk")),
+        ])
+        for r in power_rows
+    ]
+    thead = html.Tr([sort_header(label, "power", field, store, align) for label, align, field in POWER_COLS])
+    return sortable("power", table_scroll(
+        html.Table([html.Thead(thead), html.Tbody(body)], className="pf-table pf-table--compact"),
+        "기계별 평균 소비 전력 표"))
 
 
 # KPI 라벨 옆 물음표에 다는 설명. 값이 무엇을 세는지와 집계 범위를 한 문장으로 적는다
@@ -109,15 +133,13 @@ KPI_HELP = {
 }
 
 
-def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=None, start=None, end=None,
-             power_sort=DEFAULT_POWER_SORT):
+def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, table_sort=None, assets=None, start=None, end=None):
     # KPI 4개는 판단에 쓰는 값만 둔다(관측 기계 수·평균 소비 전력은 뺐다).
     #   고위험일(기계·일)·고위험일 비율(%) — 선택 기간. 비율 옆에 직전 같은 길이 기간 값을 둔다.
     #   기준일 고위험 기계(대) — 하루치 스냅샷. 비율(1대 = 10.0%)로 쓰면 정밀해 보이기만 해서 건수로 둔다.
     #   고장 표시 기계·일 — 선택 기간.
     # 고위험 = 고장점수 12 이상 고정(dashboard_data.HIGH_RISK_THRESHOLD). ③의 12/13/14 토글은
     # 모델 비교 결과만 바꾸고 이 값에는 영향을 주지 않는다.
-    prio_sort = prio_sort or DEFAULT_PRIO_SORT
     kpis = load_screen1_kpis(assets, start, end)
     # "최고 베어링 온도"·"부품 출고 금액(누적)"은 삭제한다 — 남은 4개가 같은
     # 458px 폭(4×458 + 3×16 = 1880)으로 행 전체를 균등 분배한다.
@@ -134,12 +156,13 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=N
     row_a = row(ROW_KPI, [kpi_value_tile(label, value_text, w=458, help_text=KPI_HELP[key], sub=sub)
                           for label, value_text, key, sub in kpi_specs])
 
-    sort_by = prio_sort.get("sort_by", DEFAULT_PRIO_SORT["sort_by"])
-    direction = prio_sort.get("direction", DEFAULT_PRIO_SORT["direction"])
-    priority_records = load_priority_table(PRIO_SORT_AXIS.get(sort_by, sort_by), direction, assets=assets)
-    prio = card("점검 우선순위", 1090, ROW_MAIN,
-                priority_table(priority_records, sort_by, direction),
-                right=note("기준일 스냅샷 · 기간 미적용 · 열 머리 ▲▼로 정렬"))
+    prio = card("점검 우선순위", 1090, ROW_MAIN, priority_block(table_sort, assets),
+                right=html.Div(
+                    [note("기준일 스냅샷 · 기간 미적용"),
+                     help_icon("순위 = 등급가중 고장점수가 높은 순서의 점검 우선순위다. 열 제목을 누르면 그 열로 "
+                               "오름차순 → 내림차순 → 기본 순서로 바뀌고, 다른 열로 정렬해도 순위 번호는 그대로다. "
+                               "붉은 행은 고장점수가 위험 기준선(12) 이상인 기계다.")],
+                    style={"display": "flex", "alignItems": "center", "gap": "8px"}))
 
     def machine_tile(status_row):
         return html.Div(
@@ -193,24 +216,8 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=N
                          style={"flexShrink": "0"})],
             style={"display": "flex", "alignItems": "center", "gap": "8px"}))
 
-    power_rows = load_screen1_power_by_machine(assets, start, end, power_sort)
-    max_power = max((r["avg_power_kw"] for r in power_rows), default=1.0) or 1.0
-    # 단일 계열 막대는 series-1 한 색이다 — 값에 따라 색을 바꾸지 않는다(.pf-risk).
-    prows = html.Div(
-        [html.Div([html.Span(r["asset_tag"], className=CODE_12, style={"width": "88px", "flexShrink": "0"}),
-                   html.Span(html.Span(className="pf-risk__fill",
-                                       style={"width": f"{r['avg_power_kw'] / max_power * 100:.1f}%"}),
-                             className="pf-risk__track"),
-                   html.Span(f"{r['avg_power_kw']:,.2f}", className=f"pf-risk__value {NUM_13}",
-                             style={"width": "56px", "flexShrink": "0"})],
-                  className="pf-risk", style={"height": "25px"})
-         for r in power_rows],
-    )
-    power_body = html.Div([prows], style={"display": "flex", "flexDirection": "column"})
-    power = card("기계별 평균 소비 전력 (kW)", 616, ROW_SUB, power_body,
-                 right=html.Div([note(f"{len(power_rows)}개 · 선택 기간 평균"),
-                                 direction_buttons("power-sort-btn", "평균 소비 전력", power_sort, "screen1")],
-                                style={"display": "flex", "alignItems": "center", "gap": "6px"}))
+    power = card("기계별 평균 소비 전력 (kW)", 616, ROW_SUB, power_block(table_sort, assets, start, end),
+                 right=note(f"{len(assets if assets is not None else load_asset_list())}대 · 선택 기간 평균"))
     row_c = row(ROW_SUB, [heat, power])
 
     return html.Div([row_a, row_b, row_c],

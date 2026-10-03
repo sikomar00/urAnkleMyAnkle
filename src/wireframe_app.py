@@ -49,7 +49,7 @@ from .dashboard_data import (  # noqa: E402
 )
 from .ui.base import (  # noqa: E402
     _filter_scope, _focus_asset, _period_dates, _period_index, CANVAS_H, DEFAULT_AUDIENCE,
-    DEFAULT_FILTERS, DEFAULT_POWER_SORT, DEFAULT_PRIO_SORT, DEFAULT_SEG, empty_state, FILTERBAR_H,
+    DEFAULT_FILTERS, DEFAULT_SEG, empty_state, FILTERBAR_H, next_sort,
     FOOTER_H, HEATMAP_UNITS, HEADER_H,
     INDEX_STRING, MARGIN, NO_DATA_MARK, PERIOD_PRESETS, REPORT_AUDIENCES,
 )
@@ -61,7 +61,7 @@ from .ui.figures import (  # noqa: E402
     _trend_figure,
 )
 from .ui.screen1 import (  # noqa: E402
-    screen_1,
+    power_block, priority_block, screen_1,
 )
 from .ui.screen2 import (  # noqa: E402
     screen_2,
@@ -98,8 +98,8 @@ app.layout = html.Div(
         # (관리자가 매번 같은 공장·기간을 다시 고르던 문제)
         dcc.Store(id="filter-store", data=DEFAULT_FILTERS, storage_type="local"),
         dcc.Store(id="seg-store", data=DEFAULT_SEG, storage_type="local"),
-        dcc.Store(id="prio-sort-store", data=DEFAULT_PRIO_SORT),
-        dcc.Store(id="power-sort-store", data=DEFAULT_POWER_SORT),
+        # 모든 표의 정렬 상태 {표 id: {"col", "direction"}} — 빈 dict = 전부 기본 순서.
+        dcc.Store(id="table-sort-store", data={}),
         # ③ "부품군 진단" 표 행 클릭이 바꾸는, 현재 드릴다운 중인 부품군.
         # None이면 screen_3()이 정렬 후 1행(average_precision 최댓값)으로 대체한다.
         dcc.Store(id="selected-family-store", data=None),
@@ -131,20 +131,19 @@ app.layout = html.Div(
     Output("screen-content", "children"),
     Input("screen-tabs", "value"),
     Input("seg-store", "data"),
-    Input("prio-sort-store", "data"),
-    Input("power-sort-store", "data"),
     Input("filter-store", "data"),
     Input("selected-family-store", "data"),
+    # 표 정렬은 sort_table()이 그 표만 다시 그린다. 여기서는 화면을 새로 그릴 때 정렬을 이어받기만 한다.
+    State("table-sort-store", "data"),
 )
-def render_screen(active, seg_state, prio_sort, power_sort, filters, selected_family):
+def render_screen(active, seg_state, filters, selected_family, table_sort):
     assets, start, end = _filter_scope(filters)
     if active in ("1", "2", "4") and not assets:
         return empty_state("조건에 맞는 기계 없음",
                            "선택한 공장·기계 종류·기계 조합에 해당하는 기계가 없다", 400)
     kwargs = {"seg_state": seg_state, "audience": DEFAULT_AUDIENCE}
     if active == "1":
-        kwargs.update(prio_sort=prio_sort or DEFAULT_PRIO_SORT, power_sort=power_sort or DEFAULT_POWER_SORT,
-                      assets=assets, start=start, end=end)
+        kwargs.update(table_sort=table_sort, assets=assets, start=start, end=end)
     if active == "2":
         kwargs.update(asset_tag=_focus_asset(filters), start=start, end=end)
     if active == "3":
@@ -573,30 +572,43 @@ def echo_action(_clicks):
 
 
 # ------------------------------------------------------------
-# ① "점검 우선순위" 열 머리 ▲▼ · "기계별 평균 소비 전력" ▲▼
-# 화면이 다시 그려지면 버튼이 n_clicks=0으로 재생성되며 콜백이 한 번 더 불린다 —
-# write_seg와 동일하게 값이 전부 0인 호출은 무시한다.
+# 표 정렬 — 모든 표의 열 제목 버튼({"type": "sort-th"})이 이 콜백 하나로 모인다.
+# 누른 표 하나만 다시 그리고(나머지는 no_update), 정렬 상태는 table-sort-store에 남긴다.
+# 화면이 다시 그려지면 버튼이 n_clicks=0으로 재생성되며 한 번 더 불린다 — 값 0은 무시한다.
 # ------------------------------------------------------------
-@app.callback(
-    Output("prio-sort-store", "data"),
-    Input({"type": "prio-sort-btn", "index": ALL, "dir": ALL}, "n_clicks"),
-    prevent_initial_call=True,
-)
-def write_priority_sort(n_clicks_list):
-    if not n_clicks_list or not any(n_clicks_list) or not isinstance(ctx.triggered_id, dict):
-        return no_update
-    return {"sort_by": ctx.triggered_id["index"], "direction": ctx.triggered_id["dir"]}
+def _sorted_priority(store, filters, _seg_state, _family):
+    assets, _, _ = _filter_scope(filters)
+    return priority_block(store, assets)
+
+
+def _sorted_power(store, filters, _seg_state, _family):
+    assets, start, end = _filter_scope(filters)
+    return power_block(store, assets, start, end)
+
+
+SORT_TABLE_BUILDERS = {"priority": _sorted_priority, "power": _sorted_power}
 
 
 @app.callback(
-    Output("power-sort-store", "data"),
-    Input({"type": "power-sort-btn", "index": ALL, "dir": ALL}, "n_clicks"),
+    Output({"type": "sort-table", "table": ALL}, "children"),
+    Output("table-sort-store", "data"),
+    Input({"type": "sort-th", "table": ALL, "col": ALL}, "n_clicks"),
+    State({"type": "sort-table", "table": ALL}, "id"),
+    State("table-sort-store", "data"),
+    State("filter-store", "data"),
+    State("seg-store", "data"),
+    State("selected-family-store", "data"),
     prevent_initial_call=True,
 )
-def write_power_sort(n_clicks_list):
-    if not n_clicks_list or not any(n_clicks_list) or not isinstance(ctx.triggered_id, dict):
-        return no_update
-    return ctx.triggered_id["dir"]
+def sort_table(_clicks, table_ids, store, filters, seg_state, family):
+    trig = ctx.triggered[0] if ctx.triggered else None
+    if not trig or not trig.get("value") or not isinstance(ctx.triggered_id, dict):
+        return [no_update] * len(table_ids), no_update
+    table_id = ctx.triggered_id["table"]
+    store = next_sort(store, table_id, ctx.triggered_id["col"])
+    build = SORT_TABLE_BUILDERS[table_id]
+    return ([build(store, filters, seg_state, family).children if tid["table"] == table_id else no_update
+             for tid in table_ids], store)
 
 
 # ------------------------------------------------------------

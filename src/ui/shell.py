@@ -99,7 +99,7 @@ def page_footer():
     보조기술에 contentinfo 영역으로 잡혀 따로 이름을 붙이지 않아도 된다."""
     return html.Footer(
         f"LS-JumpUp 프로젝트 · 전체 데이터 기간 {load_data_start_date()} ~ {load_data_reference_date()}"
-        " · 합성 데이터로 만든 교육용 화면이다",
+        " · 이 프로젝트는 실측 데이터가 아닌 학습용 인공합성 데이터로 진행하였습니다.",
         className="micro-11 pf-muted",
         style={"height": f"{FOOTER_H}px", "padding": f"0 {MARGIN}px", "display": "flex",
                "alignItems": "center", "justifyContent": "flex-end", "whiteSpace": "nowrap",

@@ -82,9 +82,9 @@ MACHINE_OPTIONS = load_asset_list()
 PERIOD_PRESETS = [("최근 30일", 30), ("최근 90일", 90), ("최근 1년", 365), ("전체", None)]
 
 DEFAULT_FILTERS = {
-    # 기본 기간은 최근 90일 — 센서 추이를 읽을 수 있는 폭이다(전체 3년은 한 화면에 뭉개진다).
+    # 기본 기간은 최근 30일 — 기준일 직전 한 달의 상태를 먼저 본다(사용자 결정 2026-10-03).
     # period_index = 눌린 기간 버튼. 시작일·종료일 칸을 직접 고치면 None이 되고 start·end가 정본이 된다.
-    "plant": None, "machine_type": None, "machine": None, "period_index": 1,
+    "plant": None, "machine_type": None, "machine": None, "period_index": 0,
     "start": None, "end": None,
 }
 
@@ -208,13 +208,8 @@ SEG_GROUPS = {
 }
 # SEG_GROUPS["heat_unit"] 인덱스 → dashboard_data.HEATMAP_FREQ의 키.
 HEATMAP_UNITS = ["day", "week", "month", "year"]
-DEFAULT_SEG = {"task": 0, "threshold": 0, "dataset": 0, "heat_unit": 2}
-
-# ① "점검 우선순위" 표의 정렬 상태. sort_by는 표의 열 id이고, 열 머리의 ▲▼ 버튼이 바꾼다.
-DEFAULT_PRIO_SORT = {"sort_by": "failure_points", "direction": "desc"}
-
-# ① "기계별 평균 소비 전력" 막대의 정렬 방향.
-DEFAULT_POWER_SORT = "desc"
+# 히트맵 기본 단위는 일 — 기본 기간(최근 30일)과 짝을 이룬다.
+DEFAULT_SEG = {"task": 0, "threshold": 0, "dataset": 0, "heat_unit": 0}
 
 
 # ============================================================
@@ -311,17 +306,20 @@ def btn(label, w=None, bid=None):
     )
 
 
-def seg(group, label_text, options, sel=0, disabled=False):
+def seg(group, label_text, options, sel=0, disabled=False, help_text=None):
     """세그먼티드 컨트롤(.pf-seg) — 실제로 선택이 바뀐다. group은 seg-store의 키다.
-    ③ 과제 / ③ 위험 기준선 / ④ 데이터셋이 각각 하나의 group."""
+    ③ 과제 / ③ 위험 기준선 / ④ 데이터셋 / ① 히트맵 단위가 각각 하나의 group.
+    help_text를 주면 라벨 옆에 물음표 설명을 단다."""
     buttons = [
         html.Button(o, id={"type": "seg-btn", "group": group, "index": i}, n_clicks=0, disabled=disabled,
                     className="pf-seg__item label-12", **{"aria-pressed": "true" if i == sel else "false"})
         for i, o in enumerate(options)
     ]
+    label = [html.Span(label_text, className=LABEL_12, style={"whiteSpace": "nowrap"})]
+    if help_text:
+        label.append(help_icon(help_text))
     return html.Div(
-        [html.Span(label_text, className=LABEL_12, style={"whiteSpace": "nowrap"}),
-         html.Div(buttons, className="pf-seg")],
+        label + [html.Div(buttons, className="pf-seg")],
         style={"display": "flex", "alignItems": "center", "gap": "8px"},
     )
 
@@ -379,15 +377,69 @@ def help_icon(text):
     return html.Span("?", className="pf-help micro-11", title=text, role="img", **{"aria-label": text})
 
 
-def direction_buttons(btn_type, name, direction, index):
-    """오름차순·내림차순 버튼 한 쌍. 지금 적용된 쪽만 aria-pressed="true"다.
-    direction이 None이면(그 열로 정렬 중이 아니면) 둘 다 눌리지 않은 상태로 둔다."""
-    def btn(value, glyph, word):
-        return html.Button(glyph, id={"type": btn_type, "index": index, "dir": value}, n_clicks=0,
-                           className="pf-sort__btn",
-                           **{"aria-label": f"{name} {word} 정렬",
-                              "aria-pressed": "true" if direction == value else "false"})
-    return html.Span([btn("asc", "▲", "오름차순"), btn("desc", "▼", "내림차순")], className="pf-sort")
+# ── 표 정렬 ─────────────────────────────────────────────────────────
+# 모든 표는 열 제목 자체가 정렬 버튼이다. 같은 열을 누를 때마다 오름차순 → 내림차순 →
+# 기본 순서로 돈다. 상태는 table-sort-store = {표 id: {"col": 열 id, "direction": "asc"|"desc"}}
+# 한 곳에 두고, 화살표(▲ 오름차순 · ▼ 내림차순)는 지금 정렬 중인 열에만 붙는다.
+SORT_NEXT = {None: "asc", "asc": "desc", "desc": None}
+ARIA_SORT = {"asc": "ascending", "desc": "descending"}
+_SORT_ACTION = {None: "오름차순으로 정렬", "asc": "내림차순으로 정렬", "desc": "기본 순서로 되돌림"}
+
+
+def table_sort(store, table_id):
+    """table-sort-store에서 표 하나의 (열 id, 방향). 기본 순서면 (None, None)."""
+    state = (store or {}).get(table_id) or {}
+    direction = state.get("direction")
+    return (state.get("col"), direction) if direction in ARIA_SORT else (None, None)
+
+
+def next_sort(store, table_id, col_id):
+    """같은 열을 다시 누르면 다음 상태로, 다른 열을 누르면 그 열의 오름차순부터 시작한다."""
+    col, direction = table_sort(store, table_id)
+    new = SORT_NEXT[direction if col == col_id else None]
+    updated = dict(store or {})
+    updated[table_id] = {"col": col_id, "direction": new} if new else {}
+    return updated
+
+
+def sort_header(label, table_id, col_id, store, align="left"):
+    """정렬 가능한 열 제목(<th> 안의 버튼). 정렬 중인 열은 제목을 진하게, 방향은 ▲▼로 표시한다."""
+    col, direction = table_sort(store, table_id)
+    active = direction if col == col_id else None
+    action = _SORT_ACTION[active]
+    return html.Th(
+        html.Button(
+            [html.Span(label),
+             # 화살표 자리는 비어 있어도 폭을 잡아 둔다 — 정렬할 때 열 폭이 흔들리지 않게.
+             html.Span({"asc": "▲", "desc": "▼"}.get(active, ""), className="pf-th-sort__arrow",
+                       **{"aria-hidden": "true"})],
+            id={"type": "sort-th", "table": table_id, "col": col_id}, n_clicks=0, type="button",
+            className="pf-th-sort" + (" pf-th-sort--active" if active else ""),
+            title=f"{label} · 누르면 {action}",
+            style={"justifyContent": {"right": "flex-end", "center": "center"}.get(align, "flex-start")},
+            **{"aria-label": f"{label}, {action}"},
+        ),
+        className="label-12 pf-th--sortable" + (" pf-th--num" if align == "right" else ""),
+        style={"textAlign": align},
+        **{"aria-sort": ARIA_SORT.get(active, "none")},
+    )
+
+
+def sort_rows(rows, key, direction):
+    """기본 순서면 그대로 두고, 아니면 key 값으로 정렬한다. 값이 없는(None) 행은 방향과
+    상관없이 맨 아래에 둔다 — 빈 값이 맨 위로 올라와 1등처럼 보이지 않게."""
+    if direction not in ARIA_SORT:
+        return list(rows)
+    present = [r for r in rows if key(r) is not None]
+    missing = [r for r in rows if key(r) is None]
+    return sorted(present, key=key, reverse=direction == "desc") + missing
+
+
+def sortable(table_id, table):
+    """정렬 콜백이 표만 다시 그릴 수 있도록 표를 id 달린 칸에 담는다(화면 전체를 다시 그리면
+    다른 카드의 상태 — 슬라이더 위치·표 페이지·히트맵 확대 — 가 초기화된다)."""
+    return html.Div(table, id={"type": "sort-table", "table": table_id},
+                    style={"height": "100%", "minHeight": "0", "display": "flex", "flexDirection": "column"})
 
 
 def table_placeholder(cols, nrows, row_h, head_h=32, first_idx=False, sort_col=None, width=None, cell_h=6):

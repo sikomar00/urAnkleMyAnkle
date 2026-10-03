@@ -179,12 +179,21 @@ def test_family_recurrence_intervals_rejects_unknown_inputs():
         dd.load_family_recurrence_intervals('AST-1041', 'NotAFamily')
 
 
-def test_priority_table_asc_direction_reverses_desc_and_reranks():
-    desc_rows = dd.load_priority_table('grade', 'desc')
-    asc_rows = dd.load_priority_table('grade', 'asc')
-    assert [r['asset_tag'] for r in asc_rows] == [r['asset_tag'] for r in desc_rows][::-1]
-    assert [r['rank'] for r in asc_rows] == list(range(1, len(asc_rows) + 1))
-    assert asc_rows[0]['failure_points'] <= desc_rows[0]['failure_points']
+def test_priority_table_sort_keeps_priority_rank_and_breaks_ties_by_rank():
+    default = dd.load_priority_table()
+    assert [r['rank'] for r in default] == list(range(1, len(default) + 1))
+    assert [r['asset_tag'] for r in dd.load_priority_table('grade', 'desc')] == [r['asset_tag'] for r in default]
+    rank_of = {r['asset_tag']: r['rank'] for r in default}
+    for direction in ('asc', 'desc'):
+        rows = dd.load_priority_table('failure_points', direction)
+        # 순위 번호는 정렬과 무관하게 기본 우선순위의 번호다.
+        assert {r['asset_tag']: r['rank'] for r in rows} == rank_of
+        points = [r['failure_points'] for r in rows]
+        assert points == sorted(points, reverse=direction == 'desc')
+        # 값이 같은 기계끼리는 어느 방향이든 우선순위 순서를 지킨다.
+        for a, b in zip(rows, rows[1:]):
+            if a['failure_points'] == b['failure_points']:
+                assert a['rank'] < b['rank']
 
 
 def test_screen1_machine_status_covers_all_assets_sorted():

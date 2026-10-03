@@ -130,17 +130,27 @@
   border: var(--stroke-hairline) solid var(--border-control); color: var(--ink-secondary);
 }
 
-/* 열 머리·카드의 오름차/내림차순 버튼 — 눌린 쪽만 진하게 둔다. */
-.pf-sort { display: inline-flex; flex-direction: column; flex-shrink: 0; }
-.pf-sort__btn {
-  width: 14px; height: 11px; padding: 0; border: 0; background: none; cursor: pointer;
-  font-size: 8px; line-height: 11px; color: var(--ink-muted);
-}
-.pf-sort__btn[aria-pressed="true"] { color: var(--accent-text); }
-.pf-sort__btn:hover { color: var(--ink); }
-/* 정렬 표시는 이 버튼이 맡는다 — th[aria-sort]의 기본 글리프·커서를 끈다. */
-.pf-table th.pf-th--sortable { cursor: default; }
+/* ── 표 정렬 — 열 제목 자체가 버튼이다 ───────────────────────────────── */
+/* 누를 때마다 오름차순 → 내림차순 → 기본 순서로 돈다. 정렬 중인 열만 제목을 ink·굵게,
+   화살표(▲▼)를 accent-text로 둔다. 화살표 칸은 비어 있어도 폭을 잡아 열 폭이 흔들리지 않는다.
+   방향 표시는 이 버튼이 맡으므로 02-bundle.css의 th[aria-sort]::after 글리프는 끈다. */
+.pf-table th.pf-th--sortable { color: var(--ink-secondary); cursor: default; }
 .pf-table th.pf-th--sortable::after { content: none; }
+.pf-th-sort {
+  display: flex; align-items: center; gap: var(--space-1);
+  width: 100%; height: 100%; min-height: inherit; padding: 0; margin: 0;
+  border: 0; background: none; color: inherit; font: inherit; text-align: inherit;
+  white-space: nowrap; cursor: pointer;
+}
+.pf-th-sort:hover { color: var(--ink); }
+.pf-th-sort--active { color: var(--ink); font-weight: 600; }
+.pf-th-sort__arrow { display: inline-block; width: 10px; font-size: 9px; color: var(--accent-text); }
+
+/* 압축 표 — 막대 목록처럼 행이 많은 좁은 카드(① 기계별 평균 소비 전력).
+   높이는 구분선 1px을 포함해 머리 28 + 행 24 × 10 = 268px — 카드 본문(270px)에 스크롤 없이 들어간다. */
+.pf-table--compact th { height: 27px; }
+.pf-table--compact td { height: 23px; }
+.pf-table--compact .pf-risk { height: 23px; }
 
 /* 기계 상태 타일 — 상태는 배지(점 + 글자)가 나르고 타일 배경은 칠하지 않는다. */
 .pf-machinetile {
