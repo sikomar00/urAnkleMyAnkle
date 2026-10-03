@@ -3,13 +3,13 @@
 from dash import dcc, html
 
 from ..dashboard_data import (
-    load_asset_failure_heatmap, load_month_coverage, load_priority_table, load_screen1_kpis,
+    load_asset_failure_heatmap, load_period_coverage, load_priority_table, load_screen1_kpis,
     load_screen1_machine_status, load_screen1_power_by_machine,
 )
 from .base import (
-    _span, BODY_13, card, CODE_12, DEFAULT_AUDIENCE, DEFAULT_POWER_SORT, DEFAULT_PRIO_SORT,
-    direction_buttons, GUTTER, help_icon, LABEL_12, MICRO_11, note, NUM_13, row, ROW_KPI, ROW_MAIN,
-    ROW_SUB, status_badge, table_scroll,
+    _span, BODY_13, card, CODE_12, DEFAULT_AUDIENCE, DEFAULT_POWER_SORT, DEFAULT_PRIO_SORT, DEFAULT_SEG,
+    direction_buttons, GUTTER, help_icon, HEATMAP_UNITS, LABEL_12, MICRO_11, note, NUM_13, row, ROW_KPI,
+    ROW_MAIN, ROW_SUB, seg, SEG_GROUPS, status_badge, table_scroll,
 )
 from .figures import _heatmap_figure, _spark_figure
 
@@ -170,16 +170,28 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=N
                              "스파크라인 최근 30일 · 기간 미적용"))
     row_b = row(ROW_MAIN, [prio, status])
 
+    unit_index = (seg_state or DEFAULT_SEG).get("heat_unit", DEFAULT_SEG["heat_unit"])
+    unit = HEATMAP_UNITS[unit_index if 0 <= unit_index < len(HEATMAP_UNITS) else DEFAULT_SEG["heat_unit"]]
     heat_body = html.Div(
         dcc.Graph(id={"type": "heatmap-chart", "index": "screen1"},
-                  figure=_heatmap_figure(load_asset_failure_heatmap(assets, start, end),
-                                       load_month_coverage(start, end), "light"),
+                  figure=_heatmap_figure(load_asset_failure_heatmap(assets, start, end, unit),
+                                         load_period_coverage(start, end, unit), "light"),
                   config={"displayModeBar": False, "responsive": True},
                   style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
         style={"height": "100%", "display": "flex", "flexDirection": "column"},
     )
-    heat = card("고장 표시 히트맵", 1248, ROW_SUB, heat_body,
-                right=note("셀 = 그 달 고장 표시된 부품-일 행 수 합계 · 부분 = 관측 일수가 그 달보다 적은 달"))
+    heat = card(
+        "고장 표시 히트맵", 1248, ROW_SUB, heat_body,
+        right=html.Div(
+            [help_icon("칸 하나 = 그 기계가 그 기간에 고장 표시된 (부품 × 날짜) 건수. "
+                       "1월 5일에 부품 3개, 1월 9일에 부품 2개가 표시됐으면 5다. "
+                       "날짜 끝의 '부분'은 그 구간의 일부 날짜만 데이터에 있다는 뜻이다 — "
+                       "건수가 적은 것이 덜 위험했다는 뜻이 아니다."),
+             seg("heat_unit", "단위", SEG_GROUPS["heat_unit"], sel=unit_index),
+             html.Button("초기 배율", id={"type": "heat-reset-btn", "index": "screen1"}, n_clicks=0,
+                         className="pf-btn label-12", title="확대·이동한 히트맵을 처음 배율로 되돌린다",
+                         style={"flexShrink": "0"})],
+            style={"display": "flex", "alignItems": "center", "gap": "8px"}))
 
     power_rows = load_screen1_power_by_machine(assets, start, end, power_sort)
     max_power = max((r["avg_power_kw"] for r in power_rows), default=1.0) or 1.0

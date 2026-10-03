@@ -199,8 +199,12 @@ SEG_GROUPS = {
     "task": ["기계 고위험일 판별", "부품 7일 내 고장 표시", "부품 당일 고장 표시 판별", "부품군 진단"],
     "threshold": ["12", "13", "14"],
     "dataset": ["원자료", "기계·일 집계"],
+    # ① 고장 표시 히트맵 가로축 단위. 순서 = HEATMAP_UNITS.
+    "heat_unit": ["일", "주", "월", "년"],
 }
-DEFAULT_SEG = {"task": 0, "threshold": 0, "dataset": 0}
+# SEG_GROUPS["heat_unit"] 인덱스 → dashboard_data.HEATMAP_FREQ의 키.
+HEATMAP_UNITS = ["day", "week", "month", "year"]
+DEFAULT_SEG = {"task": 0, "threshold": 0, "dataset": 0, "heat_unit": 2}
 
 # ① "점검 우선순위" 표의 정렬 상태. sort_by는 표의 열 id이고, 열 머리의 ▲▼ 버튼이 바꾼다.
 DEFAULT_PRIO_SORT = {"sort_by": "failure_points", "direction": "desc"}

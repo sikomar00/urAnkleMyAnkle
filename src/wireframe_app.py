@@ -40,7 +40,7 @@ from .dashboard_data import (  # noqa: E402
     load_asset_family_diagnosis,
     load_asset_parts_history,
     load_asset_sensor_series,
-    load_month_coverage,
+    load_period_coverage,
     load_failure_trend,
     load_family_pr_curve_and_confusion,
     load_family_recurrence_intervals,
@@ -50,6 +50,7 @@ from .dashboard_data import (  # noqa: E402
 from .ui.base import (  # noqa: E402
     _filter_scope, _focus_asset, _period_dates, _period_index, CANVAS_H, DEFAULT_AUDIENCE,
     DEFAULT_FILTERS, DEFAULT_POWER_SORT, DEFAULT_PRIO_SORT, DEFAULT_SEG, empty_state, FILTERBAR_H,
+    HEATMAP_UNITS,
     HEADER_H,
     INDEX_STRING, MARGIN, NO_DATA_MARK, PERIOD_PRESETS, REPORT_AUDIENCES,
 )
@@ -267,11 +268,33 @@ def recolor_trend_chart(theme, _active_tab):
     Input("theme-store", "data"),
     Input("screen-tabs", "value"),
     State("filter-store", "data"),
+    State("seg-store", "data"),
 )
-def recolor_heatmap_chart(theme, _active_tab, filters):
+def recolor_heatmap_chart(theme, _active_tab, filters, seg_state):
     assets, start, end = _filter_scope(filters)
-    return [_heatmap_figure(load_asset_failure_heatmap(assets, start, end),
-                            load_month_coverage(start, end), theme or "light")]
+    index = (seg_state or DEFAULT_SEG).get("heat_unit", DEFAULT_SEG["heat_unit"])
+    unit = HEATMAP_UNITS[index if 0 <= index < len(HEATMAP_UNITS) else DEFAULT_SEG["heat_unit"]]
+    return [_heatmap_figure(load_asset_failure_heatmap(assets, start, end, unit),
+                            load_period_coverage(start, end, unit), theme or "light")]
+
+
+# ① 히트맵 "초기 배율" — 드래그로 확대·이동한 축을 처음 범위로 되돌린다.
+# 서버를 거치지 않고 브라우저에서 축 설정만 되돌리면 되므로 clientside로 둔다.
+app.clientside_callback(
+    """function (clicks, figure) {
+        if (!clicks || !figure) { return window.dash_clientside.no_update; }
+        const reset = JSON.parse(JSON.stringify(figure));
+        reset.layout = Object.assign({}, reset.layout, {
+            xaxis: Object.assign({}, reset.layout.xaxis, {autorange: true}),
+            yaxis: Object.assign({}, reset.layout.yaxis, {autorange: 'reversed'}),
+        });
+        return reset;
+    }""",
+    Output({"type": "heatmap-chart", "index": MATCH}, "figure", allow_duplicate=True),
+    Input({"type": "heat-reset-btn", "index": MATCH}, "n_clicks"),
+    State({"type": "heatmap-chart", "index": MATCH}, "figure"),
+    prevent_initial_call=True,
+)
 
 
 # 화면① "기계 상태" 타일 10개의 스파크라인도 같은 방식으로 재색칠한다.

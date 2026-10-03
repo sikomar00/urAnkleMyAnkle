@@ -26,13 +26,15 @@ _SEQ_BLUE = ["seq-blue-100", "seq-blue-200", "seq-blue-300", "seq-blue-400",
 
 
 def _heatmap_figure(heat, coverage, theme):
-    """화면 ① "고장 표시 히트맵" — 자산 × 월 그레인, 셀 = 그 달 고장 표시된
-    부품-일 행 수. period는 이미 오름차순 CSV 순서라 그대로 pivot한다.
-    coverage(load_month_coverage)로 관측 일수가 그 달보다 적은 달에 '부분'을 붙인다."""
+    """화면 ① "고장 표시 히트맵" — 자산 × 기간(일·주·월·년) 그레인, 셀 = 그 기간에
+    고장 표시된 부품-일 행 수. period는 이미 오름차순 CSV 순서라 그대로 pivot한다.
+    coverage(load_period_coverage)로 관측 일수가 달력상 일수보다 적은 칸에 '부분'을 붙인다."""
     theme = _theme(theme)
     pivot = heat.pivot(index="asset_tag", columns="period", values="failed_part_count")
     periods = pivot.columns.tolist()
     partial = [p for p in periods if coverage.get(p, (0, 0))[0] < coverage.get(p, (0, 0))[1]]
+    # 칸이 많아지면(일 단위 3년 = 1,095칸) 2px 간격이 칸보다 넓어져 격자가 사라진다.
+    xgap = 2 if len(periods) <= 120 else 0
     step = max(1, len(periods) // 6)
     tickvals = [p for p in periods if p in set(periods[::step]) | set(partial)]
     observed_days = np.tile([coverage.get(p, (0, 0))[0] for p in periods], (len(pivot.index), 1))
@@ -43,7 +45,7 @@ def _heatmap_figure(heat, coverage, theme):
                      for i, name in enumerate(_SEQ_BLUE)])
     fig = go.Figure(go.Heatmap(
         z=pivot.to_numpy(), x=periods, y=pivot.index.tolist(), customdata=observed_days,
-        zmin=0, zmax=zmax, colorscale=colorscale, xgap=2, ygap=2,
+        zmin=0, zmax=zmax, colorscale=colorscale, xgap=xgap, ygap=2,
         hovertemplate="%{y} · %{x}<br>%{z}건 · 관측 %{customdata}일<extra></extra>",
         colorbar=dict(title=dict(text="건수", font=dict(size=10)), tickfont=dict(size=10)),
     ))

@@ -479,25 +479,39 @@ def load_screen1_power_by_machine(assets: list[str] | None = None,
     ]
 
 
+# 히트맵 가로축 단위 → pandas period 빈도. 화면 ①의 "일 · 주 · 월 · 년" 버튼이 고른다.
+HEATMAP_FREQ = {"day": "D", "week": "W", "month": "M", "year": "Y"}
+
+
+def _period_labels(dates: pd.Series, unit: str) -> pd.Series:
+    """날짜 열 → 히트맵 가로축 라벨. 주는 그 주의 시작일(월요일)로 적는다."""
+    periods = dates.dt.to_period(HEATMAP_FREQ[unit])
+    if unit == "week":
+        return periods.dt.start_time.dt.strftime("%Y-%m-%d")
+    return periods.astype(str)
+
+
 def load_asset_failure_heatmap(assets: list[str] | None = None,
                                start: pd.Timestamp | None = None,
-                               end: pd.Timestamp | None = None) -> pd.DataFrame:
-    """화면 ① "고장 표시 히트맵" — 자산 × 월(YYYY-MM) 그레인, 셀 값은 그 달에
+                               end: pd.Timestamp | None = None,
+                               unit: str = "month") -> pd.DataFrame:
+    """화면 ① "고장 표시 히트맵" — 자산 × 기간 그레인, 셀 값은 그 기간에
     고장 표시된 부품-일 행 수 합계(CURRENT_TARGET == 1인 원자료 행 수).
 
-    ``assets``(None = 전체 기계)와 ``start``(None = 전체 기간)로 범위를 좁힌다.
-    기간이 월 중간에서 시작하면 그 달 칸은 기간 안의 행만 센다.
+    ``assets``(None = 전체 기계)와 ``start``~``end``(None = 열린 쪽 끝)로 범위를 좁히고,
+    ``unit``은 ``HEATMAP_FREQ``의 키(day·week·month·year)다. 기간이 구간 중간에서
+    시작하면 그 칸은 기간 안의 행만 센다.
 
     Returns:
-        asset_tag, period("YYYY-MM"), failed_part_count 3열. 데이터가 없는
-        자산×월 조합도 0으로 채워 히트맵 격자에 빈 칸이 생기지 않게 한다.
+        asset_tag, period(라벨 문자열), failed_part_count 3열. 데이터가 없는
+        자산×기간 조합도 0으로 채워 히트맵 격자에 빈 칸이 생기지 않게 한다.
     """
     raw = _scoped(_load_raw(), start=start, end=end)
-    periods = sorted(raw[DATE_COLUMN].dt.to_period("M").astype(str).unique())
+    periods = sorted(_period_labels(raw[DATE_COLUMN], unit).unique())
     assets = [a for a in load_asset_list() if assets is None or a in assets]
 
     failed = raw.loc[raw[CURRENT_TARGET].eq(1)].copy()
-    failed["period"] = failed[DATE_COLUMN].dt.to_period("M").astype(str)
+    failed["period"] = _period_labels(failed[DATE_COLUMN], unit)
     counts = failed.groupby([ASSET_COLUMN, "period"])[PART_COLUMN].count()
 
     full_index = pd.MultiIndex.from_product([assets, periods], names=[ASSET_COLUMN, "period"])
@@ -508,14 +522,19 @@ def load_asset_failure_heatmap(assets: list[str] | None = None,
     return heat[["asset_tag", "period", "failed_part_count"]]
 
 
-def load_month_coverage(start: pd.Timestamp | None = None,
-                        end: pd.Timestamp | None = None) -> dict[str, tuple[int, int]]:
-    """히트맵 월별 (관측 일수, 그 달의 일수). 관측 일수가 더 적으면 '부분 월'이다 —
-    합계 건수가 작게 나와도 그 달이 덜 위험했다는 뜻이 아니다."""
+def load_period_coverage(start: pd.Timestamp | None = None,
+                         end: pd.Timestamp | None = None,
+                         unit: str = "month") -> dict[str, tuple[int, int]]:
+    """히트맵 가로축 칸별 (관측 일수, 그 칸의 달력상 일수). 관측 일수가 더 적으면
+    '부분' 칸이다 — 합계 건수가 작게 나와도 그 구간이 덜 위험했다는 뜻이 아니다."""
     dates = pd.Series(_scoped(_load_raw(), start=start, end=end)[DATE_COLUMN].unique())
-    months = dates.dt.to_period("M")
-    observed = dates.groupby(months).size()
-    return {str(month): (int(count), int(month.days_in_month)) for month, count in observed.items()}
+    periods = dates.dt.to_period(HEATMAP_FREQ[unit])
+    observed = dates.groupby(periods).size()
+    labels = _period_labels(dates, unit).groupby(periods).first()
+    return {
+        labels[period]: (int(count), (period.end_time.normalize() - period.start_time.normalize()).days + 1)
+        for period, count in observed.items()
+    }
 
 
 def load_asset_list() -> list[str]:

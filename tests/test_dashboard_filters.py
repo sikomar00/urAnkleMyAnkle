@@ -142,11 +142,11 @@ def test_screen1_kpi_cards_explain_scope_with_help_icon_not_label():
     """"선택 기간" 라벨을 빼고 물음표 설명으로 내렸다 — 범위 설명이 사라지면 안 된다."""
     from src.ui.screen1 import KPI_HELP
     layout = w.screen_1()
+    assert len(KPI_HELP) == 4 and '선택 기간' in ' '.join(KPI_HELP.values())
     icons = [n for n in _walk(layout)
              if getattr(n, 'className', None) and 'pf-help' in str(n.className)]
-    assert len(icons) == len(KPI_HELP) == 4
+    assert len(icons) == 5          # KPI 4개 + 히트맵 설명 1개
     assert all(i.title and i.title == _prop(i, 'aria-label') for i in icons)
-    assert '선택 기간' in ' '.join(KPI_HELP.values())
     # 라벨 줄에는 제목과 물음표만 남는다 — 예전 "선택 기간"·"기준일" note가 없어야 한다.
     cards = [n for n in _walk(layout) if getattr(n, 'className', '') == 'pf-card pf-kpi']
     assert len(cards) == 4
@@ -163,3 +163,29 @@ def test_screen1_sort_buttons_mark_only_the_active_one():
     pressed = [b.id for b in buttons if _prop(b, 'aria-pressed') == 'true']
     assert pressed == [{'type': 'prio-sort-btn', 'index': 'plant_code', 'dir': 'asc'},
                        {'type': 'power-sort-btn', 'index': 'screen1', 'dir': 'asc'}]
+
+
+def test_heatmap_units_keep_the_same_total_and_mark_partial_periods():
+    """일·주·월·년 어느 단위로 봐도 센 건수 합계는 같고, 데이터가 일부만 있는 칸은 '부분'이다."""
+    from src.dashboard_data import load_asset_failure_heatmap, load_period_coverage
+    from src.ui.base import HEATMAP_UNITS
+    totals, columns = set(), {}
+    for unit in HEATMAP_UNITS:
+        heat = load_asset_failure_heatmap(unit=unit)
+        coverage = load_period_coverage(unit=unit)
+        periods = sorted(heat['period'].unique())
+        totals.add(int(heat['failed_part_count'].sum()))
+        columns[unit] = len(periods)
+        assert set(periods) == set(coverage), unit
+        partial = [p for p in periods if coverage[p][0] < coverage[p][1]]
+        # 원본은 2022-01-03에 시작해 2025-01-01에 끝난다 — 하루 단위에는 '부분'이 없다.
+        assert partial == ([] if unit == 'day' else partial) and len(partial) <= 2, unit
+    assert totals == {21636}
+    assert columns == {'day': 1095, 'week': 157, 'month': 37, 'year': 4}
+
+
+def test_heatmap_card_has_unit_buttons_and_reset():
+    layout = w.screen_1()
+    ids = [n.id for n in _walk(layout) if isinstance(getattr(n, 'id', None), dict)]
+    assert [i['index'] for i in ids if i.get('group') == 'heat_unit'] == [0, 1, 2, 3]
+    assert {'type': 'heat-reset-btn', 'index': 'screen1'} in ids
