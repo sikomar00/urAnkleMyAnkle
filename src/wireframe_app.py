@@ -25,6 +25,7 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import numpy as np
 import plotly.graph_objects as go
 from dash import Dash, html, dcc, dash_table, Input, Output, State, ALL, MATCH, ctx, no_update
 from plotly.subplots import make_subplots
@@ -54,6 +55,7 @@ from .dashboard_data import (  # noqa: E402
     load_data_quality_summary,
     load_data_reference_date,
     load_data_start_date,
+    load_month_coverage,
     load_failure_trend,
     load_family_feature_importance,
     load_family_pr_curve_and_confusion,
@@ -160,7 +162,8 @@ MACHINE_OPTIONS = load_asset_list()
 PERIOD_PRESETS = [("최근 30일", 30), ("최근 90일", 90), ("최근 1년", 365), ("전체", None)]
 
 DEFAULT_FILTERS = {
-    "plant": None, "machine_type": None, "machine": None, "period_index": 3,
+    # 기본 기간은 최근 90일 — 센서 추이를 읽을 수 있는 폭이다(전체 3년은 한 화면에 뭉개진다).
+    "plant": None, "machine_type": None, "machine": None, "period_index": 1,
 }
 
 
@@ -587,23 +590,31 @@ _SEQ_BLUE = ["seq-blue-100", "seq-blue-200", "seq-blue-300", "seq-blue-400",
              "seq-blue-500", "seq-blue-600", "seq-blue-700"]
 
 
-def _heatmap_figure(heat, theme):
+def _heatmap_figure(heat, coverage, theme):
     """화면 ① "고장 표시 히트맵" — 자산 × 월 그레인, 셀 = 그 달 고장 표시된
-    부품-일 행 수. period는 이미 오름차순 CSV 순서라 그대로 pivot한다."""
+    부품-일 행 수. period는 이미 오름차순 CSV 순서라 그대로 pivot한다.
+    coverage(load_month_coverage)로 관측 일수가 그 달보다 적은 달에 '부분'을 붙인다."""
     theme = _theme(theme)
     pivot = heat.pivot(index="asset_tag", columns="period", values="failed_part_count")
+    periods = pivot.columns.tolist()
+    partial = [p for p in periods if coverage.get(p, (0, 0))[0] < coverage.get(p, (0, 0))[1]]
+    step = max(1, len(periods) // 6)
+    tickvals = [p for p in periods if p in set(periods[::step]) | set(partial)]
+    observed_days = np.tile([coverage.get(p, (0, 0))[0] for p in periods], (len(pivot.index), 1))
     zmax = max(int(pivot.to_numpy().max()), 1)
     first = 1 / zmax  # 값 1의 위치 — 0만 표면색, 1 이상은 seq-blue-100부터
     colorscale = ([[0, C("surface-sunken", theme)], [first * 0.999, C("surface-sunken", theme)]]
                   + [[first + (1 - first) * i / (len(_SEQ_BLUE) - 1), C(name, theme)]
                      for i, name in enumerate(_SEQ_BLUE)])
     fig = go.Figure(go.Heatmap(
-        z=pivot.to_numpy(), x=pivot.columns.tolist(), y=pivot.index.tolist(),
+        z=pivot.to_numpy(), x=periods, y=pivot.index.tolist(), customdata=observed_days,
         zmin=0, zmax=zmax, colorscale=colorscale, xgap=2, ygap=2,
-        hovertemplate="%{y} · %{x}<br>%{z}건<extra></extra>",
+        hovertemplate="%{y} · %{x}<br>%{z}건 · 관측 %{customdata}일<extra></extra>",
         colorbar=dict(title=dict(text="건수", font=dict(size=10)), tickfont=dict(size=10)),
     ))
-    fig.update_xaxes(tickfont=dict(size=10), showgrid=False, tickformat="%Y-%m")
+    fig.update_xaxes(type="category", tickmode="array", tickvals=tickvals,
+                     ticktext=[f"{p} 부분" if p in partial else p for p in tickvals],
+                     tickfont=dict(size=10), showgrid=False)
     fig.update_yaxes(tickfont=dict(size=11), showgrid=False, autorange="reversed")
     fig.update_layout(template=_figure_template(theme), height=270, margin=dict(l=8, r=8, t=8, b=8),
                       hovermode="closest")
@@ -640,7 +651,10 @@ SMULT_SENSORS = [("베어링 온도 (°C)", "temp_bearing_degC"),
                  ("소비 전력 (kW)", "power_consumption_kw")]
 # 카드 본문 452 = 패널 48×8 + 간격 4×7 + 공유 x축 40. 왼쪽 라벨 열과 차트 내부
 # 패널이 같은 치수를 써야 1:1로 정렬되므로 상수로 묶어 둔다.
-SMULT_PANEL_H, SMULT_GAP, SMULT_AXIS_H = 48, 4, 40
+# 화면 ② 아래 행 높이 = 본문 928 - 기계 정보 줄 88 - 거터 16. 카드 본문(824 - 70)에
+# 패널 8개 + 간격 7개 + 공유 x축 40이 들어가도록 패널 높이를 정한다.
+SCREEN2_ROW_H = 824
+SMULT_PANEL_H, SMULT_GAP, SMULT_AXIS_H = 85, 4, 40
 SMULT_PLOT_H = SMULT_PANEL_H * len(SMULT_SENSORS) + SMULT_GAP * (len(SMULT_SENSORS) - 1)
 SMULT_BODY_H = SMULT_PLOT_H + SMULT_AXIS_H
 
@@ -704,19 +718,20 @@ def _parts_figure(df, theme):
     """화면 ② "부품 출고 이력" — 부품별 출고 금액 상위 10개 가로 막대(series-1 단일 계열).
     금액 내림차순이 위로 오도록 autorange="reversed"."""
     theme = _theme(theme)
+    labels = [f"{no}<br>{desc}" for no, desc in zip(df["part_no"], df["part_description"])]
     fig = go.Figure(go.Bar(
-        x=df["total_issue_value_inr"], y=df["part_no"], orientation="h",
+        x=df["total_issue_value_inr"], y=labels, orientation="h", width=0.4,
         marker_color=C("series-1", theme),
         text=[f"{v:,.0f}" for v in df["total_issue_value_inr"]],
         textposition="outside", textfont=dict(size=11),
         cliponaxis=False,
         customdata=df["part_description"],
-        hovertemplate="%{y} · %{customdata}<br>%{text} INR<extra></extra>",
+        hovertemplate="%{customdata}<br>%{text} INR<extra></extra>",
     ))
     fig.update_yaxes(autorange="reversed", showgrid=False, tickfont=dict(size=11))
     fig.update_xaxes(visible=False, range=[0, df["total_issue_value_inr"].max() * 1.35])
-    fig.update_layout(template=_figure_template(theme), height=132, margin=dict(l=0, r=0, t=0, b=0),
-                      bargap=0.28, hovermode="closest")
+    fig.update_layout(template=_figure_template(theme), height=SCREEN2_ROW_H - 76,
+                      margin=dict(l=0, r=0, t=0, b=0), hovermode="closest")
     return fig
 
 
@@ -872,13 +887,13 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=N
 
     heat_body = html.Div(
         dcc.Graph(id={"type": "heatmap-chart", "index": "screen1"},
-                  figure=_heatmap_figure(load_asset_failure_heatmap(assets, start), "light"),
+                  figure=_heatmap_figure(load_asset_failure_heatmap(assets, start), load_month_coverage(start), "light"),
                   config={"displayModeBar": False, "responsive": True},
                   style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
         style={"height": "100%", "display": "flex", "flexDirection": "column"},
     )
     heat = card("고장 표시 히트맵", 1248, ROW_SUB, heat_body,
-                right=note("셀 = 그 달 고장 표시된 부품-일 행 수 합계 · 자산 × 월"))
+                right=note("셀 = 그 달 고장 표시된 부품-일 행 수 합계 · 부분 = 관측 일수가 그 달보다 적은 달"))
 
     power_rows = load_screen1_power_by_machine(assets, start)
     max_power = max((r["avg_power_kw"] for r in power_rows), default=1.0) or 1.0
@@ -967,8 +982,8 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
                    style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"})],
         8, style={"height": f"{SMULT_BODY_H}px"},
     )
-    smult = card("센서 8종 스몰 멀티플", 1248, 520, sm_body,
-                 right=note("x축 공유 · 밴드 = 위험 기준선 초과일"))
+    smult = card("센서 8종 스몰 멀티플", 1248, SCREEN2_ROW_H, sm_body,
+                 right=note("x축 공유 · 밴드 = 고위험일(고장점수 12 이상)"))
 
     # "이상 점수 추이"·"군집 위치"·"고장 직전 센서 변화"·"동종 기계 대비" 4개
     # 카드를 삭제한다. K-Means 결과(군집·이상 점수)는 화면④ 데이터 조회의
@@ -985,8 +1000,9 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
                                figure=_parts_figure(parts_history, "light"),
                                config={"displayModeBar": False, "responsive": True},
                                style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"})
-    parts = card("부품 출고 이력", 616, 520, parts_body)
-    row_b = row(520, [smult, parts])
+    parts = card("부품 출고 금액 상위 10 (INR)", 616, SCREEN2_ROW_H, parts_body,
+                 right=note("선택 기간 합계"))
+    row_b = row(SCREEN2_ROW_H, [smult, parts])
 
     return html.Div([strip, row_b],
                      style={"display": "flex", "flexDirection": "column", "gap": f"{GUTTER}px"})
@@ -1434,16 +1450,16 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None)
     dtable = card(f"데이터 조회 · {SEG_GROUPS['dataset'][dataset_index]}", 1880, 524, dtable_body,
                   right=note("공장·기계 종류·기계·기간 필터 적용"))
 
-    # 열 폭은 반쪽 표 폭에 대한 비율 — 두 반쪽이 카드 폭을 나눠 가진다.
-    dict_cols = [("컬럼명", "30%", "left"), ("타입", "13%", "left"), ("단위", "12%", "left"),
-                 ("결측률 (%)", "17%", "right"), ("설명", "28%", "left")]
+    dict_cols = [("컬럼명", "left"), ("타입", "left"), ("단위", "left"),
+                 ("결측률 (%)", "right"), ("설명", "left")]
 
     def dict_table(records):
-        """데이터 사전 표(.pf-table, 행 22px) — "컬럼명"·"설명" 칸은 말줄임 + title 툴팁."""
+        """데이터 사전 표(.pf-table) — 글자를 자르지 않는다. 열 폭은 내용에 맞추고 설명만
+        줄바꿈하며, 22행이 카드 높이를 넘으면 카드 안에서 세로로 스크롤한다(헤더 고정)."""
         thead = html.Tr(
             [html.Th(l, className="label-12" + (" pf-th--num" if a == "right" else ""),
-                     style={"width": w, "height": "24px", "padding": "0 8px", "textAlign": a})
-             for l, w, a in dict_cols],
+                     style={"height": "24px", "padding": "0 8px", "textAlign": a})
+             for l, a in dict_cols],
         )
         body_rows = []
         for record in records:
@@ -1452,20 +1468,17 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None)
             values = [record["column"], record["dtype_label"], record["unit"],
                       missing_text, record["description"]]
             cells = []
-            for (l, w, a), text in zip(dict_cols, values):
+            for (l, a), text in zip(dict_cols, values):
                 cls = {"컬럼명": CODE_12, "결측률 (%)": f"{NUM_13} pf-td--num"}.get(l, "label-12")
-                cells.append(html.Td(text, className=cls, title=text if l in ("컬럼명", "설명") else None,
-                                     style={"height": "22px", "padding": "0 8px", "textAlign": a}))
+                cell_style = {"height": "24px", "padding": "0 8px", "textAlign": a}
+                if l == "설명":
+                    cell_style["whiteSpace"] = "normal"
+                cells.append(html.Td(text, className=cls, style=cell_style))
             body_rows.append(html.Tr(cells))
-        return html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table",
-                           style={"tableLayout": "fixed"})
+        return html.Div(html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table"),
+                        className="pf-table__scroll")
 
-    def dict_half(records):
-        return html.Div(dict_table(records), style={"flex": "1 1 0", "minWidth": "0"})
-
-    dict_rows = load_data_dictionary()
-    ddict = card("데이터 사전 (22열)", 932, ROW_SUB,
-                 hstack([dict_half(dict_rows[:11]), dict_half(dict_rows[11:])], 16),
+    ddict = card("데이터 사전 (22열)", 932, ROW_SUB, dict_table(load_data_dictionary()),
                  right=note("데이터셋 전체 기준 · 필터 미적용"))
 
     def info_box(text, h=94):
@@ -2156,7 +2169,7 @@ def recolor_trend_chart(theme, _active_tab):
 )
 def recolor_heatmap_chart(theme, _active_tab, filters):
     assets, start = _filter_scope(filters)
-    return [_heatmap_figure(load_asset_failure_heatmap(assets, start), theme or "light")]
+    return [_heatmap_figure(load_asset_failure_heatmap(assets, start), load_month_coverage(start), theme or "light")]
 
 
 # 화면① "기계 상태" 타일 10개의 스파크라인도 같은 방식으로 재색칠한다.

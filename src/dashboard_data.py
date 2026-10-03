@@ -463,6 +463,15 @@ def load_asset_failure_heatmap(assets: list[str] | None = None,
     return heat[["asset_tag", "period", "failed_part_count"]]
 
 
+def load_month_coverage(start: pd.Timestamp | None = None) -> dict[str, tuple[int, int]]:
+    """히트맵 월별 (관측 일수, 그 달의 일수). 관측 일수가 더 적으면 '부분 월'이다 —
+    합계 건수가 작게 나와도 그 달이 덜 위험했다는 뜻이 아니다."""
+    dates = pd.Series(_scoped(_load_raw(), start=start)[DATE_COLUMN].unique())
+    months = dates.dt.to_period("M")
+    observed = dates.groupby(months).size()
+    return {str(month): (int(count), int(month.days_in_month)) for month, count in observed.items()}
+
+
 def load_asset_list() -> list[str]:
     """전체 자산 태그를 알파벳 오름차순으로 반환한다."""
     raw = _load_raw()

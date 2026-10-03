@@ -32,6 +32,7 @@ FORBIDDEN = {
     "localStorage": r"localStorage",
     "엔티티 무관": r"엔티티 무관",
     "고장율": r"고장율",
+    "렌더 실패": r"화면을 불러오지 못했습니다",  # render_screen이 예외를 잡았을 때의 문구
 }
 TRUNCATED_CELLS_JS = """() => [...document.querySelectorAll('#screen-content table.pf-table th, #screen-content table.pf-table td')]
     .filter(c => c.scrollWidth > c.clientWidth + 1).length"""
