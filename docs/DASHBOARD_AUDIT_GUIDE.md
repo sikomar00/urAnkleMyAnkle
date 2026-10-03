@@ -9,9 +9,10 @@
 ```powershell
 cd C:\urAnkleMyAnkle
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m src.init_dashboard_db
 .\.venv\Scripts\python.exe src\wireframe_app.py
 ```
+
+앱이 시작할 때 `create_audit_tables()`가 계정·로그 테이블을 만들고 `.env`의 기본 관리자 계정을 준비한다. 예전 `src/init_dashboard_db.py`는 `archive/legacy/src/`로 옮겼다. DB 없이 화면만 보려면 `python -m src.wireframe_app --demo`, 로그인까지 보려면 `python -m scripts.local_login_preview`.
 
 브라우저에서 `http://127.0.0.1:8052/`를 열면 로그인 화면부터 표시됩니다. 실행 중인 대시보드 코드를 수정한 뒤에는 **기존 터미널 서버를 Ctrl+C로 종료하고 다시 실행**해야 수정이 반영됩니다. DB URL, AES 키, 로그인 세션 서명 키와 단일 관리자 계정은 Git에서 제외된 `.env`에 둡니다. `.env.example`은 변수 이름만 보여줍니다. 로그인 화면에는 공개 회원가입이나 관리자 등록 버튼이 없습니다. 자세한 절차는 [`DASHBOARD_LOGIN_GUIDE.md`](DASHBOARD_LOGIN_GUIDE.md)를 확인해 주세요.
 
@@ -79,7 +80,7 @@ Workbench에서 `SELECT * FROM predictive_maintenance.action_logs;`만 실행하
 - `src/audit_service.py`: 트랜잭션, 중복 방지, CSV 변경 확인, 관리자 등록
 - `src/security_service.py`: Argon2id와 AES-256-GCM
 - `src/db_service.py`: 기존 MySQL 연결 설정 재사용
-- `src/init_dashboard_db.py`: 로그·관리자 테이블 생성
+- `src/audit_service.py`의 `create_audit_tables()`: 앱 시작 시 로그·관리자 테이블 생성(예전 `init_dashboard_db.py`는 `archive/legacy/`)
 - `tests/test_audit_service.py`: SQLite 테스트 DB로 저장·보안·중복 검증
 
 기존 `dashboard_failure_alerts`, `dashboard_system_logs` 테이블과 구 DB 시범 코드는 이전 실험의 흔적이며 현재 5탭 화면의 로그는 위 새 테이블로 들어갑니다.

@@ -3,7 +3,7 @@
 현재 5탭 대시보드에는 ⑥ 화면이 없습니다. 현행 구조와 실행 방법은
 [`DASHBOARD_AUDIT_GUIDE.md`](DASHBOARD_AUDIT_GUIDE.md)를 확인해 주세요.
 
-아래 내용은 이전 시범 구현 기록입니다.
+아래 내용은 이전 시범 구현 기록입니다. 여기 나오는 `src/alert_service.py`·`src/init_dashboard_db.py`는 `archive/legacy/src/`로 옮겼고, `src/db_inga.py`는 삭제했습니다(2026-10-03, `1ca1000`).
 
 이 문서는 `KYS-dashboard` 브랜치의 설비 대시보드에 추가한 DB 기능을 설명합니다. 기존 ①~⑤ 화면은 CSV 기반 조회를 유지하고, ⑥ 화면에서 대시보드 전용 MySQL 표를 조회합니다. 사진으로 만든 화면 시안의 숫자는 코드에 사용하지 않았습니다.
 

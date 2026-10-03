@@ -10,7 +10,7 @@
 
 | 데이터 | 제공기관 | URL | 접근일 | 라이선스/이용허락 | 파일명 | 비고 |
 |---|---|---|---|---|---|---|
-| 산업 설비 센서·고장 데이터 | Kaggle — Machine Demand & Failure Prediction Dataset | (TODO: Kaggle 게시 페이지 URL 미기록) | 2026-09-22 이전 (저장소 최초 커밋 기준, 정확한 날짜 미기록) | CC BY-SA 4.0 (2026-09-21 게시 페이지 확인 기준) | `data/raw/synthetic_industrial_machine_data.csv` | 219,000행 × 22열. 2022-01-03~2025-01-01(1,095일) × 기계 10대 × 부품 20종, 공장 3곳(CHN-02/DHR-03/PUN-01), 기계 종류 5종. 팀 내 공유는 Notion 첨부 경유. **현재 유일한 raw 데이터** |
+| 산업 설비 센서·고장 데이터 | Kaggle — Machine Demand & Failure Prediction Dataset | TODO(사용자 확인: Kaggle 게시 페이지 URL) | TODO(사용자 확인: 다운로드일 — 이 저장소에 CSV가 처음 커밋된 날은 2026-09-27, `42cd069`) | CC BY-SA 4.0 (2026-09-21 게시 페이지 확인 기준) | `data/raw/synthetic_industrial_machine_data.csv` | 219,000행 × 22열. 2022-01-03~2025-01-01(1,095일) × 기계 10대 × 부품 20종, 공장 3곳(CHN-02/DHR-03/PUN-01), 기계 종류 5종. 팀 내 공유는 Notion 첨부 경유. **현재 유일한 raw 데이터** |
 | ~~공공 전력데이터~~ | ~~(공공데이터포털/한국전력거래소 등)~~ | | | | | **이전 요건, 현재 미사용** |
 | ~~기상 데이터~~ | ~~기상청 등~~ | | | | | **이전 요건, 현재 미사용** |
 
