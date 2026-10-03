@@ -86,12 +86,14 @@ SMULT_SENSORS = [("베어링 온도 (°C)", "temp_bearing_degC"),
                  ("부하율 (%)", "load_pct"),
                  ("회전 속도 (rpm)", "shaft_rpm"),
                  ("소비 전력 (kW)", "power_consumption_kw")]
-# 카드 본문 452 = 패널 48×8 + 간격 4×7 + 공유 x축 40. 왼쪽 라벨 열과 차트 내부
-# 패널이 같은 치수를 써야 1:1로 정렬되므로 상수로 묶어 둔다.
+# 왼쪽 라벨 열과 차트 내부 패널이 같은 치수를 써야 1:1로 정렬되므로 상수로 묶어 둔다.
 # 화면 ② 아래 행 높이 = 본문 928 - 기계 정보 줄 88 - 거터 16. 카드 본문(824 - 70)에
-# 패널 8개 + 간격 7개 + 공유 x축 40이 들어가도록 패널 높이를 정한다.
+# 패널 78×8 + 간격 12×7 + 공유 x축 40 = 748이 들어간다. 간격 한가운데에 센서 사이 구분선을 긋는다
+# (screen2 — 간격이 좁으면 위 패널의 아래 경계 점선과 아래 패널의 위 경계 점선이 붙어 보인다).
 SCREEN2_ROW_H = 824
-SMULT_PANEL_H, SMULT_GAP, SMULT_AXIS_H = 85, 4, 40
+SMULT_PANEL_H, SMULT_GAP, SMULT_AXIS_H = 78, 12, 40
+# 패널 위아래 여백(값 범위의 비율) — 경계 점선과 경계 밖 점이 패널 가장자리에 붙거나 잘리지 않게 한다.
+SMULT_Y_PAD = 0.12
 SMULT_PLOT_H = SMULT_PANEL_H * len(SMULT_SENSORS) + SMULT_GAP * (len(SMULT_SENSORS) - 1)
 SMULT_BODY_H = SMULT_PLOT_H + SMULT_AXIS_H
 
@@ -151,6 +153,10 @@ def _smult_figure(df, theme, bounds=None):
         if not bounds or df.empty:
             continue
         bound = bounds[column]
+        low = min(df[column].min(), bound["lower"])
+        high = max(df[column].max(), bound["upper"])
+        pad = (high - low) * SMULT_Y_PAD or 1
+        fig.update_yaxes(range=[low - pad, high + pad], row=r, col=1)
         for level in (bound["lower"], bound["upper"]):
             fig.add_trace(go.Scatter(x=[dates.iloc[0], dates.iloc[-1]], y=[level, level], mode="lines",
                                       line=dict(color=C("chart-muted", theme), width=1, dash="dash"),

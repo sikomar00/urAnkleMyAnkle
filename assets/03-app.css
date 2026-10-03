@@ -149,6 +149,12 @@
 .pf-th-sort--active { color: var(--ink); font-weight: 600; }
 .pf-th-sort__arrow { display: inline-block; width: 10px; font-size: 9px; color: var(--accent-text); }
 
+/* 화면 ② 센서 8종 종합 지표 — 센서 사이 구분선(라벨 열 + 차트 전체 폭). 마우스는 아래 차트로 통과시킨다. */
+.pf-smult-sep {
+  position: absolute; left: 0; right: 0; height: 0; pointer-events: none;
+  border-top: var(--stroke-hairline) solid var(--chart-axis);
+}
+
 /* 카드 머리 범례 표식 — 02-bundle.css의 .pf-legend__key(12×2 선)·--dot(8px 점)에 색과 모양만 더한다. */
 .pf-key--line { background: var(--series-1); }
 .pf-key--dash { width: 18px; height: 0; background: none; border-top: var(--stroke-mark) dashed var(--chart-muted); }

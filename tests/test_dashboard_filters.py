@@ -263,3 +263,21 @@ def test_rate_change_shows_trend_glyph_with_words_not_color_only():
     better = rate_change(9.7, 13.3)
     assert _text(better[0]) == '▼ 3.6%p 감소' and 'pf-delta--better' in better[0].className
     assert rate_change(9.71, 9.68) == '직전 같은 기간과 같음 (9.7)'
+
+
+def test_sensor_card_separates_each_sensor_with_a_solid_line_in_the_gap():
+    from src.ui.figures import SMULT_GAP, SMULT_PANEL_H, SMULT_SENSORS, SMULT_Y_PAD
+    filters = _filters(machine='AST-2031', period_index=LAST_30_DAYS)
+    _, start, end = w._filter_scope(filters)
+    layout = w.screen_2(asset_tag='AST-2031', start=start, end=end)
+    seps = [n for n in _walk(layout) if 'pf-smult-sep' in (getattr(n, 'className', None) or '')]
+    # 센서 8개 사이 7줄, 각 줄은 패널 사이 간격 한가운데.
+    assert [int(n.style['top'][:-2]) for n in seps] == [
+        i * SMULT_PANEL_H + (i - 1) * SMULT_GAP + SMULT_GAP // 2 for i in range(1, len(SMULT_SENSORS))]
+    # 경계 점선이 패널 가장자리에 붙지 않도록 y 범위에 여백이 있다.
+    graph = next(n for n in _walk(layout) if isinstance(n, dcc.Graph) and n.id['type'] == 'smult-chart')
+    bearing = next(t for t in graph.figure.data if t.mode == 'lines' and t.line.dash == 'dash')
+    low, high = graph.figure.layout.yaxis.range
+    lower, upper = sorted(bearing.y)[0], sorted(bearing.y)[-1]
+    assert low < min(lower, upper) and high > max(lower, upper)
+    assert SMULT_Y_PAD > 0

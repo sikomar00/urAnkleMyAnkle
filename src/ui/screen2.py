@@ -90,13 +90,23 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
         style={"width": "160px", "flexShrink": "0", "display": "flex", "flexDirection": "column",
                "gap": f"{SMULT_GAP}px"},
     )
-    sm_body = hstack(
-        [sensor_labels,
-         dcc.Graph(id={"type": "smult-chart", "index": "screen2"},
-                   figure=_smult_figure(series, "light", bounds),
-                   config={"displayModeBar": False, "responsive": True},
-                   style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"})],
-        8, style={"height": f"{SMULT_BODY_H}px"},
+    # 센서 사이 구분선 — 패널 사이 간격 한가운데에 라벨 열부터 차트 끝까지 실선 하나(점선은 경계값이라
+    # 구분선으로 쓰지 않는다). 패널 높이가 고정 px이라 라벨 열·차트 패널과 같은 위치에 맞는다.
+    separators = [
+        html.Div(className="pf-smult-sep",
+                 style={"top": f"{i * SMULT_PANEL_H + (i - 1) * SMULT_GAP + SMULT_GAP // 2}px"})
+        for i in range(1, len(SMULT_SENSORS))
+    ]
+    sm_body = html.Div(
+        [hstack(
+            [sensor_labels,
+             dcc.Graph(id={"type": "smult-chart", "index": "screen2"},
+                       figure=_smult_figure(series, "light", bounds),
+                       config={"displayModeBar": False, "responsive": True},
+                       style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"})],
+            8, style={"height": f"{SMULT_BODY_H}px"},
+        )] + separators,
+        style={"position": "relative"},
     )
     smult = card("센서 8종 종합 지표", 1248, SCREEN2_ROW_H, sm_body,
                  right=html.Div([legend([("line", "측정값"), ("dash", "정상 범위 경계"),
