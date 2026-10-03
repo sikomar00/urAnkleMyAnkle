@@ -129,8 +129,24 @@
 .pf-app .Select-noresults { color: var(--ink-muted); }
 
 /* KPI 타일 — 클릭하면 표 정렬이 바뀌는 타일 */
-.pf-kpi--action { border-color: var(--border-control); cursor: pointer; }
-.pf-kpi--action:hover { background: var(--surface-hover); }
+/* KPI 라벨 옆 물음표 — 설명은 브라우저 기본 툴팁(title)이 띄운다. */
+.pf-help {
+  width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+  display: inline-grid; place-items: center; cursor: help;
+  border: var(--stroke-hairline) solid var(--border-control); color: var(--ink-secondary);
+}
+
+/* 열 머리·카드의 오름차/내림차순 버튼 — 눌린 쪽만 진하게 둔다. */
+.pf-sort { display: inline-flex; flex-direction: column; flex-shrink: 0; }
+.pf-sort__btn {
+  width: 14px; height: 11px; padding: 0; border: 0; background: none; cursor: pointer;
+  font-size: 8px; line-height: 11px; color: var(--ink-muted);
+}
+.pf-sort__btn[aria-pressed="true"] { color: var(--accent-text); }
+.pf-sort__btn:hover { color: var(--ink); }
+/* 정렬 표시는 이 버튼이 맡는다 — th[aria-sort]의 기본 글리프·커서를 끈다. */
+.pf-table th.pf-th--sortable { cursor: default; }
+.pf-table th.pf-th--sortable::after { content: none; }
 
 /* 기계 상태 타일 — 상태는 배지(점 + 글자)가 나르고 타일 배경은 칠하지 않는다. */
 .pf-machinetile {

@@ -36,6 +36,12 @@ def _walk(node):
         yield from _walk(children)
 
 
+
+def _prop(node, name):
+    """aria-* 는 파이썬 식별자가 아니라 to_plotly_json()으로 읽는다."""
+    return node.to_plotly_json()['props'].get(name)
+
+
 def _text(node):
     return ''.join(str(n) for n in _walk(node) if isinstance(n, (str, int, float)))
 
@@ -114,3 +120,46 @@ def test_date_boxes_render_as_native_date_inputs():
     assert [n.id for n in boxes] == ['start-date', 'end-date']
     assert {n.type for n in boxes} == {'date'}
     assert {(n.min, n.max) for n in boxes} == {('2022-01-03', '2025-01-01')}
+
+
+
+def test_priority_table_sorts_by_every_column_and_reverses():
+    """열 머리 ▲▼가 보내는 정렬 축 전부가 동작하고, 오름차순은 내림차순의 역순이다."""
+    from src.dashboard_data import PRIORITY_SORT_KEYS, load_priority_table
+    from src.ui.screen1 import PRIO_COLS, PRIO_SORT_AXIS
+    for _label, _align, field in PRIO_COLS:
+        axis = PRIO_SORT_AXIS.get(field, field)
+        assert axis in PRIORITY_SORT_KEYS, field
+        desc = load_priority_table(axis, 'desc')
+        asc = load_priority_table(axis, 'asc')
+        assert [r['asset_tag'] for r in asc] == [r['asset_tag'] for r in desc][::-1], field
+        assert [r['rank'] for r in asc] == list(range(1, 11)), field
+    # 모르는 축은 기본(등급가중 고장점수)으로 떨어진다.
+    assert load_priority_table('없는열') == load_priority_table('grade')
+
+
+def test_screen1_kpi_cards_explain_scope_with_help_icon_not_label():
+    """"선택 기간" 라벨을 빼고 물음표 설명으로 내렸다 — 범위 설명이 사라지면 안 된다."""
+    from src.ui.screen1 import KPI_HELP
+    layout = w.screen_1()
+    icons = [n for n in _walk(layout)
+             if getattr(n, 'className', None) and 'pf-help' in str(n.className)]
+    assert len(icons) == len(KPI_HELP) == 4
+    assert all(i.title and i.title == _prop(i, 'aria-label') for i in icons)
+    assert '선택 기간' in ' '.join(KPI_HELP.values())
+    # 라벨 줄에는 제목과 물음표만 남는다 — 예전 "선택 기간"·"기준일" note가 없어야 한다.
+    cards = [n for n in _walk(layout) if getattr(n, 'className', '') == 'pf-card pf-kpi']
+    assert len(cards) == 4
+    for card in cards:
+        kinds = [str(n.className).split()[0] for n in card.children[0].children]
+        assert kinds == ['pf-kpi__label', 'pf-help'], kinds
+
+
+def test_screen1_sort_buttons_mark_only_the_active_one():
+    layout = w.screen_1(prio_sort={'sort_by': 'plant_code', 'direction': 'asc'}, power_sort='asc')
+    buttons = [n for n in _walk(layout)
+               if getattr(n, 'className', None) == 'pf-sort__btn']
+    assert len(buttons) == 2 * 8 + 2          # 표 8열 × ▲▼ + 전력 ▲▼
+    pressed = [b.id for b in buttons if _prop(b, 'aria-pressed') == 'true']
+    assert pressed == [{'type': 'prio-sort-btn', 'index': 'plant_code', 'dir': 'asc'},
+                       {'type': 'power-sort-btn', 'index': 'screen1', 'dir': 'asc'}]

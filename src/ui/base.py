@@ -202,12 +202,11 @@ SEG_GROUPS = {
 }
 DEFAULT_SEG = {"task": 0, "threshold": 0, "dataset": 0}
 
-# ① 화면의 "점검 우선순위" 표 정렬 축. KPI "기준일 고위험 기계" 타일을 클릭하면
-# "grade"(등급가중 고장점수, 기본) → "threshold"(기준선 초과)로 바뀐다.
-DEFAULT_PRIO_SORT = {"sort_by": "grade", "direction": "desc"}
+# ① "점검 우선순위" 표의 정렬 상태. sort_by는 표의 열 id이고, 열 머리의 ▲▼ 버튼이 바꾼다.
+DEFAULT_PRIO_SORT = {"sort_by": "failure_points", "direction": "desc"}
 
-# ①에만 있는 타일이라 패턴 매칭 id를 쓴다 — 이유는 tile() 호출부 주석 참고.
-KPI_FAILRATE_ID = {"type": "kpi-drill", "index": "failrate"}
+# ① "기계별 평균 소비 전력" 막대의 정렬 방향.
+DEFAULT_POWER_SORT = "desc"
 
 
 # ============================================================
@@ -364,6 +363,23 @@ def date_range_inputs():
          box("end-date")],
         style={"display": "flex", "alignItems": "center", "gap": "6px", "flexShrink": "0"},
     )
+
+
+def help_icon(text):
+    """라벨 옆 물음표 — 마우스를 올리면 설명(title)이 뜬다. 보조기술은 aria-label로 같은 글을 읽는다.
+    KPI 카드는 .pf-card가 overflow:hidden이라 직접 그린 말풍선이 잘린다 — 브라우저 기본 title을 쓴다."""
+    return html.Span("?", className="pf-help micro-11", title=text, role="img", **{"aria-label": text})
+
+
+def direction_buttons(btn_type, name, direction, index):
+    """오름차순·내림차순 버튼 한 쌍. 지금 적용된 쪽만 aria-pressed="true"다.
+    direction이 None이면(그 열로 정렬 중이 아니면) 둘 다 눌리지 않은 상태로 둔다."""
+    def btn(value, glyph, word):
+        return html.Button(glyph, id={"type": btn_type, "index": index, "dir": value}, n_clicks=0,
+                           className="pf-sort__btn",
+                           **{"aria-label": f"{name} {word} 정렬",
+                              "aria-pressed": "true" if direction == value else "false"})
+    return html.Span([btn("asc", "▲", "오름차순"), btn("desc", "▼", "내림차순")], className="pf-sort")
 
 
 def table_placeholder(cols, nrows, row_h, head_h=32, first_idx=False, sort_col=None, width=None, cell_h=6):

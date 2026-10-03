@@ -49,7 +49,8 @@ from .dashboard_data import (  # noqa: E402
 )
 from .ui.base import (  # noqa: E402
     _filter_scope, _focus_asset, _period_dates, _period_index, CANVAS_H, DEFAULT_AUDIENCE,
-    DEFAULT_FILTERS, DEFAULT_PRIO_SORT, DEFAULT_SEG, empty_state, FILTERBAR_H, HEADER_H,
+    DEFAULT_FILTERS, DEFAULT_POWER_SORT, DEFAULT_PRIO_SORT, DEFAULT_SEG, empty_state, FILTERBAR_H,
+    HEADER_H,
     INDEX_STRING, MARGIN, NO_DATA_MARK, PERIOD_PRESETS, REPORT_AUDIENCES,
 )
 from .ui.shell import (  # noqa: E402
@@ -98,6 +99,7 @@ app.layout = html.Div(
         dcc.Store(id="filter-store", data=DEFAULT_FILTERS, storage_type="local"),
         dcc.Store(id="seg-store", data=DEFAULT_SEG, storage_type="local"),
         dcc.Store(id="prio-sort-store", data=DEFAULT_PRIO_SORT),
+        dcc.Store(id="power-sort-store", data=DEFAULT_POWER_SORT),
         # ③ "부품군 진단" 표 행 클릭이 바꾸는, 현재 드릴다운 중인 부품군.
         # None이면 screen_3()이 정렬 후 1행(average_precision 최댓값)으로 대체한다.
         dcc.Store(id="selected-family-store", data=None),
@@ -128,17 +130,19 @@ app.layout = html.Div(
     Input("screen-tabs", "value"),
     Input("seg-store", "data"),
     Input("prio-sort-store", "data"),
+    Input("power-sort-store", "data"),
     Input("filter-store", "data"),
     Input("selected-family-store", "data"),
 )
-def render_screen(active, seg_state, prio_sort, filters, selected_family):
+def render_screen(active, seg_state, prio_sort, power_sort, filters, selected_family):
     assets, start, end = _filter_scope(filters)
     if active in ("1", "2", "4") and not assets:
         return empty_state("조건에 맞는 기계 없음",
                            "선택한 공장·기계 종류·기계 조합에 해당하는 기계가 없다", 400)
     kwargs = {"seg_state": seg_state, "audience": DEFAULT_AUDIENCE}
     if active == "1":
-        kwargs.update(prio_sort=prio_sort or DEFAULT_PRIO_SORT, assets=assets, start=start, end=end)
+        kwargs.update(prio_sort=prio_sort or DEFAULT_PRIO_SORT, power_sort=power_sort or DEFAULT_POWER_SORT,
+                      assets=assets, start=start, end=end)
     if active == "2":
         kwargs.update(asset_tag=_focus_asset(filters), start=start, end=end)
     if active == "3":
@@ -545,46 +549,30 @@ def echo_action(_clicks):
 
 
 # ------------------------------------------------------------
-# ① KPI "기준일 고위험 기계" 드릴다운 — 클릭할 때마다 "점검 우선순위" 표 정렬을
-# 등급가중 고장점수 ↔ 기준선 초과 사이로 토글한다. 화면을 새로 만들지 않고
-# 이미 있는 표를 재사용해 원인(어느 공장·기계·부품)까지 이어지게 한다.
+# ① "점검 우선순위" 열 머리 ▲▼ · "기계별 평균 소비 전력" ▲▼
+# 화면이 다시 그려지면 버튼이 n_clicks=0으로 재생성되며 콜백이 한 번 더 불린다 —
+# write_seg와 동일하게 값이 전부 0인 호출은 무시한다.
 # ------------------------------------------------------------
 @app.callback(
     Output("prio-sort-store", "data"),
-    Output("action-echo", "children", allow_duplicate=True),
-    Input({"type": "kpi-drill", "index": ALL}, "n_clicks"),
-    State("prio-sort-store", "data"),
+    Input({"type": "prio-sort-btn", "index": ALL, "dir": ALL}, "n_clicks"),
     prevent_initial_call=True,
 )
-def drill_failrate_to_priority(n_clicks_list, current):
-    # ALL 패턴이라 리스트로 온다 — ①이 화면에 없을 땐 빈 리스트, 있을 땐 [n].
-    # 화면 재렌더로 타일이 다시 만들어질 때의 n_clicks=0도 함께 무시한다.
-    if not n_clicks_list or not any(n_clicks_list):
-        return no_update, no_update
-    current = current or DEFAULT_PRIO_SORT
-    new_sort_by = "grade" if current.get("sort_by") == "threshold" else "threshold"
-    msg = ("'기준일 고위험 기계' 클릭 → 점검 우선순위를 기준선 초과 기준으로 정렬"
-           if new_sort_by == "threshold" else
-           "'기준일 고위험 기계' 다시 클릭 → 점검 우선순위를 등급가중 고장점수 기준으로 복귀")
-    new_state = {"sort_by": new_sort_by, "direction": current.get("direction", "desc")}
-    return new_state, msg
-
-
-# 점검 우선순위 표의 오름차순 ↔ 내림차순 토글 — sort_by(등급가중 고장점수 ↔
-# 기준선 초과)는 그대로 두고 방향만 뒤집는다. drill_failrate_to_priority와
-# 같은 prio-sort-store를 쓰므로 화면 전환·테마 전환에도 함께 유지된다.
-@app.callback(
-    Output("prio-sort-store", "data", allow_duplicate=True),
-    Input({"type": "prio-dir-btn", "index": ALL}, "n_clicks"),
-    State("prio-sort-store", "data"),
-    prevent_initial_call=True,
-)
-def toggle_priority_direction(n_clicks_list, current):
-    if not n_clicks_list or not any(n_clicks_list):
+def write_priority_sort(n_clicks_list):
+    if not n_clicks_list or not any(n_clicks_list) or not isinstance(ctx.triggered_id, dict):
         return no_update
-    current = current or DEFAULT_PRIO_SORT
-    new_direction = "asc" if current.get("direction", "desc") == "desc" else "desc"
-    return {"sort_by": current.get("sort_by", "grade"), "direction": new_direction}
+    return {"sort_by": ctx.triggered_id["index"], "direction": ctx.triggered_id["dir"]}
+
+
+@app.callback(
+    Output("power-sort-store", "data"),
+    Input({"type": "power-sort-btn", "index": ALL, "dir": ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def write_power_sort(n_clicks_list):
+    if not n_clicks_list or not any(n_clicks_list) or not isinstance(ctx.triggered_id, dict):
+        return no_update
+    return ctx.triggered_id["dir"]
 
 
 # ------------------------------------------------------------

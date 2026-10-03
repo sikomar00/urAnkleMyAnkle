@@ -351,13 +351,25 @@ def load_failure_trend() -> pd.DataFrame:
     return trend.sort_values(DATE_COLUMN).reset_index(drop=True)
 
 
+# "점검 우선순위" 표의 정렬 축 → 내림차순 정렬 키. 동률은 등급가중 고장점수로 가른다.
+# "grade"·"threshold"는 표에 열 머리 정렬 버튼이 생기기 전부터 쓰던 이름이다.
+PRIORITY_SORT_KEYS = {
+    "grade": lambda row: (row["failure_points"],),
+    "threshold": lambda row: (row["threshold_exceeded"], row["failure_points"]),
+    "asset_tag": lambda row: (row["asset_tag"],),
+    "machine_type": lambda row: (row["machine_type"], row["failure_points"]),
+    "plant_code": lambda row: (row["plant_code"], row["failure_points"]),
+    "high_risk_days_30d": lambda row: (row["high_risk_days_30d"], row["failure_points"]),
+    "failed_part_count": lambda row: (row["failed_part_count"], row["failure_points"]),
+}
+
+
 def load_priority_table(sort_by: str = "grade", direction: str = "desc",
                         assets: list[str] | None = None) -> list[dict]:
     """"점검 우선순위" 표의 행 데이터를 만든다.
 
     Args:
-        sort_by: ``"grade"``(등급가중 고장점수 내림차순, 기본) 또는
-            ``"threshold"``(기준선 초과 우선, 동률이면 고장점수 내림차순).
+        sort_by: ``PRIORITY_SORT_KEYS``의 정렬 축. 모르는 값이면 ``"grade"``를 쓴다.
         direction: ``"desc"``(기본) 또는 ``"asc"`` — sort_by 기준으로 정렬한
             뒤 전체 순서를 뒤집는다. rank는 이 최종 순서 기준으로 매긴다.
         assets: 대상 기계 태그 목록. None이면 전체 기계.
@@ -415,10 +427,7 @@ def load_priority_table(sort_by: str = "grade", direction: str = "desc",
             }
         )
 
-    if sort_by == "threshold":
-        rows.sort(key=lambda row: (not row["threshold_exceeded"], -row["failure_points"]))
-    else:
-        rows.sort(key=lambda row: -row["failure_points"])
+    rows.sort(key=PRIORITY_SORT_KEYS.get(sort_by, PRIORITY_SORT_KEYS["grade"]), reverse=True)
     if direction == "asc":
         rows.reverse()
 
@@ -456,13 +465,14 @@ def load_screen1_machine_status(assets: list[str] | None = None) -> list[dict]:
 
 def load_screen1_power_by_machine(assets: list[str] | None = None,
                                   start: pd.Timestamp | None = None,
-                                  end: pd.Timestamp | None = None) -> list[dict]:
+                                  end: pd.Timestamp | None = None,
+                                  direction: str = "desc") -> list[dict]:
     """화면 ① "기계별 평균 소비 전력" — 기간(``start``~``end``, None이면 열린 쪽 끝)
-    자산별 평균 소비전력(kW), 내림차순.
+    자산별 평균 소비전력(kW). ``direction``은 ``"desc"``(기본) 또는 ``"asc"``.
     """
     daily = _scoped(_daily(), assets, start, end)
     avg_power = daily.groupby(ASSET_COLUMN)["power_consumption_kw"].mean()
-    avg_power = avg_power.sort_values(ascending=False)
+    avg_power = avg_power.sort_values(ascending=direction == "asc")
     return [
         {"asset_tag": asset_tag, "avg_power_kw": float(value)}
         for asset_tag, value in avg_power.items()
