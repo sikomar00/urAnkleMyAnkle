@@ -15,11 +15,6 @@ holidays==0.58
 
 plotly==5.24.1
 dash==2.18.2
-SQLAlchemy>=2.0,<2.1
-PyMySQL>=1.1,<2
-argon2-cffi>=23,<26
-cryptography>=43,<47
-python-dotenv>=1.0,<2
 
 reportlab==4.4.10
 openpyxl==3.1.5

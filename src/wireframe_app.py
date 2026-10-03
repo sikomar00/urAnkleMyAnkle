@@ -3,7 +3,6 @@
 
 데이터는 합성 데이터 원본(data/raw/synthetic_industrial_machine_data.csv)과 outputs/의
 모델 결과 파일을 src/dashboard_data.py로 읽는다. 대시보드는 모델을 다시 학습하지 않는다.
-이 파일은 앱 조립·콜백만 둔다. 화면·그림·보고서 구성 요소는 src/ui/에 있다.
 
 동작:
   · 필터바 — 공장 · 기계 종류 · 기계 · 기간(최근 30일/90일/1년/전체, 데이터 최신일 포함).
@@ -12,11 +11,10 @@
   · ③ 과제 · 위험 기준선 선택, 판정 임계값 슬라이더(저장된 예측 확률 재이진화)
   · ④ 데이터 조회 — 서버 측 정렬·페이지, 필터 적용 CSV 내보내기
   · 테마 전환(라이트 ↔ 다크), 보고서 내보내기(PDF · Excel — 독자별 섹션 골격)
-  · 운영 모드는 로그인·역할·감사 로그(MySQL)를 쓴다. 데모 모드는 DB·로그인 없이 읽기 전용.
+  · 로그인·DB 없이 실행한다(로그인·계정·감사 로그는 2026-10-03 archive/legacy/로 옮김).
 
 실행:
-    python -m src.wireframe_app           # 운영 모드 (.env의 MACHINE_DATABASE_URL 필요)
-    python -m src.wireframe_app --demo    # 데모 모드 (DASHBOARD_MODE=demo와 같다)
+    python -m src.wireframe_app
     → http://127.0.0.1:8052
 """
 
@@ -26,7 +24,6 @@ from datetime import datetime
 from pathlib import Path
 
 from dash import Dash, html, dcc, Input, Output, State, ALL, MATCH, ctx, no_update
-from flask import got_request_exception, session
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -53,21 +50,10 @@ from .dashboard_data import (  # noqa: E402
     load_table_page,
     period_start,
 )
-from .audit_service import (  # noqa: E402
-    change_admin_password, create_audit_tables, delete_user_accounts,
-    ensure_dashboard_admin, list_user_accounts, log_failure, record_action, record_error, sync_if_csv_changed,
-)
-from .dashboard_auth import (  # noqa: E402
-    current_session_state, end_admin_session, extend_admin_session, install_auth,
-)
-from .demo_mode import (  # noqa: E402
-    empty_list, no_session_state, noop,
-)
 from .ui.base import (  # noqa: E402
-    _filter_scope, _focus_asset, _period_index, BODY_13, CANVAS_H, CODE_12, DEFAULT_AUDIENCE,
-    DEFAULT_FILTERS, DEFAULT_PRIO_SORT, DEFAULT_SEG, DEMO_MODE, empty_state, FILTERBAR_H, HEADER_H,
-    INDEX_STRING, LABEL_12, MARGIN, NO_DATA_MARK, PERIOD_PRESETS, REPORT_AUDIENCES,
-    SCREENS,  # noqa: F401 — 테스트가 wireframe_app.SCREENS로 읽는다
+    _filter_scope, _focus_asset, _period_index, CANVAS_H, DEFAULT_AUDIENCE,
+    DEFAULT_FILTERS, DEFAULT_PRIO_SORT, DEFAULT_SEG, empty_state, FILTERBAR_H, HEADER_H,
+    INDEX_STRING, MARGIN, NO_DATA_MARK, PERIOD_PRESETS, REPORT_AUDIENCES,
 )
 from .ui.shell import (  # noqa: E402
     app_header, filter_bar, FILTER_ECHO_STYLE,
@@ -93,15 +79,6 @@ from .ui.report import (  # noqa: E402
     build_report_pdf, build_report_xlsx,
 )
 
-if DEMO_MODE:
-    # 데모 모드: 감사·계정 함수가 DB에 접속하지 않도록 이름만 no-op으로 바꾼다.
-    change_admin_password = delete_user_accounts = ensure_dashboard_admin = noop
-    create_audit_tables = log_failure = record_action = record_error = noop
-    sync_if_csv_changed = noop
-    list_user_accounts = empty_list
-    current_session_state = extend_admin_session = no_session_state
-    end_admin_session = noop
-
 # screen_5()는 탭에서는 빠지지만 함수 자체는 지우지 않는다 — 헤더의 내보내기
 # 드롭다운(REPORT_AUDIENCES/build_report_pdf/xlsx)이 화면⑤ 없이도 정상
 # 동작하는지는 확인했지만, screen_5()가 그 보고서 구성의 참조 구현이라
@@ -116,35 +93,6 @@ SCREEN_BUILDERS = {"1": screen_1, "2": screen_2, "3": screen_3, "4": screen_4}
 app = Dash(__name__, assets_folder=str(Path(__file__).resolve().parents[1] / "assets"))
 app.title = "설비 모니터링 대시보드"
 app.index_string = INDEX_STRING
-if not DEMO_MODE:
-    install_auth(app.server)
-ADMIN_INPUT_STYLE = {"display": "block", "width": "100%", "marginBottom": "8px"}
-
-
-def _scrim_style(visible, z_index):
-    """모달 레이어의 인라인 스타일 — 표시 여부와 쌓임 순서만. 모양은 .pf-scrim/.pf-modal."""
-    return {"display": "flex" if visible else "none", "zIndex": z_index}
-
-
-def _modal(modal_id, z_index, width, title, body, actions):
-    """확인 모달(DESIGN.md §7.6) — 제목 title-16, 본문 body-14, 버튼은 우측 정렬로
-    [취소 = --ghost] [실행 = --primary 또는 --danger]."""
-    return html.Div(
-        html.Div([html.H2(title, className="pf-modal__title title-16"),
-                  *body,
-                  html.Div(actions, className="pf-modal__actions")],
-                 className="pf-modal", style={"width": f"{width}px", "maxWidth": "calc(100vw - 32px)"}),
-        id=modal_id, className="pf-scrim", style=_scrim_style(False, z_index),
-    )
-
-
-def _modal_text(text=None, **kwargs):
-    return html.P(text, className="pf-modal__body body-14", **kwargs)
-
-
-def _modal_btn(label, btn_id, variant="ghost", **kwargs):
-    return html.Button(label, id=btn_id, n_clicks=0, className=f"pf-btn pf-btn--{variant} label-12", **kwargs)
-
 
 app.layout = html.Div(
     [
@@ -157,78 +105,6 @@ app.layout = html.Div(
         # None이면 screen_3()이 정렬 후 1행(average_precision 최댓값)으로 대체한다.
         dcc.Store(id="selected-family-store", data=None),
         dcc.Store(id="theme-store", data="light", storage_type="local"),
-        dcc.Store(id="audit-sync-status"),
-        dcc.Store(id="audit-audience-event"),
-        # 서버가 발급한 만료 시각만 담는다. 비밀번호·키는 브라우저에 두지 않는다.
-        dcc.Store(id="session-state"),
-        dcc.Store(id="session-prompt-state", data={"shown": False}),
-        dcc.Store(id="account-delete-mode", data=False),
-        dcc.Store(id="account-delete-refresh", data=0),
-        dcc.Interval(id="audit-csv-interval", interval=60_000, n_intervals=0),
-        dcc.Interval(id="session-timer", interval=1_000, n_intervals=0, disabled=DEMO_MODE),
-        dcc.Location(id="auth-redirect", refresh=True),
-        # 이전 콜백의 State 식별자는 유지하되 사용자 입력은 제거한다.
-        # 실제 actor_id는 audit_service가 검증된 Flask 세션에서 읽는다.
-        dcc.Input(id="actor-id-input", type="hidden", value=""),
-        # 비밀번호 변경 팝업
-        _modal("password-panel", 300, 360, "비밀번호 변경", [
-            _modal_text("현재 비밀번호를 확인한 뒤 새 비밀번호로 바꿉니다."),
-            dcc.Input(id="password-current", type="password", placeholder="현재 비밀번호",
-                      className="pf-control", style=ADMIN_INPUT_STYLE),
-            dcc.Input(id="password-new", type="password", placeholder="새 비밀번호 (4자 이상)",
-                      className="pf-control", style=ADMIN_INPUT_STYLE),
-            dcc.Input(id="password-confirm", type="password", placeholder="새 비밀번호 다시 입력",
-                      className="pf-control", style=ADMIN_INPUT_STYLE),
-            html.Div(id="password-result", role="status", className="pf-field__error label-12",
-                     style={"minHeight": "18px", "marginBottom": "12px"}),
-        ], [_modal_btn("닫기", "password-close-btn"),
-            _modal_btn("변경", "password-save-btn", "primary")]),
-        _modal("session-expiry-modal", 300, 360, "로그인 시간 연장",
-               [_modal_text("로그인 시간이 곧 만료됩니다. 계속 사용하시겠습니까?")],
-               [_modal_btn("아니오", "session-modal-logout-btn"),
-                _modal_btn("예 (10초)", "session-modal-extend-btn", "primary")]),
-        _modal("logout-confirm-modal", 310, 330, "로그아웃", [_modal_text("로그아웃하시겠습니까?")],
-               [_modal_btn("아니오", "logout-confirm-no-btn"),
-                _modal_btn("예", "logout-confirm-yes-btn", "primary")]),
-        _modal("password-success-modal", 320, 360, "비밀번호 변경 완료",
-               [_modal_text("비밀번호가 변경되었습니다. 다시 로그인해 주세요.")],
-               [_modal_btn("확인", "password-success-confirm-btn", "primary")]),
-        # ADMIN 역할에서만 열 수 있는 일반 계정 목록입니다. 이름은 서버에서만 복호화합니다.
-        html.Div(id="account-management-modal", className="pf-scrim", style=_scrim_style(False, 330), children=[
-            html.Div([
-                html.Div([
-                    html.H2("계정 관리", className="title-16", style={"margin": 0}),
-                    html.Button("계정 삭제", id="account-delete-mode-btn", n_clicks=0, className="pf-btn label-12"),
-                ], style={"display": "flex", "alignItems": "center", "justifyContent": "space-between",
-                          "marginBottom": "16px"}),
-                html.Div(id="account-list-body", className=BODY_13),
-                html.Div(id="account-delete-header", className="pf-list-head label-12", children=[
-                    html.Span("아이디"),
-                    html.Span("이름"),
-                    html.Span("접속 상태", style={"textAlign": "right"}),
-                    html.Span("선택", style={"textAlign": "right"}),
-                ], style={"display": "none"}),
-                dcc.Checklist(id="account-delete-selection", options=[], value=[], className=BODY_13,
-                              style={"display": "none"},
-                              inputStyle={"marginLeft": "8px", "cursor": "pointer"},
-                              labelClassName="pf-check-row",
-                              labelStyle={"display": "flex", "flexDirection": "row-reverse", "width": "100%",
-                                          "alignItems": "center", "padding": "10px 4px"}),
-                html.Div(id="account-delete-feedback", role="status", className=LABEL_12,
-                         style={"minHeight": "18px", "textAlign": "center", "marginTop": "12px"}),
-                html.Div([
-                    _modal_btn("닫기", "account-management-close-btn"),
-                    _modal_btn("확인", "account-delete-confirm-btn", "primary", style={"display": "none"}),
-                ], className="pf-modal__actions", style={"marginTop": "20px"}),
-            ], className="pf-modal", style={"width": "520px", "maxWidth": "calc(100vw - 32px)"}),
-        ]),
-        _modal("account-delete-confirm-modal", 340, 380, "계정 삭제",
-               [_modal_text(id="account-delete-confirm-message")],
-               [_modal_btn("아니오", "account-delete-no-btn"),
-                _modal_btn("예", "account-delete-yes-btn", "danger")]),
-        # 일반 계정이 PDF·Excel을 누르면 파일 생성 없이 이 안내만 보여 준다.
-        _modal("export-access-modal", 340, 330, "접근 권한", [_modal_text("접근 권한이 필요합니다.")],
-               [_modal_btn("확인", "export-access-modal-close", "primary")]),
         # 1280px 미만에서만 보인다(03-app.css). 그 폭에서는 가로 스크롤로 본다.
         html.Div("이 대시보드는 폭 1280px 이상의 데스크톱 화면 전용이다",
                  className="pf-desktop-only pf-notice pf-notice--warning label-12", role="note"),
@@ -257,12 +133,8 @@ app.layout = html.Div(
     Input("prio-sort-store", "data"),
     Input("filter-store", "data"),
     Input("selected-family-store", "data"),
-    State("actor-id-input", "value"),
 )
-def render_screen(active, seg_state, prio_sort, filters, selected_family, actor_id):
-    if ctx.triggered_id == "screen-tabs":
-        record_action("ACT_TAB_OPEN", "화면 이동", actor_id=actor_id,
-                      target_type="tab", target_id=active)
+def render_screen(active, seg_state, prio_sort, filters, selected_family):
     assets, start = _filter_scope(filters)
     if active in ("1", "2", "4") and not assets:
         return empty_state("조건에 맞는 기계 없음",
@@ -278,10 +150,9 @@ def render_screen(active, seg_state, prio_sort, filters, selected_family, actor_
         kwargs.update(assets=assets, start=start)
     try:
         return SCREEN_BUILDERS[active](**kwargs)
-    except Exception as exc:
-        log_failure("ACT_SCREEN_RENDER", "화면 조회", exc, actor_id=actor_id,
-                    source="wireframe_app.render_screen", target_id=active)
-        return html.Div("화면을 불러오지 못했습니다. 오류 로그를 확인해 주세요.")
+    except Exception:
+        app.server.logger.exception("화면 %s 렌더 실패", active)
+        return html.Div("화면을 불러오지 못했습니다. 서버 로그를 확인해 주세요.")
 
 
 # ②의 "‹ 이전 기계"/"다음 기계 ›" — 공장·기계 종류 필터 안에서 알파벳순으로
@@ -291,10 +162,9 @@ def render_screen(active, seg_state, prio_sort, filters, selected_family, actor_
     Output("machine-dd", "value", allow_duplicate=True),
     Input({"type": "machine-nav-btn", "index": ALL}, "n_clicks"),
     State("filter-store", "data"),
-    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def cycle_selected_asset(_clicks, filters, actor_id):
+def cycle_selected_asset(_clicks, filters):
     triggered = ctx.triggered_id
     if not triggered:
         return no_update
@@ -314,10 +184,7 @@ def cycle_selected_asset(_clicks, filters, actor_id):
         idx = (idx - 1) % len(assets)
     else:
         return no_update
-    chosen = assets[idx]
-    record_action("ACT_ASSET_NAVIGATE", "설비 상세 이동", actor_id=actor_id,
-                  target_type="asset", target_id=chosen)
-    return chosen
+    return assets[idx]
 
 
 # ③ "부품군 진단" 표의 행 클릭 — family-row는 task_sel==1일 때만 DOM에
@@ -370,14 +237,10 @@ def recompute_threshold_metrics(slider_values, seg_state):
     Output("theme-store", "data"),
     Input("theme-btn", "n_clicks"),
     State("theme-store", "data"),
-    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def toggle_theme(_n, current, actor_id):
-    new_theme = "light" if (current or "light") == "dark" else "dark"
-    record_action("ACT_THEME_CHANGE", "테마 전환", actor_id=actor_id,
-                  target_type="theme", target_id=new_theme)
-    return new_theme
+def toggle_theme(_n, current):
+    return "light" if (current or "light") == "dark" else "dark"
 
 
 # 화면⑤ "고장·위험 추세" 차트 전용 재색칠 — render_screen과 무관한 별도
@@ -540,9 +403,8 @@ app.clientside_callback(
     Input({"type": "period-btn", "index": ALL}, "n_clicks"),
     Input("reset-btn", "n_clicks"),
     State("filter-store", "data"),
-    State("actor-id-input", "value"),
 )
-def write_filters(plant, machine_type, machine, _period_clicks, _reset_clicks, current, actor_id):
+def write_filters(plant, machine_type, machine, _period_clicks, _reset_clicks, current):
     trigger = ctx.triggered_id
     current = current or DEFAULT_FILTERS
     new = dict(current)
@@ -566,8 +428,6 @@ def write_filters(plant, machine_type, machine, _period_clicks, _reset_clicks, c
 
     if new == current:
         return no_update, *dd_values
-    record_action("ACT_FILTER_CHANGE", "조회 조건 변경", actor_id=actor_id,
-                  target_type="filter", target_id=str(trigger)[:100], detail=new)
     return new, *dd_values
 
 
@@ -643,10 +503,9 @@ def render_filters(data):
     Output("seg-store", "data"),
     Input({"type": "seg-btn", "group": ALL, "index": ALL}, "n_clicks"),
     State("seg-store", "data"),
-    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def write_seg(_clicks, current, actor_id):
+def write_seg(_clicks, current):
     # 화면이 다시 그려지면 버튼이 n_clicks=0으로 재생성되며 이 콜백이 한 번
     # 더 불린다 — 값이 0인 호출은 무시한다(무한 루프 방지).
     trig = ctx.triggered[0] if ctx.triggered else None
@@ -657,8 +516,6 @@ def write_seg(_clicks, current, actor_id):
         return no_update
     new = dict(current or DEFAULT_SEG)
     new[tid["group"]] = tid["index"]
-    record_action("ACT_SEGMENT_CHANGE", "분석 선택", actor_id=actor_id,
-                  target_type=str(tid["group"]), target_id=str(tid["index"]))
     return new
 
 
@@ -668,18 +525,14 @@ def write_seg(_clicks, current, actor_id):
 @app.callback(
     Output("action-echo", "children"),
     Input({"type": "ghost-btn", "index": ALL}, "n_clicks"),
-    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def echo_action(_clicks, actor_id):
+def echo_action(_clicks):
     trig = ctx.triggered[0] if ctx.triggered else None
     if not trig or not trig.get("value"):
         return no_update
     tid = ctx.triggered_id
     label = tid["index"] if isinstance(tid, dict) else str(tid)
-    record_action("ACT_UNAVAILABLE", "미구현 기능 클릭", actor_id=actor_id,
-                  target_type="button", target_id=str(label), status="BLOCKED",
-                  block_reason="아직 구현되지 않은 기능")
     return f"'{label}' 클릭됨 — 동작 미구현 ({NO_DATA_MARK})"
 
 
@@ -693,10 +546,9 @@ def echo_action(_clicks, actor_id):
     Output("action-echo", "children", allow_duplicate=True),
     Input({"type": "kpi-drill", "index": ALL}, "n_clicks"),
     State("prio-sort-store", "data"),
-    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def drill_failrate_to_priority(n_clicks_list, current, actor_id):
+def drill_failrate_to_priority(n_clicks_list, current):
     # ALL 패턴이라 리스트로 온다 — ①이 화면에 없을 땐 빈 리스트, 있을 땐 [n].
     # 화면 재렌더로 타일이 다시 만들어질 때의 n_clicks=0도 함께 무시한다.
     if not n_clicks_list or not any(n_clicks_list):
@@ -707,8 +559,6 @@ def drill_failrate_to_priority(n_clicks_list, current, actor_id):
            if new_sort_by == "threshold" else
            "'기준일 고위험 기계' 다시 클릭 → 점검 우선순위를 등급가중 고장점수 기준으로 복귀")
     new_state = {"sort_by": new_sort_by, "direction": current.get("direction", "desc")}
-    record_action("ACT_PRIORITY_SORT", "점검 우선순위 정렬", actor_id=actor_id,
-                  target_type="priority", target_id=f"{new_sort_by}:{new_state['direction']}")
     return new_state, msg
 
 
@@ -735,29 +585,14 @@ def toggle_priority_direction(n_clicks_list, current):
 @app.callback(
     Output("report-download", "data"),
     Output("action-echo", "children", allow_duplicate=True),
-    Output("export-access-modal", "style"),
     Input("export-run-btn", "n_clicks"),
-    Input("export-access-modal-close", "n_clicks"),
     State("export-dd", "value"),
     State("filter-store", "data"),
     State("seg-store", "data"),
-    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def export_report(_run, _close, export_value, filters, seg_state, actor_id):
-    if ctx.triggered_id == "export-access-modal-close":
-        return no_update, no_update, {"display": "none"}
-
+def export_report(_run, export_value, filters, seg_state):
     fmt, audience = (export_value or f"pdf:{DEFAULT_AUDIENCE}").split(":")
-    audit_format = "excel" if fmt == "xlsx" else fmt
-    # 버튼은 보이지만, 파일을 만드는 직전에 서버 세션의 역할을 다시 확인한다.
-    # 일반 사용자가 요청을 직접 바꾸더라도 PDF·Excel은 받을 수 없다.
-    if not DEMO_MODE and str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
-        record_action("ACT_EXPORT_ACCESS_BLOCKED", "파일 내보내기 접근 차단", actor_id=actor_id,
-                      target_type="export", target_id=audit_format, status="BLOCKED",
-                      block_reason="관리자 역할이 필요합니다.")
-        return (no_update, "파일 내보내기는 관리자 계정만 사용할 수 있습니다.",
-                _scrim_style(True, 340))
     aud = REPORT_AUDIENCES[audience]
     stamp = datetime.now().strftime("%Y%m%d-%H%M")
     base = f"설비모니터링_보고서_{audience}_{stamp}"
@@ -769,15 +604,10 @@ def export_report(_run, _close, export_value, filters, seg_state, actor_id):
                 build_report_xlsx(filters, seg_state, audience), f"{base}.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except Exception as exc:  # noqa: BLE001 — 실패 이유를 화면에 그대로 보여준다
-        log_failure("ACT_REPORT_EXPORT", "보고서 내보내기", exc, actor_id=actor_id,
-                    source="wireframe_app.export_report", target_id=ctx.triggered_id)
-        return no_update, f"내보내기 실패 — {type(exc).__name__}", {"display": "none"}
-    record_action("ACT_REPORT_EXPORT", "보고서 내보내기", actor_id=actor_id,
-                  target_type="export", target_id=audit_format,
-                  detail={"audience": audience, "format": audit_format})
+        app.server.logger.exception("보고서 내보내기 실패")
+        return no_update, f"내보내기 실패 — {type(exc).__name__}"
     return (dcc.send_bytes(lambda b: b.write(payload), name, type=mime),
-            f"{aud['label']} 보고서 내보냄 — {name} (섹션 {len(aud['sections'])}개 · 값은 {NO_DATA_MARK})",
-            {"display": "none"})
+            f"{aud['label']} 보고서 내보냄 — {name} (섹션 {len(aud['sections'])}개 · 값은 {NO_DATA_MARK})")
 
 
 # ------------------------------------------------------------
@@ -795,26 +625,16 @@ def export_report(_run, _close, export_value, filters, seg_state, actor_id):
     Input({"type": "dtable", "index": MATCH}, "page_current"),
     Input({"type": "dtable", "index": MATCH}, "sort_by"),
     State("filter-store", "data"),
-    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def update_dtable_page(page_current, sort_by, filters, actor_id):
+def update_dtable_page(page_current, sort_by, filters):
     dataset_key = ctx.triggered_id["index"]
     sort_col = sort_by[0]["column_id"] if sort_by else None
     sort_dir = sort_by[0]["direction"] if sort_by else "asc"
     triggered_prop = ctx.triggered[0]["prop_id"].rsplit(".", 1)[-1] if ctx.triggered else None
     page = 0 if triggered_prop == "sort_by" else (page_current or 0)
-    try:
-        assets, start = _filter_scope(filters)
-        result = load_table_page(dataset_key, sort_col, sort_dir, page, assets=assets, start=start)
-    except Exception as exc:
-        log_failure("ACT_DATA_QUERY", "데이터 표 조회", exc, actor_id=actor_id,
-                    source="wireframe_app.update_dtable_page", target_id=dataset_key)
-        raise
-    if triggered_prop in ("sort_by", "page_current") and ctx.triggered[0].get("value") is not None:
-        record_action("ACT_DATA_QUERY", "데이터 표 조회", actor_id=actor_id,
-                      target_type="dataset", target_id=dataset_key,
-                      detail={"page": page, "sort_column": sort_col, "sort_direction": sort_dir})
+    assets, start = _filter_scope(filters)
+    result = load_table_page(dataset_key, sort_col, sort_dir, page, assets=assets, start=start)
     footer_text = _dtable_footer_text(result["total_rows"], result["page"], 16)
     return result["data"], result["page_count"], result["page"], footer_text
 
@@ -823,10 +643,9 @@ def update_dtable_page(page_current, sort_by, filters, actor_id):
     Output("table-download", "data"),
     Input({"type": "csv-export-btn", "index": ALL}, "n_clicks"),
     State("filter-store", "data"),
-    State("actor-id-input", "value"),
     prevent_initial_call=True,
 )
-def export_dtable_csv(_clicks, filters, actor_id):
+def export_dtable_csv(_clicks, filters):
     # 화면이 다시 그려지면 버튼이 n_clicks=0으로 재생성되며 이 콜백이 한 번
     # 더 불린다 — write_seg와 동일하게 값이 0인 호출은 무시한다.
     trig = ctx.triggered[0] if ctx.triggered else None
@@ -834,335 +653,17 @@ def export_dtable_csv(_clicks, filters, actor_id):
         return no_update
     dataset_key = ctx.triggered_id["index"]
     if dataset_key not in ("raw", "daily"):
-        record_action("ACT_CSV_EXPORT", "CSV 다운로드", actor_id=actor_id,
-                      target_type="dataset", target_id=dataset_key, status="BLOCKED",
-                      block_reason="지원하지 않는 데이터셋")
         return no_update
     try:
         assets, start = _filter_scope(filters)
         csv_bytes, filename = export_table_csv(dataset_key, assets=assets, start=start)
-    except Exception as exc:
-        log_failure("ACT_CSV_EXPORT", "CSV 다운로드", exc, actor_id=actor_id,
-                    source="wireframe_app.export_dtable_csv", target_id=dataset_key)
+    except Exception:
+        app.server.logger.exception("CSV 내보내기 실패: %s", dataset_key)
         return no_update
-    record_action("ACT_CSV_EXPORT", "CSV 다운로드", actor_id=actor_id,
-                  target_type="dataset", target_id=dataset_key, detail={"filename": filename})
     return dcc.send_bytes(lambda buf: buf.write(csv_bytes), filename, type="text/csv")
 
 
-@app.callback(Output("password-panel", "style"), Input("password-open-btn", "n_clicks"),
-              Input("password-close-btn", "n_clicks"), State("password-panel", "style"),
-              prevent_initial_call=True)
-def toggle_password_panel(_open, _close, style):
-    updated = dict(style or {})
-    updated["display"] = "none" if ctx.triggered_id == "password-close-btn" else "flex"
-    return updated
-
-
-@app.callback(Output("profile-display", "children"), Output("profile-login-id", "children"),
-              Output("session-state", "data"), Output("account-manage-btn", "style"),
-              Input("screen-tabs", "value"))
-def display_profile(_active_tab):
-    login_id = str(session.get("admin_id", "관리자"))
-    role = str(session.get("role", "UNKNOWN")).upper()
-    account_button = {"display": "block" if role == "ADMIN" else "none"}
-    return login_id[:2].upper(), login_id, current_session_state(), account_button
-
-
-@app.callback(Output("account-management-modal", "style"), Output("account-list-body", "children"),
-              Input("account-manage-btn", "n_clicks"), Input("account-management-close-btn", "n_clicks"),
-              Input("account-delete-refresh", "data"),
-              prevent_initial_call=True)
-def toggle_account_management(open_clicks, close_clicks, refresh):
-    """일반 계정 목록은 ADMIN 역할의 서버 세션에서만 복호화해 보여 준다."""
-    if not (open_clicks or close_clicks or refresh):
-        return no_update, no_update
-    if ctx.triggered_id == "account-management-close-btn":
-        return {"display": "none"}, no_update
-    if str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
-        return {"display": "none"}, no_update
-    rows = list_user_accounts()
-    record_action("ACT_ACCOUNT_LIST_VIEW", "일반 계정 목록 조회", target_type="account", target_id="USER")
-    if not rows:
-        return (_scrim_style(True, 330),
-                html.P("생성된 일반 계정이 없습니다.", style={"textAlign": "center", "margin": "12px 0"}))
-    header = html.Div([
-        html.Span("아이디"),
-        html.Span("이름"),
-        html.Span("접속 상태", style={"textAlign": "right"}),
-    ], className="pf-list-head label-12",
-       style={"display": "grid", "gridTemplateColumns": "1fr 1fr 90px", "gap": "12px", "padding": "8px 4px"})
-    items = [header]
-    for row in rows:
-        items.append(html.Div([
-            html.Span(row["login_id"], className=CODE_12), html.Span(row["name"]),
-            html.Span(_online_badge(row["is_online"]), style={"textAlign": "right"}),
-        ], className="pf-list-row",
-           style={"display": "grid", "gridTemplateColumns": "1fr 1fr 90px", "gap": "12px",
-                  "padding": "10px 4px", "alignItems": "center"}))
-    return _scrim_style(True, 330), items
-
-
-def _online_badge(online):
-    """접속 상태 배지 — 접속 중은 status-good, 미접속은 중립. 점 + 글자를 함께 둔다."""
-    return html.Span([html.Span(className="pf-badge__dot"), "접속 중" if online else "미접속"],
-                     className="pf-badge micro-11 " + ("pf-badge--good" if online else "pf-badge--neutral"))
-
-
-@app.callback(Output("account-delete-selection", "options"),
-              Input("account-manage-btn", "n_clicks"), Input("account-delete-refresh", "data"),
-              prevent_initial_call=True)
-def load_account_delete_options(open_clicks, refresh):
-    """선택 행 전체를 눌러 체크할 수 있게 일반 계정만 표시한다."""
-    if not (open_clicks or refresh) or str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
-        return []
-    options = []
-    for row in list_user_accounts():
-        online = bool(row["is_online"])
-        label = html.Div([
-            html.Span(row["login_id"], className=CODE_12),
-            html.Span(row["name"]),
-            html.Span(_online_badge(online), style={"textAlign": "right"}),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 90px", "gap": "8px",
-                  "alignItems": "center", "width": "100%"})
-        options.append({"label": label, "value": row["login_id"]})
-    return options
-
-
-@app.callback(Output("account-delete-mode", "data"), Output("account-delete-selection", "value"),
-              Input("account-manage-btn", "n_clicks"),
-              Input("account-management-close-btn", "n_clicks"),
-              Input("account-delete-mode-btn", "n_clicks"),
-              Input("account-delete-refresh", "data"),
-              State("account-delete-mode", "data"), prevent_initial_call=True)
-def toggle_account_delete_mode(_open, _close, _mode_click, _refresh, current_mode):
-    if ctx.triggered_id == "account-delete-mode-btn":
-        if str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
-            return False, []
-        return not bool(current_mode), []
-    return False, []
-
-
-@app.callback(Output("account-list-body", "style"), Output("account-delete-header", "style"),
-              Output("account-delete-selection", "style"),
-              Output("account-delete-confirm-btn", "style"),
-              Output("account-delete-mode-btn", "children"),
-              Input("account-delete-mode", "data"))
-def show_account_delete_mode(enabled):
-    confirm_style = {"display": "inline-block" if enabled else "none"}
-    header_style = {"display": "grid" if enabled else "none",
-                    "gridTemplateColumns": "1fr 1fr 90px 38px", "gap": "8px", "padding": "8px 4px"}
-    return ({"display": "none" if enabled else "block"}, header_style,
-            {"display": "block" if enabled else "none"}, confirm_style,
-            "선택 취소" if enabled else "계정 삭제")
-
-
-@app.callback(Output("account-delete-confirm-modal", "style"),
-              Output("account-delete-confirm-message", "children"),
-              Output("account-delete-refresh", "data"),
-              Output("account-delete-feedback", "children"),
-              Input("account-delete-confirm-btn", "n_clicks"),
-              Input("account-delete-no-btn", "n_clicks"),
-              Input("account-delete-yes-btn", "n_clicks"),
-              Input("account-manage-btn", "n_clicks"),
-              Input("account-management-close-btn", "n_clicks"),
-              State("account-delete-selection", "value"),
-              State("account-delete-refresh", "data"), prevent_initial_call=True)
-def confirm_account_delete(_confirm, _no, _yes, _open, _close, selected, refresh):
-    triggered = ctx.triggered_id
-    hidden = {"display": "none"}
-    if triggered in {"account-manage-btn", "account-management-close-btn", "account-delete-no-btn"}:
-        session.pop("pending_account_delete", None)
-        return hidden, "", no_update, ""
-    if str(session.get("role", "UNKNOWN")).upper() != "ADMIN":
-        session.pop("pending_account_delete", None)
-        record_action("ACT_ACCOUNT_DELETE_BLOCKED", "일반 계정 삭제 차단", target_type="account",
-                      status="BLOCKED", block_reason="관리자 권한 필요")
-        return hidden, "", no_update, "접근 권한이 필요합니다."
-    selected = list(dict.fromkeys(selected or []))
-    if triggered == "account-delete-confirm-btn":
-        if not selected:
-            return hidden, "", no_update, "삭제할 계정을 선택해 주세요."
-        session["pending_account_delete"] = selected
-        return (_scrim_style(True, 340),
-                f"선택한 일반 계정 {len(selected)}개를 정말로 삭제하시겠습니까?",
-                no_update, "")
-    if triggered != "account-delete-yes-btn":
-        return no_update, no_update, no_update, no_update
-    pending = session.pop("pending_account_delete", None)
-    if not pending:
-        return hidden, "", no_update, "삭제 확인을 다시 진행해 주세요."
-    try:
-        deleted = delete_user_accounts(pending, actor_id=str(session.get("admin_id", "")))
-    except (PermissionError, ValueError) as exc:
-        record_action("ACT_ACCOUNT_DELETE_BLOCKED", "일반 계정 삭제 차단", target_type="account",
-                      status="BLOCKED", block_reason=type(exc).__name__)
-        return hidden, "", no_update, "계정 목록이 변경되었습니다. 다시 선택해 주세요."
-    except Exception as exc:
-        log_failure("ACT_ACCOUNT_DELETE", "일반 계정 삭제", exc,
-                    actor_id=str(session.get("admin_id", "")),
-                    source="wireframe_app.confirm_account_delete")
-        return hidden, "", no_update, "계정 삭제 중 오류가 발생했습니다."
-    return hidden, "", int(refresh or 0) + 1, f"일반 계정 {deleted}개를 삭제했습니다."
-
-
-# 브라우저는 초 단위 카운트다운만 표시한다. 실제 로그인 허용·차단은
-# dashboard_auth.py의 Flask before_request가 서버 시각으로 다시 판단한다.
-app.clientside_callback(
-    """function(_tick, sessionState, promptState) {
-        const hidden = {display: 'none'};
-        if (!sessionState || !sessionState.expires_at_ms) {
-            return [window.dash_clientside.no_update, hidden,
-                    window.dash_clientside.no_update, window.dash_clientside.no_update,
-                    window.dash_clientside.no_update];
-        }
-        const remaining = Math.max(0, Math.ceil((sessionState.expires_at_ms - Date.now()) / 1000));
-        const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
-        const seconds = String(remaining % 60).padStart(2, '0');
-        const label = minutes + ':' + seconds;
-        if (remaining === 0) {
-            window.location.assign('/login');
-            return [label, hidden, {shown: true}, '/login', '예 (0초)'];
-        }
-        const shown = Boolean(promptState && promptState.shown);
-        if (remaining <= 10) {
-            const modalStyle = shown ? window.dash_clientside.no_update : {display: 'flex', zIndex: 300};
-            return [label, modalStyle, {shown: true}, window.dash_clientside.no_update,
-                    '예 (' + remaining + '초)'];
-        }
-        return [label, window.dash_clientside.no_update,
-                window.dash_clientside.no_update, window.dash_clientside.no_update,
-                window.dash_clientside.no_update];
-    }""",
-    Output("session-remaining", "children"),
-    Output("session-expiry-modal", "style"),
-    Output("session-prompt-state", "data"),
-    Output("auth-redirect", "href", allow_duplicate=True),
-    Output("session-modal-extend-btn", "children"),
-    Input("session-timer", "n_intervals"),
-    State("session-state", "data"),
-    State("session-prompt-state", "data"),
-    prevent_initial_call=True,
-)
-
-
-@app.callback(Output("session-state", "data", allow_duplicate=True),
-              Output("session-prompt-state", "data", allow_duplicate=True),
-              Output("session-expiry-modal", "style", allow_duplicate=True),
-              Input("session-extend-btn", "n_clicks"),
-              Input("session-modal-extend-btn", "n_clicks"),
-              prevent_initial_call=True)
-def extend_login_session(profile_clicks, modal_clicks):
-    """프로필·확인 창 어느 쪽에서 눌러도 같은 서버 세션을 10분 연장한다."""
-    if not (profile_clicks or modal_clicks):
-        return no_update, no_update, no_update
-    state = extend_admin_session()
-    if state is None:
-        return no_update, no_update, no_update
-    return state, {"shown": False}, {"display": "none"}
-
-
-@app.callback(Output("logout-confirm-modal", "style"),
-              Input("logout-btn", "n_clicks"), Input("logout-confirm-no-btn", "n_clicks"),
-              prevent_initial_call=True)
-def toggle_logout_confirmation(logout_clicks, cancel_clicks):
-    """로그아웃을 누른 즉시 세션을 지우지 않고 먼저 확인을 받는다."""
-    if not (logout_clicks or cancel_clicks):
-        return no_update
-    if ctx.triggered_id == "logout-confirm-no-btn":
-        return {"display": "none"}
-    return _scrim_style(True, 310)
-
-
-@app.callback(Output("audit-audience-event", "data"),
-              Input("export-dd", "value"), State("actor-id-input", "value"),
-              prevent_initial_call=True)
-def log_audience_change(export_value, actor_id):
-    fmt, audience = (export_value or f"pdf:{DEFAULT_AUDIENCE}").split(":")
-    record_action("ACT_EXPORT_OPTION_CHANGE", "내보내기 옵션 선택", actor_id=actor_id,
-                  target_type="export_option", target_id=f"{fmt}:{audience}",
-                  detail={"format": fmt, "audience": audience})
-    return {"format": fmt, "audience": audience}
-
-
-@app.callback(Output("audit-sync-status", "data"), Input("audit-csv-interval", "n_intervals"))
-def sync_failure_log(_ticks):
-    try:
-        return sync_if_csv_changed()
-    except Exception as exc:
-        record_error("ERR_FAILURE_SYNC", "관측 고장 저장", exc, source="wireframe_app.sync_failure_log")
-        return {"error": type(exc).__name__}
-
-
-def _log_unhandled_exception(sender, exception, **_kwargs):
-    record_error("ERR_DASH_CALLBACK", "대시보드 요청", exception,
-                 source="wireframe_app.flask_request")
-
-
-got_request_exception.connect(_log_unhandled_exception, app.server, weak=False)
-
-
-@app.callback(Output("password-result", "children"), Output("password-current", "value"),
-              Output("password-new", "value"), Output("password-confirm", "value"),
-              Output("password-success-modal", "style"),
-              Input("password-save-btn", "n_clicks"),
-              State("password-current", "value"), State("password-new", "value"),
-              State("password-confirm", "value"), prevent_initial_call=True)
-def update_admin_password(n_clicks, current, new, confirm):
-    if not n_clicks:
-        return no_update, no_update, no_update, no_update, no_update
-    admin_id = session.get("admin_id")
-    if new != confirm:
-        record_action("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", status="BLOCKED",
-                      block_reason="새 비밀번호 확인 불일치")
-        return "새 비밀번호가 일치하지 않습니다.", "", "", "", no_update
-    try:
-        changed = change_admin_password(admin_id, current or "", new or "")
-        if not changed:
-            record_action("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", status="BLOCKED",
-                          block_reason="현재 비밀번호 불일치")
-            return "현재 비밀번호가 올바르지 않습니다.", "", "", "", no_update
-        return "", "", "", "", _scrim_style(True, 320)
-    except ValueError as exc:
-        record_action("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", status="BLOCKED",
-                      block_reason=type(exc).__name__)
-        return str(exc), "", "", "", no_update
-    except Exception as exc:
-        log_failure("ACT_PASSWORD_CHANGE", "관리자 비밀번호 변경", exc, actor_id=admin_id,
-                    source="wireframe_app.update_admin_password")
-        return f"비밀번호 변경 실패: {type(exc).__name__}", "", "", "", no_update
-
-
-@app.callback(Output("auth-redirect", "href", allow_duplicate=True),
-              Input("logout-confirm-yes-btn", "n_clicks"),
-              Input("session-modal-logout-btn", "n_clicks"),
-              Input("password-success-confirm-btn", "n_clicks"), prevent_initial_call=True)
-def logout_admin(confirm_clicks, session_decline_clicks, password_confirm_clicks):
-    if not (confirm_clicks or session_decline_clicks or password_confirm_clicks):
-        return no_update
-    reason_by_button = {
-        "logout-confirm-yes-btn": "manual",
-        "session-modal-logout-btn": "session_extend_declined",
-        "password-success-confirm-btn": "password_changed",
-    }
-    reason = reason_by_button[ctx.triggered_id]
-    end_admin_session(reason)
-    return "/login"
-
-
 if __name__ == "__main__":
-    if DEMO_MODE:
-        print("[DEMO] 데모 모드 — DB·로그인 없이 읽기 전용으로 실행합니다.")
-    else:
-        try:
-            create_audit_tables()
-            created = ensure_dashboard_admin()
-            print(f"[DB] 기본 관리자 계정: {'새로 준비됨' if created else '기존 계정 사용'}")
-            result = sync_if_csv_changed()
-            print(f"[DB] 관측 고장 로그: {result['date']} / 새로 저장 {result['created']}건")
-        except Exception as exc:
-            record_error("ERR_DB_STARTUP", "로그 DB 준비", exc, source="wireframe_app.startup")
-            print(f"[DB] 연결 또는 초기 적재 실패: {type(exc).__name__} — instance/audit_fallback.log 확인")
     # 최신 Dash(2.17+)는 app.run, 이전 버전은 app.run_server를 쓴다.
     # 이전 실행본이 8050 포트에 남아 오래된 시간 기록을 만들 수 있어 새 포트를 사용한다.
     # 같은 사내·가정 네트워크의 다른 기기도 접속할 수 있도록 모든 네트워크 인터페이스에서 받는다.

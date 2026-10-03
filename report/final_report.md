@@ -11,9 +11,7 @@
   - ② 기계 상세
   - ③ 모델·예측
   - ④ 데이터
-- **두 가지 실행 방식**
-  - 운영 모드: 로그인·역할 계정·MySQL 감사 로그를 씁니다.
-  - 데모 모드: DB 없이 읽기 전용으로 실행합니다.
+- **실행:** 로그인·DB 없이 `python -m src.wireframe_app` 하나로 실행합니다. 팀에서 만든 로그인·계정·MySQL 감사 로그 기능은 2026-10-03에 앱에서 떼어 `archive/legacy/`에 보관했습니다(7절).
 
 ## 2. 문제 정의
 
@@ -41,15 +39,10 @@ data/raw/*.csv ──▶ src/ 학습·실험 (model_comparison.py 등) ──▶
                        src/ui/ (화면 ①~④ · 그림 · 보고서)
                                   │
                        src/wireframe_app.py (Dash 앱 · 콜백)
-                                  │ 운영 모드
-                       MySQL (계정 · 행동/로그인/오류 감사 로그)
 ```
 
 - **대시보드는 학습하지 않습니다.** 모델 결과는 `outputs/`의 CSV로만 받습니다.
 - **디자인 토큰 한 벌을 CSS와 Plotly가 함께 씁니다.** `design/tokens.json`에서 `assets/00-tokens.css`(CSS 변수)와 `src/theme.py`(Plotly 템플릿 `plantfloor_light/dark`)를 함께 만듭니다. 그래서 차트와 화면이 같은 색을 씁니다.
-- **데모 모드**(`--demo` 또는 `DASHBOARD_MODE=demo`)
-  - 감사·계정 함수를 DB에 접속하지 않는 빈 함수로 바꿉니다.
-  - 로그인 미들웨어를 설치하지 않습니다.
 
 ## 4. 핵심 구현
 
@@ -65,11 +58,7 @@ data/raw/*.csv ──▶ src/ 학습·실험 (model_comparison.py 등) ──▶
 5. **보고서 내보내기**
    - 독자별(공장 관리자·경영진·설비·데이터 분석가, `src/ui/base.py`의 `REPORT_AUDIENCES`) 섹션 골격으로 PDF·Excel을 만듭니다.
    - PDF는 시스템의 한글 TrueType을 찾아 임베드합니다. 찾지 못하면 글자 없는 PDF를 내보내지 않고 실패로 알립니다(`src/ui/report.py`).
-6. **계정과 감사 로그**(커밋 `689877b`, `b04660c`)
-   - 비밀번호는 Argon2id 해시, 개인정보는 AES-256-GCM 암호화를 씁니다.
-   - 관리자·일반 역할을 나눕니다.
-   - 행동·로그인·오류 로그는 SQLAlchemy로 MySQL에 저장합니다.
-7. **접근성:** Dash 기본 컴포넌트가 노출하지 않는 접근 이름·역할·키보드 탭 조작을 `assets/04-a11y.js`가 렌더된 DOM에 보충합니다.
+6. **접근성:** Dash 기본 컴포넌트가 노출하지 않는 접근 이름·역할·키보드 탭 조작을 `assets/04-a11y.js`가 렌더된 DOM에 보충합니다.
 
 ## 5. 트러블슈팅
 
@@ -107,10 +96,10 @@ data/raw/*.csv ──▶ src/ 학습·실험 (model_comparison.py 등) ──▶
 | 디자인 CSS 로드 | 0건 | 4건 |
 | 화면 코드의 hex 색 | 58개 | 0개(테스트로 고정) |
 | 1366×768 | 가로 스크롤 | 1366·1536·1920px 4화면 모두 가로 스크롤 없음(`scripts/capture_screens.py`) |
-| axe-core 위반(화면 4개·로그인) | — | 0건(`docs/a11y/summary.md`) |
-| 지시서 접근성 항목 | lang 없음, placeholder 대비 2.32:1, 이름 없는 콤보박스 4, h1 0, 세션 연장 버튼 19×19 | ko, 5.60:1, 전부 이름 있음, h1 1, 39×24 |
-| 실행 조건 | MySQL·`.env` 필수 | 데모 모드는 DB 없이 실행, 로컬 로그인 미리보기 제공 |
-| 테스트 | 260 passed, 2 xfailed | 267 passed. 레거시 테스트 9개는 `archive/legacy/tests/`로 옮김 |
+| axe-core 위반(화면 4개) | — | 0건(`docs/a11y/summary.md`) |
+| 지시서 접근성 항목 | lang 없음, placeholder 대비 2.32:1, 이름 없는 콤보박스 4, h1 0 | ko, 5.60:1, 전부 이름 있음, h1 1 |
+| 실행 조건 | MySQL·`.env` 필수 | DB·로그인 없이 실행 |
+| 테스트 | 260 passed, 2 xfailed | 241 passed. 레거시 테스트 9개와 로그인·계정·감사 로그 테스트 31개는 `archive/legacy/tests/`로 옮김 |
 
 ## 7. 한계
 
@@ -121,4 +110,5 @@ data/raw/*.csv ──▶ src/ 학습·실험 (model_comparison.py 등) ──▶
   - 부품 당일 과제 결과는 지금 코드로 재현되지 않습니다(커밋 `02d4489`에서 생성).
   - 7일 내 과제의 RF는 다시 학습하면 저장된 예측과 최대 0.28 다릅니다.
 - **접근성 보완이 Dash 2.18 내부 DOM 구조에 기대고 있습니다.** react-select v1·rc-slider 클래스 이름을 쓰므로 Dash를 올리면 다시 맞춰야 합니다.
+- **로그인·계정·감사 로그 기능을 뺐습니다.** 팀원이 만든 Argon2id 비밀번호 해시·AES-256-GCM 개인정보 암호화·역할별 내보내기 제한·MySQL 감사 로그(커밋 `689877b`, `b04660c`)는 `archive/legacy/`에 있고, 지금 앱은 누구나 모든 화면과 내보내기를 쓸 수 있습니다. 내부망 외 공개 배포에는 별도 접근 제어가 필요합니다.
 - **팀 역할·본인 기여는 아직 채우지 않았습니다.** TODO(사용자 확인: 팀 역할·본인 기여)

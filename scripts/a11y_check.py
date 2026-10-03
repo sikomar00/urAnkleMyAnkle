@@ -1,9 +1,8 @@
-"""axe-core로 대시보드 4개 화면과 로그인 화면의 접근성을 검사한다.
+"""axe-core로 대시보드 4개 화면의 접근성을 검사한다.
 
     python -m scripts.a11y_check [--out docs/a11y]
 
 - axe-core(버전 고정)는 처음 실행할 때 cdnjs에서 .cache/에 내려받는다(저장소에 넣지 않는다).
-- 화면 4개는 데모 모드, 로그인은 운영 모드(DB 없이도 GET /login은 열린다)로 띄운다.
 - 결과: <out>/<page>.json(위반 전체), <out>/summary.md(영향도별 건수). serious·critical이
   있으면 종료 코드 1.
 """
@@ -23,8 +22,6 @@ AXE_VERSION = "4.10.2"
 AXE_URL = f"https://cdnjs.cloudflare.com/ajax/libs/axe-core/{AXE_VERSION}/axe.min.js"
 AXE_PATH = ROOT / ".cache" / f"axe-core-{AXE_VERSION}.min.js"
 IMPACTS = ["critical", "serious", "moderate", "minor"]
-# 운영 모드 서버가 DB를 건드리지 않도록 도달할 수 없는 주소를 준다.
-UNREACHABLE_DB = "mysql+pymysql://demo:demo@127.0.0.1:1/predictive_maintenance"
 
 
 def axe_source() -> str:
@@ -34,12 +31,11 @@ def axe_source() -> str:
     return AXE_PATH.read_text(encoding="utf-8")
 
 
-def serve(port: int, demo: bool, log) -> subprocess.Popen:
-    env = {**os.environ, "DASHBOARD_HOST": "127.0.0.1", "DASHBOARD_PORT": str(port),
-           "MACHINE_DATABASE_URL": UNREACHABLE_DB}
-    args = [sys.executable, "-m", "src.wireframe_app"] + (["--demo"] if demo else [])
-    server = subprocess.Popen(args, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
-    url = f"http://127.0.0.1:{port}/" + ("" if demo else "login")
+def serve(port: int, log) -> subprocess.Popen:
+    env = {**os.environ, "DASHBOARD_HOST": "127.0.0.1", "DASHBOARD_PORT": str(port)}
+    server = subprocess.Popen([sys.executable, "-m", "src.wireframe_app"], cwd=ROOT, env=env,
+                              stdout=log, stderr=subprocess.STDOUT)
+    url = f"http://127.0.0.1:{port}/"
     for _ in range(120):
         try:
             urllib.request.urlopen(url, timeout=2)
@@ -64,11 +60,6 @@ MEASURE_JS = """() => {
   const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
   const ph = document.querySelector('#plant-dd .Select-placeholder, #plant-dd .Select-value-label');
   const control = document.querySelector('#plant-dd .Select-control');
-  // 데모 모드는 계정 메뉴를 숨기므로 운영 모드 헤더처럼 보이게 한 뒤 잰다.
-  const menu = document.getElementById('profile-menu-toggle').parentElement;
-  menu.style.display = 'block'; menu.open = true;
-  const extend = document.getElementById('session-extend-btn').getBoundingClientRect();
-  menu.open = false; menu.style.display = 'none';
   return {
     lang: document.documentElement.getAttribute('lang'),
     placeholder_contrast: ratio(getComputedStyle(ph).color, getComputedStyle(control).backgroundColor),
@@ -77,7 +68,6 @@ MEASURE_JS = """() => {
     dropdowns_total: document.querySelectorAll('.dash-dropdown').length,
     h1: document.querySelectorAll('h1').length,
     card_titles_h2: [...document.querySelectorAll('.pf-card__title')].every(e => e.tagName === 'H2'),
-    session_button: [Math.round(extend.width), Math.round(extend.height)],
   };
 }"""
 
@@ -95,7 +85,7 @@ def main() -> int:
     source = axe_source()
     results: dict[str, list[dict]] = {}
     log = open(out / ".server.log", "w")
-    demo, ops = serve(8091, True, log), serve(8092, False, log)
+    server = serve(8091, log)
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch()
@@ -110,20 +100,15 @@ def main() -> int:
                 page.locator("#screen-tabs .tab").nth(index).click()
                 page.wait_for_timeout(2500)
                 results[f"screen{index + 1}"] = run_axe(page, source)
-            login = browser.new_page(viewport={"width": 1366, "height": 768})
-            login.goto("http://127.0.0.1:8092/login")
-            login.wait_for_timeout(800)
-            results["login"] = run_axe(login, source)
             browser.close()
     finally:
-        for server in (demo, ops):
-            server.terminate()
-            server.wait(timeout=10)
+        server.terminate()
+        server.wait(timeout=10)
         log.close()
         (out / ".server.log").unlink(missing_ok=True)
 
     lines = [f"# 접근성 검사 결과 (axe-core {AXE_VERSION})", "",
-             "`python -m scripts.a11y_check`로 생성한다. 화면 1~4는 데모 모드 1920×1080, 로그인은 1366×768.", "",
+             "`python -m scripts.a11y_check`로 생성한다. 화면 1~4, 1920×1080.", "",
              "| 페이지 | " + " | ".join(IMPACTS) + " |", "|---|" + "---|" * len(IMPACTS)]
     blocking = 0
     for name, violations in results.items():
@@ -138,7 +123,6 @@ def main() -> int:
               f"| 드롭다운 placeholder 대비 | {measured['placeholder_contrast']:.2f}:1 | 4.5:1 이상 |",
               f"| 콤보박스 접근 이름 | {measured['dropdowns_named']}개 입력에 이름 (드롭다운 {measured['dropdowns_total']}개) | 전부 |",
               f"| h1 개수 / 카드 제목 h2 | {measured['h1']} / {'예' if measured['card_titles_h2'] else '아니오'} | 1 / 예 |",
-              f"| 세션 연장 버튼 | {measured['session_button'][0]}×{measured['session_button'][1]} | 24×24 이상 |",
               f"| 포커스 링(Tab 첫 요소 `{focus['element']}`) | {focus['width']} {focus['style']} {focus['color']}, 오프셋 {focus['offset']} | 2px border-focus + 1px |"]
     print(measured, focus)
     (out / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

@@ -2,15 +2,15 @@
 
 합성 산업 설비 데이터(기계 10대 × 부품 20종 × 1,095일)로 **기계별 고위험일을 당일 센서로 판별**하고, 단순 기준선(학습 구간 양성 비율, 기계별 과거 비율)과 같은 분할에서 비교해 보여 주는 Dash 대시보드입니다.
 
-![화면 ① 현황 (1920×1080, 데모 모드)](docs/images/screen1_1920x1080.png)
+![화면 ① 현황 (1920×1080)](docs/images/screen1_1920x1080.png)
 
 ```bash
 pip install -r requirements.txt          # Python 3.11
-python -m src.wireframe_app --demo       # DB·로그인 없이 읽기 전용으로 실행
+python -m src.wireframe_app              # DB·로그인 없이 실행
 # → http://127.0.0.1:8052
 ```
 
-데모 모드는 MySQL 없이 4개 화면을 모두 보여 줍니다. 로그인·계정 메뉴·계정 관리까지 확인하려면 `python -m scripts.local_login_preview`를 실행하고 관리자 `admin` / `admin1234` 또는 일반 `user` / `user1234`로 로그인합니다(MySQL 대신 로컬 SQLite를 쓰고, 이 실행에서만 쓰는 계정). 다른 해상도·다크 테마 화면은 [`docs/images/`](docs/images/)에 있습니다.
+로그인 없이 바로 4개 화면이 열립니다. 팀에서 만든 로그인·계정·MySQL 감사 로그 기능은 2026-10-03에 앱에서 떼어 [`archive/legacy/`](archive/legacy/README.md)에 보관했습니다. 다른 해상도·다크 테마 화면은 [`docs/images/`](docs/images/)에 있습니다.
 
 ## 1. 문제 정의와 과제 전환
 
@@ -94,22 +94,19 @@ flowchart LR
     data["src/dashboard_data.py<br>읽기 전용 로더"]
     ui["src/ui/<br>화면 ①~④ · 그림 · 보고서"]
     app["src/wireframe_app.py<br>Dash 앱 · 콜백"]
-    db[("MySQL<br>계정·감사 로그")]
     raw --> exp --> out --> data
     raw --> data
     data --> ui --> app
-    app -- "운영 모드" --> db
 ```
 
 - 대시보드는 모델을 다시 학습하지 않고 `outputs/`와 원본 CSV를 읽기만 합니다.
-- 데모 모드에서는 계정·감사 함수가 DB에 접속하지 않는 빈 함수로 바뀝니다(`src/demo_mode.py`).
+- DB·로그인이 없습니다. 실행에 필요한 것은 원본 CSV와 `outputs/` 파일뿐입니다.
 
 | 영역 | 패키지 (`requirements.txt`) |
 |---|---|
 | 데이터·모델 | pandas 2.2.3, numpy 1.26.4, scipy 1.13.1, scikit-learn 1.6.1, joblib 1.4.2 |
 | 대시보드 | dash 2.18.2, plotly 5.24.1 |
 | 보고서 내보내기 | reportlab 4.4.10(PDF), openpyxl 3.1.5(Excel) |
-| 계정·감사 로그 | SQLAlchemy 2.0, PyMySQL, argon2-cffi(비밀번호 해시), cryptography(AES-256-GCM 개인정보 암호화), python-dotenv |
 | 시계열 실험 | prophet 1.1.6, cmdstanpy 1.2.5, holidays 0.58 — `src/data_huijae.py`의 Prophet 실험에서만 쓰고 대시보드는 쓰지 않음 |
 | 검증 | pytest 8.3.3, ruff 0.16.10·playwright 1.63.0(`requirements-dev.txt`) |
 
@@ -124,7 +121,7 @@ flowchart LR
 **검증 명령**
 
 ```bash
-pytest -q                                  # 267 passed
+pytest -q                                  # 241 passed
 ruff check .
 python -m scripts.capture_screens          # 4화면 × 3해상도 캡처 + 금지 문구·가로 스크롤·잘린 셀 검사
 python -m scripts.a11y_check               # axe-core 접근성 검사 → docs/a11y/
@@ -151,9 +148,9 @@ TODO(사용자 확인: 팀원 실명·역할·본인 기여 범위)
 
 | git 작성자 | 커밋 수 | 커밋에서 보이는 작업 |
 |---|---|---|
-| sikomar00 | 63 | 대시보드 화면·데이터 로더 연동, 데이터 출처 기록, 포트폴리오 보완(데모 모드·디자인 시스템·모델 비교 재구성·접근성·정리) |
+| sikomar00 | 63 | 대시보드 화면·데이터 로더 연동, 데이터 출처 기록, 포트폴리오 보완(디자인 시스템·모델 비교 재구성·접근성·정리) |
 | 고도현 | 45 | 기계 고장점수·등급 모델, 이상 심각도 비교, 부품군 당일 진단, 확률형 기계 위험 실험 |
-| huijae1234 | 22 | 고장점수(A=4·B=2·C=1) 로지스틱 비교, 설비·부품 정답 후보 24가지 비교, 로그인·역할 계정·MySQL 감사 로그 |
+| huijae1234 | 22 | 고장점수(A=4·B=2·C=1) 로지스틱 비교, 설비·부품 정답 후보 24가지 비교, 로그인·역할 계정·MySQL 감사 로그(현재 `archive/legacy/`) |
 | govlakdlxl | 4 | 현재 상태 분류·시계열 7일 위험 모델, EDA |
 | trabajOmar / ys_doing1 | 3 | 저장소 초기 설정(requirements, .gitignore) |
 | OmarKim | 2 | 데이터 검증, 디자인 시스템 파일 |

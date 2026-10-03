@@ -21,7 +21,7 @@ FORBIDDEN_STYLE_KEYS = {
 
 def test_no_hex_colors_in_dashboard_sources():
     hits = []
-    for path in (*APP_SOURCES, ROOT / "src" / "dashboard_auth.py", ROOT / "assets" / "03-app.css"):
+    for path in (*APP_SOURCES, ROOT / "assets" / "03-app.css"):
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if HEX.search(line):
                 hits.append(f"{path.name}:{number}: {line.strip()}")

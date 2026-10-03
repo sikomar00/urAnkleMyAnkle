@@ -3,10 +3,6 @@
 from dash import dcc, html
 
 from ..dashboard_data import filter_assets, load_asset_list, load_priority_table, period_start
-from ..demo_mode import is_demo_mode
-
-
-DEMO_MODE = is_demo_mode()
 
 # ============================================================
 # 디자인 토큰 — assets/00-tokens.css(design/tokens.json에서 생성)가 정본이다.

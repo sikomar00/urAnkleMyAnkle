@@ -3,10 +3,9 @@
 from dash import dcc, html
 
 from ..dashboard_data import load_data_reference_date
-from ..demo_mode import DEMO_BADGE_TEXT
 from .base import (
-    CODE_12, DEFAULT_AUDIENCE, DEMO_MODE, filter_dropdown, FILTERBAR_H, HEADER_H, LABEL_12, MACHINE_OPTIONS,
-    MACHINE_TYPE_OPTIONS, NOTE_12, NUM_13, period_toggle, PLANT_OPTIONS, REPORT_AUDIENCES, SCREENS,
+    CODE_12, DEFAULT_AUDIENCE, filter_dropdown, FILTERBAR_H, HEADER_H, LABEL_12, MACHINE_OPTIONS,
+    MACHINE_TYPE_OPTIONS, NOTE_12, period_toggle, PLANT_OPTIONS, REPORT_AUDIENCES, SCREENS,
 )
 
 
@@ -51,28 +50,6 @@ def app_header():
          ], id="export-group", className="pf-export"),
          html.Button("", id="theme-btn", n_clicks=0, title="테마 전환", className="pf-btn body-14",
                      style={"width": "32px", "padding": "0"}, **{"aria-label": "테마 전환"}),
-         html.Span(DEMO_BADGE_TEXT, id="demo-badge", className="pf-badge pf-badge--role label-12",
-                   style={"display": "inline-flex" if DEMO_MODE else "none"}),
-         html.Details([
-             html.Summary(html.Span("관", id="profile-display"), id="profile-menu-toggle",
-                          title="마이 프로필", className="pf-avatar label-12"),
-             html.Div([
-                 html.Div(["아이디 · ", html.Span(id="profile-login-id", className=CODE_12)],
-                          className=LABEL_12, style={"marginBottom": "6px"}),
-                 html.Div([
-                     html.Span(["남은 시간 · ", html.Span("10:00", id="session-remaining", className=NUM_13)]),
-                     html.Button("연장", id="session-extend-btn", n_clicks=0, className="pf-btn label-12",
-                                 style={"height": "24px", "width": "auto", "padding": "0 8px", "marginLeft": "auto"},
-                                 title="로그인 시간 10분으로 초기화",
-                                 **{"aria-label": "로그인 시간 10분으로 초기화"}),
-                 ], className=LABEL_12, style={"marginBottom": "8px", "display": "flex",
-                                               "alignItems": "center", "gap": "8px"}),
-                 html.Button("비밀번호 변경", id="password-open-btn", n_clicks=0, className="pf-btn label-12"),
-                 html.Button("계정 관리", id="account-manage-btn", n_clicks=0, className="pf-btn label-12",
-                             style={"display": "none"}),
-                 html.Button("로그아웃", id="logout-btn", n_clicks=0, className="pf-btn label-12"),
-             ], className="pf-menu"),
-         ], style={"position": "relative", "flexShrink": "0", "display": "none" if DEMO_MODE else "block"}),
          dcc.Download(id="report-download"),
          dcc.Download(id="table-download")],
         style={"display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "8px",

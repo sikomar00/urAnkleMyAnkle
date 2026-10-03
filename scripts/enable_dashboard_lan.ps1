@@ -17,4 +17,4 @@ New-NetFirewallRule `
     -Profile Private | Out-Null
 
 Write-Host "방화벽 규칙이 등록되었습니다: TCP 8052 (Private 네트워크)"
-Write-Host "같은 네트워크 접속 주소: http://192.168.219.110:8052/login"
+Write-Host "같은 네트워크 접속 주소: http://192.168.219.110:8052/"

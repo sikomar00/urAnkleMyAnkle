@@ -66,13 +66,6 @@
 .pf-modal { background: var(--surface-raised); border: var(--stroke-hairline) solid var(--border-hairline);
             border-radius: var(--radius-lg); box-shadow: var(--shadow-popover); padding: var(--space-6); }
 
-/* ── 모달 레이어 정렬 ────────────────────────────────────────────── */
-/* 표시 여부(display)와 쌓임 순서(z-index)만 콜백이 인라인으로 바꾼다. */
-.pf-scrim { align-items: center; justify-content: center; }
-.pf-modal__title { margin: 0 0 var(--space-4); }
-.pf-modal__body { margin: 0 0 var(--space-6); }
-.pf-modal__actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
-
 /* ════════════════════════════════════════════════════════════════════
    대시보드 화면(src/wireframe_app.py) — Dash 컴포넌트를 토큰에 연결한다.
    Dash 기본 컴포넌트(dcc.Tabs·Dropdown·DataTable)는 자체 CSS를 싣고 오므로
@@ -105,21 +98,6 @@
 #theme-btn::before { content: "☾"; }
 :root[data-theme="dark"] #theme-btn::before { content: "☀"; }
 
-/* 계정 메뉴 */
-.pf-avatar {
-  list-style: none; width: 34px; height: 34px; border-radius: 50%;
-  display: grid; place-items: center; cursor: pointer;
-  background: var(--ink); color: var(--surface-card);
-}
-.pf-avatar::-webkit-details-marker { display: none; }
-.pf-menu {
-  position: absolute; right: 0; top: 40px; width: 210px; z-index: 100;
-  padding: var(--space-3);
-  background: var(--surface-raised); color: var(--ink);
-  border: var(--stroke-hairline) solid var(--border-hairline);
-  border-radius: var(--radius-md); box-shadow: var(--shadow-popover);
-}
-.pf-menu .pf-btn { display: block; width: 100%; margin-top: var(--space-1); }
 
 /* 드롭다운 — Dash 2.x dcc.Dropdown(react-select v1) */
 .pf-app .Select { font-family: inherit; font-size: 13px; }
@@ -178,10 +156,6 @@
   border: var(--stroke-hairline) solid var(--border-hairline);
 }
 
-/* 계정 목록 */
-.pf-list-head { border-bottom: var(--stroke-hairline) solid var(--border-control); font-weight: 600; }
-.pf-list-row  { border-bottom: var(--stroke-hairline) solid var(--border-hairline); }
-.pf-check-row { border-bottom: var(--stroke-hairline) solid var(--border-hairline); cursor: pointer; }
 
 /* 데이터 조회 표 — dash_table.DataTable */
 .pf-dtable .dash-spreadsheet-container .dash-spreadsheet-inner th {

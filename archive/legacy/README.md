@@ -16,3 +16,25 @@ pytest 기본 경로(`tests/`)에 포함되지 않고, 앱·CI에서 import하�
 | `tests/test_dashboard.py`, `tests/test_features.py`, `tests/test_alert_service.py` | 위 모듈의 테스트 | 모듈과 함께 보관 |
 
 `src/db_inga.py`(하드코딩 DB 계정, import만 해도 테이블 생성·행 쓰기)는 보관하지 않고 삭제했다.
+
+## 로그인·계정·감사 로그 (2026-10-03 앱에서 제거)
+
+DB(MySQL)가 팀원 컴퓨터에만 있어 다른 팀원이 로그인할 수 없어서, 앱에서 로그인 기능을 떼어 냈다.
+지금 앱(`src/wireframe_app.py`)은 DB·로그인 없이 실행되고 누구나 모든 화면과 내보내기를 쓸 수 있다.
+
+| 경로 | 무엇 |
+|---|---|
+| `src/dashboard_auth.py` | 로그인·회원가입 화면, Flask 세션·CSRF, 10분 세션 만료 |
+| `src/audit_service.py`, `src/audit_models.py` | 계정·역할, 행동·로그인·고장·오류 로그(SQLAlchemy ORM) |
+| `src/security_service.py` | Argon2id 비밀번호 해시, AES-256-GCM 개인정보 암호화 |
+| `src/db_service.py`, `src/db_models.py` | MySQL 연결(`MACHINE_DATABASE_URL`), 관리자 정보 표 |
+| `src/demo_mode.py` | DB 없이 띄우던 데모 모드(로그인이 없어져 필요 없음) |
+| `scripts/local_login_preview.py` | MySQL 대신 로컬 SQLite로 로그인을 띄우던 미리보기 |
+| `.env.example` | DB 주소·암호화 키·관리자 계정 환경 변수 |
+| `docs/DASHBOARD_LOGIN_GUIDE.md` 외 6개 | 로그인·세션·계정 역할·감사 로그 안내 |
+| `tests/test_dashboard_auth.py` 외 6개 | 위 모듈의 테스트 31개 |
+
+다시 쓰려면 이 파일들을 원래 위치로 옮기고, `requirements.txt`에서 뺀 패키지
+(`SQLAlchemy>=2.0,<2.1`, `PyMySQL>=1.1,<2`, `argon2-cffi>=23,<26`, `cryptography>=43,<47`,
+`python-dotenv>=1.0,<2`)를 되돌린 뒤, `wireframe_app.py`의 계정 메뉴·모달·콜백을 커밋
+`7ad86c0`(제거 직전) 상태에서 가져온다.
