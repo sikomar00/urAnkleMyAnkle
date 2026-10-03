@@ -80,7 +80,7 @@
    선택자 구체성이 높아 덮을 방법이 없는 곳에만 쓴다.
    ════════════════════════════════════════════════════════════════════ */
 
-.pf-card__title { margin: 0; }
+.pf-card__title, .pf-header__brand { margin: 0; }
 /* 카드 머리 오른쪽(보조 설명·버튼·슬라이더)은 남는 폭을 받아 오른쪽에 붙는다. */
 .pf-card__actions { flex: 1 1 auto; min-width: 0; justify-content: flex-end; text-align: right; }
 .pf-strong { font-weight: 600; }

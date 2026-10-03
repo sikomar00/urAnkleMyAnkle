@@ -73,3 +73,25 @@ def test_app_serves_design_assets_and_every_figure_uses_plantfloor_template():
     for fig in figures:
         assert fig.layout.template.layout.paper_bgcolor == C("surface-card", "light")
         assert not (fig.layout.title and fig.layout.title.text)
+
+
+@needs_data
+def test_page_language_and_heading_structure():
+    from dash import html
+
+    from src import wireframe_app as w
+
+    assert '<html lang="ko"' in w.INDEX_STRING
+
+    def nodes(node):
+        yield node
+        children = getattr(node, "children", None)
+        for child in children if isinstance(children, (list, tuple)) else [children]:
+            if child is not None and not isinstance(child, (str, int, float)):
+                yield from nodes(child)
+
+    header = list(nodes(w.app_header()))
+    assert sum(isinstance(n, html.H1) for n in header) == 1
+    screen = list(nodes(w.screen_1()))
+    assert not any(isinstance(n, (html.H1, html.H3)) for n in screen)
+    assert all(isinstance(n, html.H2) for n in screen if "pf-card__title" in (getattr(n, "className", "") or ""))

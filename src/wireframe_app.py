@@ -101,7 +101,7 @@ if DEMO_MODE:
 # ============================================================
 
 INDEX_STRING = """<!DOCTYPE html>
-<html data-theme="light">
+<html lang="ko" data-theme="light">
   <head>
     {%metas%}<title>{%title%}</title>{%favicon%}{%css%}
   </head>
@@ -309,7 +309,7 @@ def card(title, w, h, body, right=None):
     return html.Section(
         [
             html.Div(
-                [html.H3(title, className=f"pf-card__title {TITLE_14}", style={"whiteSpace": "nowrap"}),
+                [html.H2(title, className=f"pf-card__title {TITLE_14}", style={"whiteSpace": "nowrap"}),
                  html.Div(right, className="pf-card__actions")],
                 className="pf-card__head",
             ),
@@ -436,6 +436,12 @@ def table_placeholder(cols, nrows, row_h, head_h=32, first_idx=False, sort_col=N
     )
 
 
+def table_scroll(table, label):
+    """카드 안 표 스크롤 영역 — 키보드로도 스크롤할 수 있게 초점을 받고 이름을 가진다."""
+    return html.Div(table, className="pf-table__scroll", tabIndex="0", role="region",
+                    **{"aria-label": label})
+
+
 def empty_state(title, reason, h=None):
     """확정되지 않은 값은 0/—이 아니라 이유가 적힌 빈 상태(.pf-empty)로 표시한다.
     폭은 부모를 채우고, h를 주지 않으면 높이도 부모를 채운다."""
@@ -454,7 +460,7 @@ def empty_state(title, reason, h=None):
 def app_header():
     """좌: 시스템명·기준일 / 중앙: 화면 탭 4개(dcc.Tabs) / 우: 내보내기·테마 토글·계정 메뉴."""
     left = html.Div(
-        [html.Span("산업 기계 센서 기반 고장 위험 예측", className="pf-header__brand title-16"),
+        [html.H1("산업 기계 센서 기반 고장 위험 예측", className="pf-header__brand title-16"),
          html.Div([html.Span("데이터 기준일", className=LABEL_12),
                    html.Span(load_data_reference_date(), className=f"{CODE_12} pf-muted")],
                   style={"display": "flex", "alignItems": "center", "gap": "6px", "whiteSpace": "nowrap"}),
@@ -499,7 +505,7 @@ def app_header():
                  html.Div([
                      html.Span(["남은 시간 · ", html.Span("10:00", id="session-remaining", className=NUM_13)]),
                      html.Button("연장", id="session-extend-btn", n_clicks=0, className="pf-btn label-12",
-                                 style={"height": "24px", "padding": "0 8px", "marginLeft": "auto"},
+                                 style={"height": "24px", "width": "auto", "padding": "0 8px", "marginLeft": "auto"},
                                  title="로그인 시간 10분으로 초기화",
                                  **{"aria-label": "로그인 시간 10분으로 초기화"}),
                  ], className=LABEL_12, style={"marginBottom": "8px", "display": "flex",
@@ -533,7 +539,7 @@ def filter_bar():
     """공장 / 기계 종류 / 기계 / 기간 / 초기화 · 우측 현재 필터 상태와 적용 범위 안내.
     dcc.Store(id="filter-store")가 화면 전환과 무관하게 값을 들고 있어 화면을
     옮겨도 선택이 유지된다."""
-    return html.Div(
+    return html.Section(
         [filter_dropdown("plant-dd", "공장", PLANT_OPTIONS, 120),
          filter_dropdown("machine-type-dd", "기계 종류", MACHINE_TYPE_OPTIONS, 150),
          filter_dropdown("machine-dd", "기계", MACHINE_OPTIONS, 130),
@@ -550,7 +556,7 @@ def filter_bar():
          html.Span("", id="action-echo", className=NOTE_12,
                    style={"maxWidth": "208px", "minWidth": "0", "textAlign": "right",
                           "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis"})],
-        className="pf-filterbar",
+        className="pf-filterbar", **{"aria-label": "조회 조건"},
         style={"height": f"{FILTERBAR_H}px", "gap": "10px",
                # overflow:hidden을 쓰면 드롭다운 팝업까지 clip된다. 줄바꿈만 막는다.
                "flexWrap": "nowrap",
@@ -803,8 +809,8 @@ def priority_table(cols, records, sort_col=None, direction="desc"):
                 cls = BODY_13
             cells.append(html.Td(text, className=cls, style={"textAlign": a}))
         body_rows.append(html.Tr(cells))
-    return html.Div(html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table"),
-                    className="pf-table__scroll")
+    return table_scroll(html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table"),
+                        "점검 우선순위 표")
 
 
 def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=None, start=None):
@@ -1087,8 +1093,7 @@ def _comparison_table(rows, focus_model):
     ]
     thead = html.Tr([html.Th(l, className="label-12" + (" pf-th--num" if a == "right" else ""),
                              style={"textAlign": a}) for l, a in cols])
-    return html.Div(html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table"),
-                    className="pf-table__scroll")
+    return table_scroll(html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table"), "모델 비교 표")
 
 
 def _confusion_body(confusion, positive_name):
@@ -1327,8 +1332,8 @@ def _family_screen(seg_state, asset_tag, family):
     family_thead = html.Tr([html.Th(l, className="label-12" + (" pf-th--num" if a == "right" else ""),
                                     style={"textAlign": a})
                             for l, a in family_cols])
-    mcomp_body = html.Div(html.Table([html.Thead(family_thead), html.Tbody(family_body_rows)],
-                                     className="pf-table"), className="pf-table__scroll")
+    mcomp_body = table_scroll(html.Table([html.Thead(family_thead), html.Tbody(family_body_rows)],
+                                         className="pf-table"), "부품군 진단 표")
     mcomp = card("부품군 진단", 774, ROW_MAIN, mcomp_body, right=note("행 = 부품군 · 행 클릭 시 오른쪽·아래 카드 갱신"))
 
     pr_body = html.Div(
@@ -1474,8 +1479,8 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None)
                     cell_style["whiteSpace"] = "normal"
                 cells.append(html.Td(text, className=cls, style=cell_style))
             body_rows.append(html.Tr(cells))
-        return html.Div(html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table"),
-                        className="pf-table__scroll")
+        return table_scroll(html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table"),
+                            "데이터 사전 표")
 
     ddict = card("데이터 사전 (22열)", 932, ROW_SUB, dict_table(load_data_dictionary()),
                  right=note("데이터셋 전체 기준 · 필터 미적용"))
@@ -1892,7 +1897,7 @@ def _modal(modal_id, z_index, width, title, body, actions):
     """확인 모달(DESIGN.md §7.6) — 제목 title-16, 본문 body-14, 버튼은 우측 정렬로
     [취소 = --ghost] [실행 = --primary 또는 --danger]."""
     return html.Div(
-        html.Div([html.H3(title, className="pf-modal__title title-16"),
+        html.Div([html.H2(title, className="pf-modal__title title-16"),
                   *body,
                   html.Div(actions, className="pf-modal__actions")],
                  className="pf-modal", style={"width": f"{width}px", "maxWidth": "calc(100vw - 32px)"}),
@@ -1959,7 +1964,7 @@ app.layout = html.Div(
         html.Div(id="account-management-modal", className="pf-scrim", style=_scrim_style(False, 330), children=[
             html.Div([
                 html.Div([
-                    html.H3("계정 관리", className="title-16", style={"margin": 0}),
+                    html.H2("계정 관리", className="title-16", style={"margin": 0}),
                     html.Button("계정 삭제", id="account-delete-mode-btn", n_clicks=0, className="pf-btn label-12"),
                 ], style={"display": "flex", "alignItems": "center", "justifyContent": "space-between",
                           "marginBottom": "16px"}),
