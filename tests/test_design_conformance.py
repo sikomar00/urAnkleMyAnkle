@@ -8,6 +8,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "src" / "wireframe_app.py"
+# 화면 구성 요소는 src/ui/로 나뉘어 있다 — 앱과 함께 검사한다.
+APP_SOURCES = [APP, *sorted((ROOT / "src" / "ui").glob("*.py"))]
 HEX = re.compile(r"#[0-9a-fA-F]{6}\b")
 # 인라인 style에 두면 테마 전환이 깨지는 키 — 색·폰트·테두리·그림자(치수·배치만 허용).
 FORBIDDEN_STYLE_KEYS = {
@@ -19,7 +21,7 @@ FORBIDDEN_STYLE_KEYS = {
 
 def test_no_hex_colors_in_dashboard_sources():
     hits = []
-    for path in (APP, ROOT / "src" / "dashboard_auth.py", ROOT / "assets" / "03-app.css"):
+    for path in (*APP_SOURCES, ROOT / "src" / "dashboard_auth.py", ROOT / "assets" / "03-app.css"):
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if HEX.search(line):
                 hits.append(f"{path.name}:{number}: {line.strip()}")
@@ -27,10 +29,10 @@ def test_no_hex_colors_in_dashboard_sources():
 
 
 def test_inline_style_dicts_carry_no_color_font_border_or_shadow():
-    tree = ast.parse(APP.read_text(encoding="utf-8"))
     hits = [
-        f"{key.value} (line {key.lineno})"
-        for node in ast.walk(tree) if isinstance(node, ast.Dict)
+        f"{path.name}: {key.value} (line {key.lineno})"
+        for path in APP_SOURCES
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))) if isinstance(node, ast.Dict)
         for key in node.keys
         if isinstance(key, ast.Constant) and key.value in FORBIDDEN_STYLE_KEYS
     ]
