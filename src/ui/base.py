@@ -49,9 +49,10 @@ def _theme(theme):
     return theme if theme in ("light", "dark") else "light"
 
 
-def status_badge(label):
-    """상태 배지 — 8px 점 + 글자. 상태색은 글자 라벨 없이 쓰지 않는다(DESIGN.md §2.1)."""
-    variant = GRADE_BADGE.get(label, "neutral")
+def status_badge(label, variant=None):
+    """상태 배지 — 8px 점 + 글자. 상태색은 글자 라벨 없이 쓰지 않는다(DESIGN.md §2.1).
+    variant를 주지 않으면 기계 등급 글자(정상·주의·경계·위험)에서 정한다."""
+    variant = variant or GRADE_BADGE.get(label, "neutral")
     return html.Span([html.Span(className="pf-badge__dot"), label],
                      className=f"pf-badge pf-badge--{variant} {MICRO_11.split()[0]}")
 

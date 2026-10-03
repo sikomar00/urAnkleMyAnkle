@@ -18,6 +18,7 @@
     → http://127.0.0.1:8052
 """
 
+import json
 import os
 import sys
 from datetime import datetime
@@ -44,7 +45,6 @@ from .dashboard_data import (  # noqa: E402
     load_sensor_outlier_bounds,
     load_failure_trend,
     load_family_pr_curve_and_confusion,
-    load_family_recurrence_intervals,
     load_screen1_machine_status,
     load_table_page,
 )
@@ -55,10 +55,10 @@ from .ui.base import (  # noqa: E402
     INDEX_STRING, MARGIN, NO_DATA_MARK, PERIOD_PRESETS, REPORT_AUDIENCES,
 )
 from .ui.shell import (  # noqa: E402
-    app_header, filter_bar, page_footer,
+    app_header, filter_bar, FILTERBAR_STYLE, page_footer,
 )
 from .ui.figures import (  # noqa: E402
-    _family_recur_figure, _heatmap_figure, _parts_figure, _pr_figure, _smult_figure, _spark_figure,
+    _heatmap_figure, _parts_figure, _pr_figure, _smult_figure, _spark_figure,
     _trend_figure,
 )
 from .ui.screen1 import (  # noqa: E402
@@ -68,8 +68,8 @@ from .ui.screen2 import (  # noqa: E402
     screen_2,
 )
 from .ui.screen3 import (  # noqa: E402
-    _confusion_body, _screen3_task_key, _screen3_threshold, _threshold_body, SCREEN3_FAMILY_INDEX,
-    SCREEN3_TASK_INFO, screen_3,
+    _confusion_body, _screen3_task_key, _screen3_threshold, _threshold_body, family_table_block,
+    model_table_block, SCREEN3_TASK_INFO, screen_3,
 )
 from .ui.screen4 import (  # noqa: E402
     _dtable_footer_text, screen_4,
@@ -93,6 +93,14 @@ app = Dash(__name__, assets_folder=str(Path(__file__).resolve().parents[1] / "as
 app.title = "설비 모니터링 대시보드"
 app.index_string = INDEX_STRING
 
+
+def main_style(filterbar_visible):
+    """본문 영역 치수 — 아래쪽 여백은 푸터가 대신한다. 필터바가 보이면 화면 본문 예산은 928px,
+    필터바를 숨기는 화면 ③은 그 높이(56px)만큼 늘어난 984px이다. 전체 높이는 언제나 1080px."""
+    height = CANVAS_H - HEADER_H - FOOTER_H - (FILTERBAR_H if filterbar_visible else 0)
+    return {"height": f"{height}px", "padding": f"{MARGIN}px {MARGIN}px 0", "overflow": "hidden"}
+
+
 app.layout = html.Div(
     [
         # storage_type="local" → 새로고침·재접속 후에도 마지막 선택이 남는다.
@@ -110,12 +118,7 @@ app.layout = html.Div(
                  className="pf-desktop-only pf-notice pf-notice--warning label-12", role="note"),
         app_header(),
         filter_bar(),
-        html.Main(
-            id="screen-content",
-            # 아래쪽 여백은 푸터가 대신한다 — 화면 ①~④가 쓰는 본문 예산은 928px 그대로다.
-            style={"height": f"{CANVAS_H - HEADER_H - FILTERBAR_H - FOOTER_H}px",
-                   "padding": f"{MARGIN}px {MARGIN}px 0", "overflow": "hidden"},
-        ),
+        html.Main(id="screen-content", style=main_style(filterbar_visible=True)),
         page_footer(),
     ],
     # 폭 1280~1920px에서 12열 그리드가 늘고 준다(03-app.css .pf-app). 높이는 레이아웃 토큰 고정.
@@ -148,7 +151,8 @@ def render_screen(active, seg_state, filters, selected_family, table_sort):
     if active == "2":
         kwargs.update(asset_tag=_focus_asset(filters), start=start, end=end)
     if active == "3":
-        kwargs.update(asset_tag=_focus_asset(filters, machine_only=True), family=selected_family)
+        kwargs.update(asset_tag=_focus_asset(filters, machine_only=True), family=selected_family,
+                      table_sort=table_sort)
     if active == "4":
         kwargs.update(assets=assets, start=start, end=end)
     try:
@@ -206,6 +210,27 @@ def select_family_row(n_clicks_list):
     if not triggered:
         return no_update
     return triggered["index"]
+
+
+# ③ 부품군 진단의 기계 선택 — 화면 ③은 필터바를 숨기므로 도구줄의 드롭다운이 전역 필터의 기계를 바꾼다.
+# 고른 기계가 지금 공장·기계 종류 필터 밖이면 write_filters가 기계 선택을 풀어 버리므로, 그때만 두 필터를
+# 함께 푼다. 화면이 다시 그려지며 드롭다운이 마운트될 때의 발화(지금 보이는 기계 그대로)는 무시한다.
+@app.callback(
+    Output("machine-dd", "value", allow_duplicate=True),
+    Output("plant-dd", "value", allow_duplicate=True),
+    Output("machine-type-dd", "value", allow_duplicate=True),
+    Input({"type": "family-asset-dd", "index": ALL}, "value"),
+    State("filter-store", "data"),
+    prevent_initial_call=True,
+)
+def pick_family_asset(values, filters):
+    asset_tag = values[0] if values else None
+    f = filters or DEFAULT_FILTERS
+    if not asset_tag or asset_tag == _focus_asset(f, machine_only=True):
+        return no_update, no_update, no_update
+    if asset_tag in filter_assets(f.get("plant"), f.get("machine_type")):
+        return asset_tag, no_update, no_update
+    return asset_tag, None, None
 
 
 # ③ "판정 임계값 조정" 슬라이더 — 과제 0·2에서만 thr-metrics가 DOM에 있으므로
@@ -342,8 +367,8 @@ def recolor_parts_chart(theme, _active_tab, filters):
     return [_parts_figure(load_asset_parts_history(_focus_asset(filters), start, end), theme or "light")]
 
 
-# ③ "부품군 진단" 드릴다운의 PR곡선·재발간격 차트도 같은 방식으로 재색칠한다.
-# family-pr-chart/family-recur-chart는 task_sel==1일 때만 DOM에 있으므로
+# ③ "부품군 진단" 드릴다운의 PR곡선도 같은 방식으로 재색칠한다.
+# family-pr-chart는 부품군 진단 과제일 때만 DOM에 있으므로
 # 다른 과제·다른 화면에서는 호출 자체가 안 된다 — asset_tag/family 폴백은
 # screen_3()의 폴백 로직과 동일하게 반복한다(그 함수 자체를 State로 참조할
 # 수는 없으므로).
@@ -362,21 +387,6 @@ def recolor_family_pr_chart(theme, _active_tab, filters, family):
     c = pr_cm["confusion"]
     pr_cm = {**pr_cm, "positive_rate": (c["tp"] + c["fn"]) / max(1, sum(c.values()))}
     return [_pr_figure(pr_cm, theme or "light")]
-
-
-@app.callback(
-    Output({"type": "family-recur-chart", "index": ALL}, "figure"),
-    Input("theme-store", "data"),
-    Input("screen-tabs", "value"),
-    State("filter-store", "data"),
-    State("selected-family-store", "data"),
-)
-def recolor_family_recur_chart(theme, _active_tab, filters, family):
-    asset_tag = _focus_asset(filters, machine_only=True)
-    valid_families = [r["part_family"] for r in load_asset_family_diagnosis(asset_tag)]
-    family = family if family in valid_families else valid_families[0]
-    intervals = load_family_recurrence_intervals(asset_tag, family)
-    return [_family_recur_figure(intervals, theme or "light")]
 
 
 # ③ 과제 ①~③의 PR 곡선도 같은 방식으로 재색칠한다 — 과제·기준은 seg-store에서 읽는다.
@@ -495,28 +505,19 @@ def sync_filter_options(data):
             options(filter_assets(f.get("plant"), f.get("machine_type"))))
 
 
-# 화면③ 모델 지표는 고정 평가 구간 전체 결과라 공장·기계 종류·기간 필터를
-# 적용하지 않는다 — 해당 컨트롤을 끄고 이유를 적는다. 기계 필터는 부품군
-# 진단 과제에서만 쓴다.
-@app.callback(
-    Output("plant-dd", "disabled"),
-    Output("machine-type-dd", "disabled"),
-    Output("machine-dd", "disabled"),
-    Output({"type": "period-btn", "index": ALL}, "disabled"),
-    Output("start-date", "disabled"),
-    Output("end-date", "disabled"),
-    Output("filter-scope-note", "children"),
+# 화면 ③의 모델 지표는 고정 평가 구간 전체 결과라 공장·기계 종류·기간 필터를 쓰지 않는다 —
+# 필터바를 숨기고 그 높이만큼 본문을 늘린다(부품군 진단의 기계 선택은 화면 ③ 도구줄에 있다).
+# 서버를 거치지 않는 clientside 콜백이라 탭을 누르는 즉시 바뀐다.
+app.clientside_callback(
+    f"""function (tab) {{
+        const hidden = tab === "3";
+        return [hidden ? {json.dumps({**FILTERBAR_STYLE, "display": "none"})} : {json.dumps(FILTERBAR_STYLE)},
+                hidden ? {json.dumps(main_style(False))} : {json.dumps(main_style(True))}];
+    }}""",
+    Output("filter-bar", "style"),
+    Output("screen-content", "style"),
     Input("screen-tabs", "value"),
-    Input("seg-store", "data"),
 )
-def apply_filter_scope(active, seg_state):
-    period_count = len(PERIOD_PRESETS)
-    if active != "3":
-        return False, False, False, [False] * period_count, False, False, ""
-    family_task = (seg_state or DEFAULT_SEG).get("task", 0) == SCREEN3_FAMILY_INDEX
-    note_text = ("모델 지표는 평가 구간 전체 기준 · "
-                 + ("부품군 진단은 기계 필터만 적용" if family_task else "필터 미적용"))
-    return True, True, not family_task, [True] * period_count, True, True, note_text
 
 
 # ------------------------------------------------------------
@@ -589,7 +590,16 @@ def _sorted_power(store, filters, _seg_state, _family):
     return power_block(store, assets, start, end)
 
 
-SORT_TABLE_BUILDERS = {"priority": _sorted_priority, "power": _sorted_power}
+def _sorted_model(store, _filters, seg_state, _family):
+    return model_table_block(store, seg_state)
+
+
+def _sorted_family(store, filters, _seg_state, family):
+    return family_table_block(store, _focus_asset(filters, machine_only=True), family)
+
+
+SORT_TABLE_BUILDERS = {"priority": _sorted_priority, "power": _sorted_power, "model": _sorted_model,
+                       "family": _sorted_family}
 
 
 @app.callback(

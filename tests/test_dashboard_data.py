@@ -166,19 +166,6 @@ def test_family_pr_curve_and_confusion_rejects_unknown_inputs():
         dd.load_family_pr_curve_and_confusion('AST-1041', 'NotAFamily')
 
 
-def test_family_recurrence_intervals_are_positive_day_counts():
-    intervals = dd.load_family_recurrence_intervals('AST-1041', 'Bearing')
-    assert len(intervals) > 0
-    assert all(isinstance(v, int) and v > 0 for v in intervals)
-
-
-def test_family_recurrence_intervals_rejects_unknown_inputs():
-    with pytest.raises(ValueError):
-        dd.load_family_recurrence_intervals('AST-9999', 'Bearing')
-    with pytest.raises(ValueError):
-        dd.load_family_recurrence_intervals('AST-1041', 'NotAFamily')
-
-
 def test_priority_table_sort_keeps_priority_rank_and_breaks_ties_by_rank():
     default = dd.load_priority_table()
     assert [r['rank'] for r in default] == list(range(1, len(default) + 1))

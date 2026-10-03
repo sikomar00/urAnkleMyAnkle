@@ -18,7 +18,7 @@ from sklearn.metrics import confusion_matrix, precision_recall_curve
 
 from .asset_anomaly_features import RobustNormalBaseline
 from .asset_features import add_asset_severity, build_asset_daily
-from .family_features import FAMILY_NAMES, build_family_daily
+from .family_features import FAMILY_NAMES
 from .industrial_data import (
     ASSET_COLUMN,
     CURRENT_TARGET,
@@ -898,38 +898,6 @@ def load_family_pr_curve_and_confusion(asset_tag: str, part_family: str) -> dict
         "cutoff": cutoff,
         "confusion": {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)},
     }
-
-
-@lru_cache(maxsize=1)
-def _family_daily() -> pd.DataFrame:
-    return build_family_daily(_load_raw())
-
-
-def load_family_recurrence_intervals(asset_tag: str, part_family: str) -> list[int]:
-    """화면 ③ "부품군 진단" 드릴다운 — 선택 자산·부품군의 affected 에피소드
-    연속 시작일 사이 간격(일수). load_asset_failure_onset_trend()와 같은
-    방식으로 에피소드 시작점을 탐지한다.
-
-    Raises:
-        ValueError: asset_tag/part_family가 유효하지 않을 때.
-    """
-    assets = load_asset_list()
-    if asset_tag not in assets:
-        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
-    if part_family not in FAMILY_NAMES:
-        raise ValueError(f"알 수 없는 part_family입니다: {part_family}")
-
-    daily = _family_daily()
-    sub = daily.loc[
-        daily[ASSET_COLUMN].eq(asset_tag) & daily["part_family"].eq(part_family)
-    ].sort_values(DATE_COLUMN)
-
-    is_affected = sub["affected"].to_numpy().astype(bool)
-    is_start = is_affected & ~np.r_[False, is_affected[:-1]]
-    start_dates = sub[DATE_COLUMN].to_numpy()[is_start]
-    if len(start_dates) < 2:
-        return []
-    return np.diff(start_dates).astype("timedelta64[D]").astype(int).tolist()
 
 
 def load_data_dictionary() -> list[dict]:

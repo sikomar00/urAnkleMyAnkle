@@ -150,6 +150,11 @@
 .pf-key--line { background: var(--series-1); }
 .pf-key--dash { width: 18px; height: 0; background: none; border-top: var(--stroke-mark) dashed var(--chart-muted); }
 .pf-key--critical { background: var(--status-critical); }
+.pf-key--warning { background: var(--status-warning); }
+.pf-key--health, .pf-key--operating, .pf-key--other { width: 10px; height: 7px; border-radius: var(--radius-sm); }
+.pf-key--health { background: var(--series-1); }
+.pf-key--operating { background: var(--series-2); }
+.pf-key--other { background: var(--chart-muted); }
 .pf-key--band { width: 10px; height: 10px; border-radius: 0; background: var(--chart-band-critical);
                 border: var(--stroke-hairline) solid var(--status-critical-border); }
 
@@ -166,21 +171,62 @@
   border-radius: var(--radius-sm);
 }
 
-/* 혼동행렬 칸 */
-.pf-cm-cell { background: var(--surface-sunken); }
+/* 화면 ③ 성능 해석 줄 — 카드와 같은 면·선, 왼쪽에 굵은 라벨 하나. */
+.pf-insight {
+  display: flex; align-items: center; gap: var(--space-4); flex-shrink: 0;
+  padding: 0 var(--layout-card-pad); background: var(--surface-card);
+  border: var(--stroke-hairline) solid var(--border-hairline); border-radius: var(--radius-sm);
+}
+.pf-insight__label { flex-shrink: 0; color: var(--ink); }
+.pf-insight__text { margin: 0; color: var(--ink); }
+/* 한국어 문장은 어절 단위로 줄을 바꾼다(단어 중간에서 끊지 않는다). */
+.pf-sentence { word-break: keep-all; overflow-wrap: anywhere; }
 
-/* 주요 영향 변수 막대 — 범주색은 series 토큰을 고정 순서로 쓴다. */
+/* 혼동행렬 — 4×4 격자(머리 줄·칸 2×2·행 합계·각주). 칸은 결과 이름 글자 + 상태 tint:
+   맞게 판정 = good, 오경보 = warning, 놓친 고장 = critical(pf-notice와 같은 tint·border·text 조합). */
+.pf-cm {
+  display: grid; height: 100%; gap: var(--space-2);
+  grid-template-columns: 64px 1fr 1fr 56px; grid-template-rows: 24px 1fr 1fr auto;
+}
+.pf-cm-head { align-self: end; text-align: center; }
+.pf-cm-side { align-self: center; }
+.pf-cm-cell {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-1);
+  border: var(--stroke-hairline) solid var(--border-hairline); border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.pf-cm-cell--good     { background: var(--status-good-tint);     border-color: var(--status-good-border); }
+.pf-cm-cell--warning  { background: var(--status-warning-tint);  border-color: var(--status-warning-border); }
+.pf-cm-cell--critical { background: var(--status-critical-tint); border-color: var(--status-critical-border); }
+.pf-cm-cell--good .pf-cm-cell__name     { color: var(--status-good-text); }
+.pf-cm-cell--warning .pf-cm-cell__name  { color: var(--status-warning-text); }
+.pf-cm-cell--critical .pf-cm-cell__name { color: var(--status-critical-text); }
+.pf-cm-cell__name { font-weight: 600; }
+.pf-cm-total { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-1); }
+.pf-cm-foot { grid-column: 1 / -1; }
+
+/* 카드 안 작은 값 칸 묶음(판정 임계값·운영 판단) — 라벨 위, 값 아래. */
+.pf-metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
+.pf-metric {
+  display: flex; flex-direction: column; gap: var(--space-1); min-width: 0;
+  padding: var(--space-2) var(--space-3); background: var(--surface-sunken); border-radius: var(--radius-sm);
+}
+.pf-verdict {
+  display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-4);
+  border: var(--stroke-hairline) solid var(--border-hairline); border-radius: var(--radius-sm);
+}
+
+/* 주요 영향 변수 — 한 줄에 순위·이름·값, 그 아래 막대. 범주색은 series 토큰을 고정 순서로 쓴다. */
+.pf-fi-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.pf-fi__head { display: flex; align-items: baseline; gap: var(--space-2); }
+.pf-fi__rank { width: 16px; flex-shrink: 0; text-align: right; }
+.pf-fi__value { margin-left: auto; flex-shrink: 0; }
+.pf-fi__track { margin: 2px 0 0 24px; height: 7px; background: var(--surface-sunken); border-radius: var(--radius-sm); }
 .pf-fi-bar { height: 7px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 .pf-fi--health   { background: var(--series-1); }
 .pf-fi--operating { background: var(--series-2); }
 .pf-fi--other    { background: var(--chart-muted); }
-
-/* 화면 ③ 위험 기준선 안내 줄 */
-.pf-inline-note {
-  padding: 0 6px; color: var(--ink-muted);
-  border: var(--stroke-hairline) solid var(--border-hairline); border-radius: var(--radius-sm);
-}
-.pf-inline-note--emphasis { color: var(--ink); font-weight: 600; border-color: var(--border-control); }
+.pf-fi-foot { margin-top: auto; padding-top: var(--space-2); }
 
 /* 아직 채우지 않은 자리(보고서 요약 참조 화면) */
 .pf-placeholder {

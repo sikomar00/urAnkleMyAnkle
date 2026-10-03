@@ -218,13 +218,3 @@ def _pr_figure(pr, theme, height=392):
     fig.update_layout(template=_figure_template(theme), height=height, margin=dict(l=48, r=16, t=8, b=40),
                       hovermode="closest")
     return fig
-
-
-def _family_recur_figure(intervals, theme):
-    """화면 ③ "부품군 진단" 드릴다운 — 선택 자산·부품군의 재발 간격(일) 분포."""
-    fig = go.Figure(go.Histogram(x=intervals, marker=dict(color=C("series-1", _theme(theme)))))
-    fig.update_yaxes(title="빈도", tickfont=dict(size=11))
-    fig.update_xaxes(title="간격(일)", tickfont=dict(size=11))
-    fig.update_layout(template=_figure_template(theme), height=184, margin=dict(l=40, r=8, t=4, b=32),
-                      bargap=0.08, hovermode="closest")
-    return fig

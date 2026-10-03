@@ -64,10 +64,18 @@ def app_header():
     )
 
 
+FILTERBAR_STYLE = {"height": f"{FILTERBAR_H}px", "gap": "10px",
+                   # overflow:hidden을 쓰면 드롭다운 팝업까지 clip된다. 줄바꿈만 막는다.
+                   "flexWrap": "nowrap",
+                   # app_header()와 같은 이유 — 필터바를 main보다 항상 위에 둔다.
+                   "position": "relative", "zIndex": 20}
+
+
 def filter_bar():
-    """공장 / 기계 종류 / 기계 / 기간 / 초기화 · 우측 현재 필터 상태와 적용 범위 안내.
+    """공장 / 기계 종류 / 기계 / 기간 / 초기화 · 우측 조작 결과 안내.
     dcc.Store(id="filter-store")가 화면 전환과 무관하게 값을 들고 있어 화면을
-    옮겨도 선택이 유지된다."""
+    옮겨도 선택이 유지된다. 화면 ③(모델 지표는 평가 구간 전체 기준)에서는 쓰는 필터가 없어
+    필터바를 숨긴다 — wireframe_app의 clientside 콜백이 style을 바꾼다."""
     return html.Section(
         [filter_dropdown("plant-dd", "공장", PLANT_OPTIONS, 120),
          filter_dropdown("machine-type-dd", "기계 종류", MACHINE_TYPE_OPTIONS, 150),
@@ -77,18 +85,11 @@ def filter_bar():
          html.Button("초기화", id="reset-btn", n_clicks=0, className="pf-btn label-12",
                      style={"flexShrink": "0"}),
          html.Div(style={"flexGrow": "1"}),
-         # 화면 ③에서는 적용 기간 대신 필터 적용 범위 안내를 보여 준다(apply_filter_scope).
-         html.Span(id="filter-scope-note", className=NOTE_12,
-                   style={"whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis", "minWidth": "0"}),
          html.Span("", id="action-echo", className=NOTE_12,
                    style={"maxWidth": "208px", "minWidth": "0", "textAlign": "right",
                           "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis"})],
-        className="pf-filterbar", **{"aria-label": "조회 조건"},
-        style={"height": f"{FILTERBAR_H}px", "gap": "10px",
-               # overflow:hidden을 쓰면 드롭다운 팝업까지 clip된다. 줄바꿈만 막는다.
-               "flexWrap": "nowrap",
-               # app_header()와 같은 이유 — 필터바를 main보다 항상 위에 둔다.
-               "position": "relative", "zIndex": 20},
+        id="filter-bar", className="pf-filterbar", **{"aria-label": "조회 조건"},
+        style=FILTERBAR_STYLE,
     )
 
 
