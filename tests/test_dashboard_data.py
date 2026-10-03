@@ -357,3 +357,18 @@ def test_comparison_feature_importance_is_sorted_and_present():
     assert len(rows) == 10
     values = [r['importance_mean'] for r in rows]
     assert values == sorted(values, reverse=True)
+
+
+def test_screen1_high_risk_kpis_for_last_90_days():
+    kpis = dd.load_screen1_kpis(start=dd.period_start(90))
+    assert kpis['high_risk_days'] == 104          # 90일 × 10대 = 900 기계·일 중
+    assert kpis['high_risk_rate_pct'] == pytest.approx(104 / 900 * 100)
+    assert kpis['prev_high_risk_rate_pct'] == pytest.approx(11.8, abs=0.05)
+    assert kpis['latest_high_risk_machines'] == 1
+    assert dd.load_screen1_kpis()['prev_high_risk_rate_pct'] is None
+
+
+def test_priority_table_counts_high_risk_days_in_last_30_days():
+    rows = {r['asset_tag']: r for r in dd.load_priority_table()}
+    assert rows['AST-2017']['high_risk_days_30d'] == 10
+    assert rows['AST-3008']['high_risk_days_30d'] == 1

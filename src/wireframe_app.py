@@ -204,10 +204,10 @@ REPORT_AUDIENCES = {
         "purpose": "당장 무엇을 점검할지 결정",
         "grain": "개별 기계 · 기계·일 단위",
         "sections": [
-            ("① 현황", "KPI 6종", ["관측 기계 (대)", "고장 표시 기계·일", "위험 기준선 초과 기계 (대)",
-                                   "평균 소비 전력 (kW)", "최고 베어링 온도 (°C)", "부품 출고 금액 (INR)"]),
+            ("① 현황", "KPI 4종", ["고위험일 (기계·일)", "고위험일 비율 (%)", "기준일 고위험 기계 (대)",
+                                   "고장 표시 기계·일"]),
             ("① 현황", "점검 우선순위 (기계 행)", ["순위", "대상", "종류", "공장", "등급가중 고장점수",
-                                                  "기준선 초과", "최근 고장 표시일", "당일 고장 표시 부품 수"]),
+                                                  "기준선 초과", "최근 30일 고위험일 수", "당일 고장 표시 부품 수"]),
             ("② 기계 상세", "상위 기계 센서 요약", ["기계 태그", "현재 등급", "위험도", "최근 고장 표시일",
                                                    "고장 표시 일수 (일)", "평균 소비 전력 (kW)"]),
             ("① 현황", "고장 표시 히트맵 (기계 × 날짜)", ["기계", "날짜", "고장 표시 부품 수"]),
@@ -263,7 +263,7 @@ SEG_GROUPS = {
 }
 DEFAULT_SEG = {"task": 0, "threshold": 0, "dataset": 0}
 
-# ① 화면의 "점검 우선순위" 표 정렬 축. KPI "위험 기준선 초과 비율" 타일을 클릭하면
+# ① 화면의 "점검 우선순위" 표 정렬 축. KPI "기준일 고위험 기계" 타일을 클릭하면
 # "grade"(등급가중 고장점수, 기본) → "threshold"(기준선 초과)로 바뀐다.
 DEFAULT_PRIO_SORT = {"sort_by": "grade", "direction": "desc"}
 
@@ -563,13 +563,16 @@ def filter_bar():
 # 화면 ① 현황 — 행 96 / 460 / 340
 # ============================================================
 
-def kpi_value_tile(label, value_text, w=300, h=96, tid=None, scope=None):
-    """KPI 값 타일(.pf-kpi). scope는 라벨 오른쪽의 집계 범위 안내(예: "기준일", "선택 기간")."""
+def kpi_value_tile(label, value_text, w=300, h=96, tid=None, scope=None, sub=None):
+    """KPI 값 타일(.pf-kpi). scope는 라벨 오른쪽의 집계 범위 안내(예: "기준일", "선택 기간"),
+    sub는 값 옆의 보조 비교(예: 직전 같은 기간 값)."""
     kwargs = {"id": tid, "n_clicks": 0} if tid else {}
     return html.Div(
         [html.Div([html.Span(label, className=f"pf-kpi__label {LABEL_12}")] + ([note(scope)] if scope else []),
                   style={"display": "flex", "justifyContent": "space-between", "gap": "8px"}),
-         html.Span(value_text, className="pf-kpi__value value-28")],
+         html.Div([html.Span(value_text, className="pf-kpi__value value-28")]
+                  + ([html.Span(sub, className="pf-kpi__sub label-12")] if sub else []),
+                  className="pf-kpi__row")],
         className="pf-card pf-kpi" + (" pf-kpi--action" if tid else ""),
         style={"gridColumn": f"span {_span(w)}", "height": f"{h}px", "minWidth": "0"}, **kwargs,
     )
@@ -778,9 +781,9 @@ def priority_table(cols, records, sort_col=None, direction="desc"):
          for i, (l, a) in enumerate(cols)],
     )
     field_order = ["rank", "asset_tag", "machine_type", "plant_code", "failure_points",
-                   "threshold_exceeded", "last_failure_date", "failed_part_count"]
-    num_fields = {"rank", "failure_points", "failed_part_count"}
-    code_fields = {"asset_tag", "plant_code", "last_failure_date"}
+                   "threshold_exceeded", "high_risk_days_30d", "failed_part_count"]
+    num_fields = {"rank", "failure_points", "high_risk_days_30d", "failed_part_count"}
+    code_fields = {"asset_tag", "plant_code"}
     body_rows = []
     for record in records:
         cells = []
@@ -790,8 +793,6 @@ def priority_table(cols, records, sort_col=None, direction="desc"):
                 text = f"{value:,.0f}"
             elif field == "threshold_exceeded":
                 text = "예" if value else "아니오"
-            elif field == "last_failure_date":
-                text = value or "—"
             else:
                 text = str(value)
             if field in num_fields:
@@ -807,20 +808,14 @@ def priority_table(cols, records, sort_col=None, direction="desc"):
 
 
 def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=None, start=None):
-    # 절충안: 6타일 중 "위험 기준선 초과 기계 (대)" 한 자리만 위험 기준선 초과 비율(%)로
-    # 바꾼다. 그 지표는 원래 절대 건수(분자)만 보여줘서 "전체 대비 얼마나
-    # 심각한가"를 암산해야 했는데, 비율로 바꾸면 그 계산이 필요 없어진다.
-    # 나머지 5개(관측 기계·고장 표시 기계·일·전력·온도·부품 금액)는 그대로 —
-    # 전부 원자료 수준 지표라 "지금 뭐가 몇 대냐"에 즉답하는 역할을 유지한다.
-    #
-    # 정의(확정): 위험 기준선 초과 비율(%) = 위험 기준선 초과 기계 수 ÷ 전체 관측 기계 수 × 100
-    # — 위험 기준선은 12점 고정(dashboard_data.HIGH_RISK_THRESHOLD)이다. ③의 12/13/14 토글은
-    #   모델 비교 결과만 바꾸고 이 값에는 영향을 주지 않는다.
-    #
-    # 이 값은 "전체 중 몇 %가 위험선을 넘었나"라는 집계 하나뿐이라, 그것만으로는
-    # "어느 공장·기계·부품이 원인인가"를 알 수 없다 — 그래서 새 카드를 더
-    # 만드는 대신, 클릭하면 아래 "점검 우선순위" 표가 기준선 초과 기준으로
-    # 다시 정렬되게 연결한다. 새 화면 공간을 쓰지 않고 이미 있는 표를 재사용.
+    # KPI 4개는 판단에 쓰는 값만 둔다(관측 기계 수·평균 소비 전력은 뺐다).
+    #   고위험일(기계·일)·고위험일 비율(%) — 선택 기간. 비율 옆에 직전 같은 길이 기간 값을 둔다.
+    #   기준일 고위험 기계(대) — 하루치 스냅샷. 비율(1대 = 10.0%)로 쓰면 정밀해 보이기만 해서 건수로 둔다.
+    #   고장 표시 기계·일 — 선택 기간.
+    # 고위험 = 고장점수 12 이상 고정(dashboard_data.HIGH_RISK_THRESHOLD). ③의 12/13/14 토글은
+    # 모델 비교 결과만 바꾸고 이 값에는 영향을 주지 않는다.
+    # "기준일 고위험 기계" 타일을 클릭하면 아래 "점검 우선순위" 표가 기준선 초과 기준으로
+    # 다시 정렬된다 — 새 카드 없이 이미 있는 표에서 어느 기계인지 이어 보게 한다.
     prio_sort = prio_sort or DEFAULT_PRIO_SORT
     # kpi-failrate-tile은 화면 ①에만 존재하고 ②~⑤로 넘어가면 DOM에서 사라진다.
     # 일반 문자열 id로 Input을 걸면 그 화면들에서 "ID not found in layout"
@@ -830,18 +825,21 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=N
     # "최고 베어링 온도"·"부품 출고 금액(누적)"은 삭제한다 — 남은 4개가 같은
     # 458px 폭(4×458 + 3×16 = 1880)으로 행 전체를 균등 분배한다.
     # 네 번째 값은 (label, value, 클릭 id, 집계 범위 안내).
+    # 고위험일 = 고장점수 12 이상인 기계·일. 하루치 스냅샷 대신 선택 기간 값을 앞에 둔다.
+    prev = kpis["prev_high_risk_rate_pct"]
     kpi_specs = [
-        ("관측 기계 (대)", f"{kpis['observed_machines']:,}", None, None),
-        ("고장 표시 기계·일", f"{kpis['failure_machine_days']:,}", None, "선택 기간"),
-        ("위험 기준선 초과 비율 (%)", f"{kpis['failure_rate_pct']:.1f}", KPI_FAILRATE_ID, "기준일"),
-        ("평균 소비 전력 (kW)", f"{kpis['avg_power_kw']:,.2f}", None, "기준일"),
+        ("고위험일 (기계·일)", f"{kpis['high_risk_days']:,}", None, "선택 기간", None),
+        ("고위험일 비율 (%)", f"{kpis['high_risk_rate_pct']:.1f}", None, "선택 기간",
+         f"직전 같은 기간 {prev:.1f}" if prev is not None else None),
+        ("기준일 고위험 기계 (대)", f"{kpis['latest_high_risk_machines']:,}", KPI_FAILRATE_ID, "기준일", None),
+        ("고장 표시 기계·일", f"{kpis['failure_machine_days']:,}", None, "선택 기간", None),
     ]
-    row_a = row(ROW_KPI, [kpi_value_tile(label, value_text, w=458, tid=tid, scope=scope)
-                          for label, value_text, tid, scope in kpi_specs])
+    row_a = row(ROW_KPI, [kpi_value_tile(label, value_text, w=458, tid=tid, scope=scope, sub=sub)
+                          for label, value_text, tid, scope, sub in kpi_specs])
 
     prio_cols = [("순위", "right"), ("대상", "left"), ("종류", "left"), ("공장", "left"),
                  ("등급가중 고장점수", "right"), ("기준선 초과", "center"),
-                 ("최근 고장 표시일", "left"), ("당일 고장 표시 부품 수", "right")]
+                 ("최근 30일 고위험일 수", "right"), ("당일 고장 표시 부품 수", "right")]
     sort_by = prio_sort.get("sort_by", "grade")
     direction = prio_sort.get("direction", "desc")
     sort_idx = 5 if sort_by == "threshold" else 4
@@ -882,7 +880,8 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, prio_sort=None, assets=N
                                   "gridTemplateRows": "repeat(5, minmax(0, 1fr))", "columnGap": "8px",
                                   "rowGap": "8px", "height": "100%"})
     status = card("기계 상태", 774, ROW_MAIN, tiles_grid,
-                  right=note("스파크라인 = 등급가중 고장점수 최근 30일 · 기간 미적용"))
+                  right=note("등급(고장점수) 정상 0 · 주의 1~5 · 경계 6~11 · 위험 12 이상 · "
+                             "스파크라인 최근 30일 · 기간 미적용"))
     row_b = row(ROW_MAIN, [prio, status])
 
     heat_body = html.Div(
@@ -2447,7 +2446,7 @@ def echo_action(_clicks, actor_id):
 
 
 # ------------------------------------------------------------
-# ① KPI "위험 기준선 초과 비율" 드릴다운 — 클릭할 때마다 "점검 우선순위" 표 정렬을
+# ① KPI "기준일 고위험 기계" 드릴다운 — 클릭할 때마다 "점검 우선순위" 표 정렬을
 # 등급가중 고장점수 ↔ 기준선 초과 사이로 토글한다. 화면을 새로 만들지 않고
 # 이미 있는 표를 재사용해 원인(어느 공장·기계·부품)까지 이어지게 한다.
 # ------------------------------------------------------------
@@ -2466,9 +2465,9 @@ def drill_failrate_to_priority(n_clicks_list, current, actor_id):
         return no_update, no_update
     current = current or DEFAULT_PRIO_SORT
     new_sort_by = "grade" if current.get("sort_by") == "threshold" else "threshold"
-    msg = ("'위험 기준선 초과 비율' 클릭 → 점검 우선순위를 기준선 초과 기준으로 정렬"
+    msg = ("'기준일 고위험 기계' 클릭 → 점검 우선순위를 기준선 초과 기준으로 정렬"
            if new_sort_by == "threshold" else
-           "'위험 기준선 초과 비율' 다시 클릭 → 점검 우선순위를 등급가중 고장점수 기준으로 복귀")
+           "'기준일 고위험 기계' 다시 클릭 → 점검 우선순위를 등급가중 고장점수 기준으로 복귀")
     new_state = {"sort_by": new_sort_by, "direction": current.get("direction", "desc")}
     record_action("ACT_PRIORITY_SORT", "점검 우선순위 정렬", actor_id=actor_id,
                   target_type="priority", target_id=f"{new_sort_by}:{new_state['direction']}")

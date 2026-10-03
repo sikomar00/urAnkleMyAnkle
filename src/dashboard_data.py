@@ -163,8 +163,10 @@ def _last_failure_date_by_asset(daily: pd.DataFrame) -> pd.Series:
 def load_screen1_kpis(assets: list[str] | None = None, start: pd.Timestamp | None = None) -> dict:
     """화면 ① KPI 타일 값을 계산한다.
 
-    ``assets``는 모든 값에, ``start``는 고장 표시 기계·일과 부품 출고 금액에만
-    적용한다. 나머지는 데이터 최신일(기준일) 스냅샷이다.
+    ``assets``는 모든 값에, ``start``는 고장 표시 기계·일·고위험일·부품 출고 금액에만
+    적용한다. ``prev_high_risk_rate_pct``는 선택 기간 바로 앞의 같은 길이 기간 값이며
+    ``start``가 None(전체 기간)이면 None이다. 나머지는 데이터 최신일(기준일) 스냅샷이다.
+    고위험일 = 등급 high_risk(고장점수 HIGH_RISK_THRESHOLD 이상)인 기계·일.
     """
     raw = _scoped(_load_raw(), assets)
     daily = _scoped(_daily(), assets)
@@ -179,9 +181,22 @@ def load_screen1_kpis(assets: list[str] | None = None, start: pd.Timestamp | Non
         high_risk_count / observed_machines * 100 if observed_machines else 0.0
     )
 
+    period = _scoped(daily, start=start)
+    high_risk_days = int((period["severity_level"] == "high_risk").sum())
+    prev_rate = None
+    if start is not None:
+        previous = daily[daily[DATE_COLUMN].ge(start - (latest_date - start) - pd.Timedelta(days=1))
+                         & daily[DATE_COLUMN].lt(start)]
+        if not previous.empty:
+            prev_rate = float((previous["severity_level"] == "high_risk").mean() * 100)
+
     return {
         "observed_machines": observed_machines,
         "failure_machine_days": failure_machine_days,
+        "high_risk_days": high_risk_days,
+        "high_risk_rate_pct": float(high_risk_days / len(period) * 100) if len(period) else 0.0,
+        "prev_high_risk_rate_pct": prev_rate,
+        "latest_high_risk_machines": high_risk_count,
         "failure_rate_pct": failure_rate_pct,
         "avg_power_kw": float(latest["power_consumption_kw"].mean()),
         "max_bearing_temp": float(latest["temp_bearing_degC"].max()),
@@ -345,6 +360,8 @@ def load_priority_table(sort_by: str = "grade", direction: str = "desc",
     )
 
     last_failure_date = _last_failure_date_by_asset(daily)
+    recent = daily[daily[DATE_COLUMN].ge(latest_date - pd.Timedelta(days=29))]
+    high_risk_30d = (recent["severity_level"] == "high_risk").groupby(recent[ASSET_COLUMN]).sum()
 
     rows = []
     for asset_tag, info in asset_info.iterrows():
@@ -378,6 +395,7 @@ def load_priority_table(sort_by: str = "grade", direction: str = "desc",
                 "failure_points": failure_points,
                 "threshold_exceeded": threshold_exceeded,
                 "last_failure_date": last_failure_date_str,
+                "high_risk_days_30d": int(high_risk_30d.get(asset_tag, 0)),
                 "failed_part_count": failed_part_count,
             }
         )
