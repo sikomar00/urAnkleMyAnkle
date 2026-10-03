@@ -247,7 +247,21 @@
   font-family: var(--font-sans); font-size: 12px;
 }
 .pf-dtable .dash-spreadsheet-container .dash-spreadsheet-inner tr:hover td { background: var(--surface-hover) !important; }
-.pf-dtable .column-header--sort { color: var(--ink-muted); }
+/* DataTable 열 정렬 — 다른 표(.pf-th-sort)와 같게 열 제목 칸 전체를 누르면 정렬되고 방향은 ▲▼ 글리프로 보인다.
+   DataTable은 정렬 아이콘(span.column-header--sort)에만 클릭을 받으므로, 그 span의 ::after를 칸 전체로
+   펼쳐 클릭을 받게 한다(가상 요소 클릭은 원래 요소로 간다). FontAwesome 아이콘은 숨기고 data-icon으로
+   방향을 읽어 ::before에 글리프를 쓴다(sort-up = 오름차순). 이름 뒤에 화살표가 오도록 순서를 뒤집는다. */
+.pf-dtable th.dash-header { position: relative; cursor: pointer; }
+.pf-dtable th.dash-header > div { display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: var(--space-1); }
+.pf-dtable th.dash-header[style*="text-align: right"] > div { justify-content: flex-start; }
+.pf-dtable th.dash-header:hover { color: var(--ink); }
+.pf-dtable .column-header--sort { color: var(--accent-text); display: inline-block; width: 10px; font-size: 9px; }
+.pf-dtable .column-header--sort svg { display: none; }
+.pf-dtable .column-header--sort::after { content: ""; position: absolute; inset: 0; }
+.pf-dtable .column-header--sort:has(svg[data-icon="sort-up"])::before { content: "▲"; }
+.pf-dtable .column-header--sort:has(svg[data-icon="sort-down"])::before { content: "▼"; }
+.pf-dtable th.dash-header:has(svg[data-icon="sort-up"]),
+.pf-dtable th.dash-header:has(svg[data-icon="sort-down"]) { color: var(--ink); font-weight: 600; }
 .pf-dtable .previous-next-container { color: var(--ink-secondary); }
 .pf-dtable .previous-next-container button { background: none; color: var(--ink-secondary); border: 0; }
 .pf-dtable .previous-next-container .current-page,

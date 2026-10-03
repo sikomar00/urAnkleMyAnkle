@@ -72,7 +72,7 @@ from .ui.screen3 import (  # noqa: E402
     model_table_block, SCREEN3_TASK_INFO, screen_3,
 )
 from .ui.screen4 import (  # noqa: E402
-    _dtable_footer_text, screen_4,
+    _dtable_footer_text, dictionary_block, screen_4,
 )
 from .ui.report import (  # noqa: E402
     build_report_pdf, build_report_xlsx,
@@ -154,7 +154,7 @@ def render_screen(active, seg_state, filters, selected_family, table_sort):
         kwargs.update(asset_tag=_focus_asset(filters, machine_only=True), family=selected_family,
                       table_sort=table_sort)
     if active == "4":
-        kwargs.update(assets=assets, start=start, end=end)
+        kwargs.update(assets=assets, start=start, end=end, table_sort=table_sort)
     try:
         return SCREEN_BUILDERS[active](**kwargs)
     except Exception:
@@ -598,8 +598,12 @@ def _sorted_family(store, filters, _seg_state, family):
     return family_table_block(store, _focus_asset(filters, machine_only=True), family)
 
 
+def _sorted_dictionary(store, _filters, _seg_state, _family):
+    return dictionary_block(store)
+
+
 SORT_TABLE_BUILDERS = {"priority": _sorted_priority, "power": _sorted_power, "model": _sorted_model,
-                       "family": _sorted_family}
+                       "family": _sorted_family, "dictionary": _sorted_dictionary}
 
 
 @app.callback(

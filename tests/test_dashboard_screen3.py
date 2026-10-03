@@ -176,4 +176,4 @@ def test_family_machine_picker_moves_the_global_machine_filter():
 
 
 def test_sort_callback_knows_every_sortable_table():
-    assert set(w.SORT_TABLE_BUILDERS) == {"priority", "power", "model", "family"}
+    assert set(w.SORT_TABLE_BUILDERS) == {"priority", "power", "model", "family", "dictionary"}

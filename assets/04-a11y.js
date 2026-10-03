@@ -77,6 +77,30 @@
         });
       }
     });
+    // DataTable 열 정렬 — 정렬 아이콘 span은 초점을 받지 않는다. 버튼 역할·이름·초점을 주고 Enter·Space로
+    // 누르게 하며, 현재 방향을 th의 aria-sort로 알린다(다른 표의 정렬 버튼과 같은 순환: 오름 → 내림 → 원래).
+    document.querySelectorAll(".pf-dtable th.dash-header").forEach(function (th) {
+      var sortEl = th.querySelector(".column-header--sort");
+      var nameEl = th.querySelector(".column-header-name");
+      if (!sortEl || !nameEl) { return; }
+      var icon = sortEl.querySelector("svg");
+      var state = icon ? icon.getAttribute("data-icon") : "sort";
+      var sort = state === "sort-up" ? "ascending" : state === "sort-down" ? "descending" : null;
+      var action = sort === "ascending" ? "내림차순으로 정렬" : sort === "descending" ? "원래 순서로 되돌림" : "오름차순으로 정렬";
+      var label = nameEl.textContent.trim() + ", " + action;
+      if (sort) { if (th.getAttribute("aria-sort") !== sort) { th.setAttribute("aria-sort", sort); } }
+      else if (th.hasAttribute("aria-sort")) { th.removeAttribute("aria-sort"); }
+      if (sortEl.getAttribute("role") !== "button") { sortEl.setAttribute("role", "button"); }
+      if (sortEl.getAttribute("tabindex") !== "0") { sortEl.setAttribute("tabindex", "0"); }
+      if (sortEl.getAttribute("aria-label") !== label) { sortEl.setAttribute("aria-label", label); }
+      if (th.getAttribute("title") !== label) { th.setAttribute("title", label); }
+      if (!sortEl.dataset.keyboard) {
+        sortEl.dataset.keyboard = "1";
+        sortEl.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); sortEl.click(); }
+        });
+      }
+    });
     // 가로 스크롤 표는 키보드로도 스크롤할 수 있어야 한다.
     document.querySelectorAll(".dash-spreadsheet-container:not([tabindex])").forEach(function (el) {
       el.setAttribute("tabindex", "0");

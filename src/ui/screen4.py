@@ -7,15 +7,18 @@ from ..dashboard_data import (
     load_source_info, load_table_page,
 )
 from .base import (
-    card, CODE_12, col, DEFAULT_AUDIENCE, DEFAULT_SEG, empty_state, GUTTER, hstack, LABEL_12, note, NUM_13,
-    REPORT_AUDIENCES, row, ROW_KPI, ROW_MAIN, ROW_SUB, seg, SEG_GROUPS, slot, table_scroll, tile,
+    card, CODE_12, col, DEFAULT_AUDIENCE, DEFAULT_SEG, empty_state, GUTTER, help_icon, hstack, LABEL_12, note,
+    NUM_13, REPORT_AUDIENCES, row, ROW_KPI, ROW_MAIN, ROW_SUB, seg, SEG_GROUPS, slot, sort_header, sort_rows,
+    sortable, table_scroll, table_sort, tile,
 )
 from .figures import _trend_figure
 from .screen1 import kpi_value_tile
 
 
 # ============================================================
-# 화면 ④ 데이터 — 툴바 32 / 524 / 340
+# 화면 ④ 데이터 — 데이터 조회 572 / 340
+# 데이터셋 선택·CSV 내보내기는 데이터 조회 카드 머리에 둔다(따로 두던 도구줄 32 + 간격 16을
+# 카드에 돌려 표 아래 "N행 중 a–b행 표시"가 잘리지 않게 한다).
 # ============================================================
 
 # SEG_GROUPS["dataset"] 인덱스 → dashboard_data의 dataset 키.
@@ -32,7 +35,44 @@ def _dtable_footer_text(total_rows, page, page_size=16):
     return f"{total_rows:,}행 중 {start:,}–{end:,}행 표시"
 
 
-def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None, end=None):
+# 데이터 사전 표 — (열 라벨, 정렬, 열 id). 기본 순서는 원본 CSV의 열 순서.
+DICT_COLS = [("컬럼명", "left", "column"), ("타입", "left", "dtype_label"), ("단위", "left", "unit"),
+             ("결측률 (%)", "right", "missing_pct"), ("설명", "left", "description")]
+DTABLE_HELP = ("공장·기계 종류·기계·기간 필터가 적용된 행만 보인다. 열 제목을 누르면 오름차순 → 내림차순 → "
+               "원래 순서로 바뀐다(키보드는 Tab으로 열 제목에 가서 Enter). CSV 내보내기는 필터에 맞는 전체 행을 "
+               "원래 순서로 내려받는다(표의 정렬·페이지와 무관).")
+
+
+def dict_table(records, store):
+    """데이터 사전 표(.pf-table) — 글자를 자르지 않는다. 열 폭은 내용에 맞추고 설명만
+    줄바꿈하며, 22행이 카드 높이를 넘으면 카드 안에서 세로로 스크롤한다(헤더 고정)."""
+    col_id, direction = table_sort(store, "dictionary")
+    if col_id:
+        records = sort_rows(records, lambda r, c=col_id: r[c], direction)
+    thead = html.Tr([sort_header(label, "dictionary", key, store, align) for label, align, key in DICT_COLS])
+    body_rows = []
+    for record in records:
+        missing_pct = record["missing_pct"]
+        missing_text = "—" if missing_pct is None else f"{missing_pct:.2f}"
+        values = [record["column"], record["dtype_label"], record["unit"], missing_text, record["description"]]
+        cells = []
+        for (label, align, _key), text in zip(DICT_COLS, values):
+            cls = {"컬럼명": CODE_12, "결측률 (%)": f"{NUM_13} pf-td--num"}.get(label, "label-12")
+            cell_style = {"height": "24px", "padding": "0 8px", "textAlign": align}
+            if label == "설명":
+                cell_style["whiteSpace"] = "normal"
+            cells.append(html.Td(text, className=cls, style=cell_style))
+        body_rows.append(html.Tr(cells))
+    return table_scroll(html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table"),
+                        "데이터 사전 표")
+
+
+def dictionary_block(store):
+    """정렬 콜백과 screen_4()가 함께 쓰는 데이터 사전 표."""
+    return sortable("dictionary", dict_table(load_data_dictionary(), store))
+
+
+def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None, end=None, table_sort=None):
     seg_state = seg_state or DEFAULT_SEG
     dataset_index = seg_state.get("dataset", 0)
     # 예전에 저장된 선택(없어진 데이터셋 인덱스)은 원자료로 되돌린다.
@@ -91,45 +131,12 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None,
     csv_btn = html.Button("CSV 내보내기", id={"type": "csv-export-btn", "index": dataset_key},
                           n_clicks=0, className="pf-btn label-12")
 
-    toolbar = html.Div(
-        [seg("dataset", "데이터셋", SEG_GROUPS["dataset"], sel=dataset_index),
-         html.Div([csv_btn], style={"display": "flex", "alignItems": "center", "gap": "12px"})],
-        style={"height": "32px", "flexShrink": "0", "display": "flex",
-               "alignItems": "center", "justifyContent": "space-between"},
-    )
+    dtable = card("데이터 조회", 1880, 572, dtable_body,
+                  right=html.Div([note("공장·기계 종류·기계·기간 필터 적용"), help_icon(DTABLE_HELP),
+                                  seg("dataset", "데이터셋", SEG_GROUPS["dataset"], sel=dataset_index), csv_btn],
+                                 style={"display": "flex", "alignItems": "center", "gap": "16px"}))
 
-    dtable = card(f"데이터 조회 · {SEG_GROUPS['dataset'][dataset_index]}", 1880, 524, dtable_body,
-                  right=note("공장·기계 종류·기계·기간 필터 적용"))
-
-    dict_cols = [("컬럼명", "left"), ("타입", "left"), ("단위", "left"),
-                 ("결측률 (%)", "right"), ("설명", "left")]
-
-    def dict_table(records):
-        """데이터 사전 표(.pf-table) — 글자를 자르지 않는다. 열 폭은 내용에 맞추고 설명만
-        줄바꿈하며, 22행이 카드 높이를 넘으면 카드 안에서 세로로 스크롤한다(헤더 고정)."""
-        thead = html.Tr(
-            [html.Th(l, className="label-12" + (" pf-th--num" if a == "right" else ""),
-                     style={"height": "24px", "padding": "0 8px", "textAlign": a})
-             for l, a in dict_cols],
-        )
-        body_rows = []
-        for record in records:
-            missing_pct = record["missing_pct"]
-            missing_text = "—" if missing_pct is None else f"{missing_pct:.2f}"
-            values = [record["column"], record["dtype_label"], record["unit"],
-                      missing_text, record["description"]]
-            cells = []
-            for (l, a), text in zip(dict_cols, values):
-                cls = {"컬럼명": CODE_12, "결측률 (%)": f"{NUM_13} pf-td--num"}.get(l, "label-12")
-                cell_style = {"height": "24px", "padding": "0 8px", "textAlign": a}
-                if l == "설명":
-                    cell_style["whiteSpace"] = "normal"
-                cells.append(html.Td(text, className=cls, style=cell_style))
-            body_rows.append(html.Tr(cells))
-        return table_scroll(html.Table([html.Thead(thead), html.Tbody(body_rows)], className="pf-table"),
-                            "데이터 사전 표")
-
-    ddict = card("데이터 사전 (22열)", 932, ROW_SUB, dict_table(load_data_dictionary()),
+    ddict = card("데이터 사전 (22열)", 932, ROW_SUB, dictionary_block(table_sort),
                  right=note("데이터셋 전체 기준 · 필터 미적용"))
 
     def info_box(text, h=94):
@@ -164,7 +171,7 @@ def screen_4(seg_state=None, audience=DEFAULT_AUDIENCE, assets=None, start=None,
                hstack([info_box(source_lines), info_box(s["license"]), info_box(s["limitations"])], 16))
     row_c = row(ROW_SUB, [ddict, col(932, ROW_SUB, [qual, src])])
 
-    return html.Div([toolbar, row(524, [dtable]), row_c],
+    return html.Div([row(572, [dtable]), row_c],
                      style={"display": "flex", "flexDirection": "column", "gap": f"{GUTTER}px"})
 
 

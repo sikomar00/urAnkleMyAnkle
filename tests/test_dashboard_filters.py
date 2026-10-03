@@ -82,7 +82,8 @@ def test_filter_options_exclude_empty_combinations():
 
 def test_removed_datasets_fall_back_to_raw():
     layout = w.screen_4(seg_state={**w.DEFAULT_SEG, 'dataset': 3})
-    assert '데이터 조회 · 원자료' in _text(layout)
+    pressed = [n for n in _walk(layout) if isinstance(n, html.Button) and _prop(n, 'aria-pressed') == 'true']
+    assert [_text(n) for n in pressed] == ['원자료']
 
 
 def test_custom_date_range_bounds_both_ends():
