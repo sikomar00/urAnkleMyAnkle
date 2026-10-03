@@ -146,6 +146,13 @@
 .pf-th-sort--active { color: var(--ink); font-weight: 600; }
 .pf-th-sort__arrow { display: inline-block; width: 10px; font-size: 9px; color: var(--accent-text); }
 
+/* 카드 머리 범례 표식 — 02-bundle.css의 .pf-legend__key(12×2 선)·--dot(8px 점)에 색과 모양만 더한다. */
+.pf-key--line { background: var(--series-1); }
+.pf-key--dash { width: 18px; height: 0; background: none; border-top: var(--stroke-mark) dashed var(--chart-muted); }
+.pf-key--critical { background: var(--status-critical); }
+.pf-key--band { width: 10px; height: 10px; border-radius: 0; background: var(--chart-band-critical);
+                border: var(--stroke-hairline) solid var(--status-critical-border); }
+
 /* 압축 표 — 막대 목록처럼 행이 많은 좁은 카드(① 기계별 평균 소비 전력).
    높이는 구분선 1px을 포함해 머리 28 + 행 24 × 10 = 268px — 카드 본문(270px)에 스크롤 없이 들어간다. */
 .pf-table--compact th { height: 27px; }

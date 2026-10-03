@@ -4,19 +4,26 @@ from dash import dcc, html
 
 from ..dashboard_data import (
     load_asset_detail_kpis, load_asset_list, load_asset_parts_history, load_asset_sensor_series,
+    load_sensor_outlier_bounds, OUTLIER_BASELINE_END, OUTLIER_Z,
 )
 from .base import (
-    BODY_13, card, CODE_12, DEFAULT_AUDIENCE, empty_state, GUTTER, hstack, LABEL_12, note, NUM_13, row,
-    status_badge,
+    BODY_13, card, CODE_12, DEFAULT_AUDIENCE, empty_state, GUTTER, help_icon, hstack, LABEL_12, legend,
+    note, NUM_13, row, status_badge,
 )
 from .figures import (
-    _parts_figure, _smult_figure, SCREEN2_ROW_H, SMULT_AXIS_H, SMULT_BODY_H, SMULT_GAP, SMULT_PANEL_H,
-    SMULT_SENSORS,
+    _parts_figure, _smult_figure, SCREEN2_ROW_H, sensor_outside_mask, SMULT_AXIS_H, SMULT_BODY_H, SMULT_GAP,
+    SMULT_PANEL_H, SMULT_SENSORS,
 )
+
+
+SENSOR_HELP = (f"센서마다 이 기계의 학습 구간({OUTLIER_BASELINE_END:%Y-%m-%d} 이전) 정상일(고장 표시가 없는 날) "
+               f"값으로 정상 범위를 정한다. 점선은 중앙값 ± {OUTLIER_Z} × 1.4826 × MAD(강건 z {OUTLIER_Z})이고, "
+               "빨간 점은 그 범위를 벗어난 날이다. 붉은 세로 띠는 고장점수 12 이상인 고위험일이다. "
+               "설비 이상 실험(asset_anomaly_features)의 강건 z 점수와 같은 기준이다.")
 
 
 # ============================================================
-# 화면 ② 기계 상세 — 행 88 / 520 / 288
+# 화면 ② 기계 상세 — 정보 띠 88 / 824
 # ============================================================
 
 def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=None, end=None):
@@ -65,10 +72,20 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
 
     # 라벨 열은 HTML로 두고 오른쪽 차트만 Plotly로 그린다. 패널 높이·간격이
     # _smult_figure()의 subplot 치수(SMULT_*)와 같아야 1:1로 정렬된다.
+    series = load_asset_sensor_series(asset_tag, start, end)
+    bounds = load_sensor_outlier_bounds(asset_tag)
+
+    def sensor_label(label, column):
+        outside = int(sensor_outside_mask(series, column, bounds[column]).sum())
+        count = (html.Span([html.Span(className="pf-legend__key pf-legend__key--dot pf-key--critical"),
+                            f"경계 밖 {outside}일"], className=f"{LABEL_12} pf-legend__item")
+                 if outside else html.Span("경계 밖 없음", className=f"{LABEL_12} pf-muted"))
+        return html.Div([html.Span(label, className=f"{LABEL_12} pf-strong"), count],
+                        style={"height": f"{SMULT_PANEL_H}px", "flexShrink": "0", "display": "flex",
+                               "flexDirection": "column", "justifyContent": "center", "gap": "4px"})
+
     sensor_labels = html.Div(
-        [html.Div(label, className=LABEL_12, style={"height": f"{SMULT_PANEL_H}px", "flexShrink": "0",
-                                                     "display": "flex", "alignItems": "center"})
-         for label, _ in SMULT_SENSORS]
+        [sensor_label(label, column) for label, column in SMULT_SENSORS]
         + [html.Div(style={"height": f"{SMULT_AXIS_H}px", "flexShrink": "0"})],
         style={"width": "160px", "flexShrink": "0", "display": "flex", "flexDirection": "column",
                "gap": f"{SMULT_GAP}px"},
@@ -76,13 +93,16 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
     sm_body = hstack(
         [sensor_labels,
          dcc.Graph(id={"type": "smult-chart", "index": "screen2"},
-                   figure=_smult_figure(load_asset_sensor_series(asset_tag, start, end), "light"),
+                   figure=_smult_figure(series, "light", bounds),
                    config={"displayModeBar": False, "responsive": True},
                    style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"})],
         8, style={"height": f"{SMULT_BODY_H}px"},
     )
-    smult = card("센서 8종 스몰 멀티플", 1248, SCREEN2_ROW_H, sm_body,
-                 right=note("x축 공유 · 밴드 = 고위험일(고장점수 12 이상)"))
+    smult = card("센서 8종 종합 지표", 1248, SCREEN2_ROW_H, sm_body,
+                 right=html.Div([legend([("line", "측정값"), ("dash", "정상 범위 경계"),
+                                         ("critical", "경계 밖"), ("band", "고위험일")]),
+                                 help_icon(SENSOR_HELP)],
+                                style={"display": "flex", "alignItems": "center", "gap": "12px"}))
 
     # "이상 점수 추이"·"군집 위치"·"고장 직전 센서 변화"·"동종 기계 대비" 4개
     # 카드를 삭제한다. K-Means 결과(군집·이상 점수)는 화면④ 데이터 조회의

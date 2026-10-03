@@ -41,6 +41,7 @@ from .dashboard_data import (  # noqa: E402
     load_asset_parts_history,
     load_asset_sensor_series,
     load_period_coverage,
+    load_sensor_outlier_bounds,
     load_failure_trend,
     load_family_pr_curve_and_confusion,
     load_family_recurrence_intervals,
@@ -312,7 +313,7 @@ def recolor_spark_charts(theme, _active_tab, filters):
     return [_spark_figure(r["sparkline"], theme or "light") for r in rows]
 
 
-# 화면② 스몰 멀티플도 같은 방식으로 재색칠한다. trend-chart와 id 타입을 나눠
+# 화면② "센서 8종 종합 지표"도 같은 방식으로 재색칠한다. trend-chart와 id 타입을 나눠
 # 둬야 두 콜백의 Output 매칭 개수가 서로 섞이지 않는다. 기계·기간 전환은 이미
 # render_screen이 화면②를 다시 그리므로 filter-store는 State로만 읽는다.
 @app.callback(
@@ -323,7 +324,9 @@ def recolor_spark_charts(theme, _active_tab, filters):
 )
 def recolor_smult_chart(theme, _active_tab, filters):
     _, start, end = _filter_scope(filters)
-    return [_smult_figure(load_asset_sensor_series(_focus_asset(filters), start, end), theme or "light")]
+    asset_tag = _focus_asset(filters)
+    return [_smult_figure(load_asset_sensor_series(asset_tag, start, end), theme or "light",
+                          load_sensor_outlier_bounds(asset_tag))]
 
 
 # 화면② "부품 출고 이력" 막대차트도 같은 방식으로 재색칠한다. smult-chart와

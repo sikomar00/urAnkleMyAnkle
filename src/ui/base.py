@@ -371,6 +371,19 @@ def date_range_inputs():
     )
 
 
+def legend(items):
+    """카드 머리의 작은 범례(.pf-legend) — items는 (표식 종류, 글자) 목록.
+    표식 종류: line(series-1 선) · dash(점선 경계) · critical(status-critical 점) · band(고위험 띠).
+    상태색 표식은 항상 글자와 같이 둔다(DESIGN §2.1)."""
+    shape = {"critical": " pf-legend__key--dot"}
+    return html.Div(
+        [html.Span([html.Span(className=f"pf-legend__key{shape.get(kind, '')} pf-key--{kind}"), text],
+                   className="pf-legend__item")
+         for kind, text in items],
+        className="pf-legend label-12",
+    )
+
+
 def help_icon(text):
     """라벨 옆 물음표 — 마우스를 올리면 설명(title)이 뜬다. 보조기술은 aria-label로 같은 글을 읽는다.
     KPI 카드는 .pf-card가 overflow:hidden이라 직접 그린 말풍선이 잘린다 — 브라우저 기본 title을 쓴다."""

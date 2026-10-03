@@ -127,23 +127,50 @@ def _band_shapes(dates, flags, color):
             for a, b in _true_runs(flags)]
 
 
-def _smult_figure(df, theme):
-    """화면 ② "센서 8종 스몰 멀티플" — 모든 패널 series-1 단색(축·격자·범례 없음,
+def sensor_outside_mask(df, column, bound):
+    """센서 값이 정상 범위(bound["lower"]~bound["upper"]) 밖인 날."""
+    return (df[column] < bound["lower"]) | (df[column] > bound["upper"])
+
+
+def _smult_figure(df, theme, bounds=None):
+    """화면 ② "센서 8종 종합 지표" — 모든 패널 series-1 단색(축·격자·범례 없음,
     맨 아래 공유 x축만) + 위험 기준선 초과일 세로 밴드(chart-band-critical).
-    밴드는 yref="paper"라 8개 패널과 그 사이 간격까지 하나로 관통한다."""
+    밴드는 yref="paper"라 8개 패널과 그 사이 간격까지 하나로 관통한다.
+    bounds(load_sensor_outlier_bounds)를 주면 센서마다 정상 범위 경계를 점선(chart-muted)으로 긋고
+    범위 밖 날을 status-critical 점으로 찍는다(DESIGN §8 — 점선은 임계선, 점 둘레 surface-card 2px 링).
+    경계선은 trace로 그려 y축 범위가 경계까지 넓어지게 한다(shape는 자동 범위에 들어가지 않는다)."""
     theme = _theme(theme)
     fig = make_subplots(rows=len(SMULT_SENSORS), cols=1, shared_xaxes=True,
                         vertical_spacing=SMULT_GAP / SMULT_PLOT_H)
-    for r, (_, column) in enumerate(SMULT_SENSORS, start=1):
-        fig.add_trace(go.Scatter(x=df["transaction_date"], y=df[column], mode="lines",
+    dates = df["transaction_date"]
+    for r, (label, column) in enumerate(SMULT_SENSORS, start=1):
+        fig.add_trace(go.Scatter(x=dates, y=df[column], mode="lines",
                                   line=dict(color=C("series-1", theme), width=1.5),
                                   showlegend=False, hoverinfo="skip"),
                       row=r, col=1)
+        if not bounds or df.empty:
+            continue
+        bound = bounds[column]
+        for level in (bound["lower"], bound["upper"]):
+            fig.add_trace(go.Scatter(x=[dates.iloc[0], dates.iloc[-1]], y=[level, level], mode="lines",
+                                      line=dict(color=C("chart-muted", theme), width=1, dash="dash"),
+                                      showlegend=False, hoverinfo="skip"),
+                          row=r, col=1)
+        outside = df[sensor_outside_mask(df, column, bound)]
+        if not outside.empty:
+            fig.add_trace(go.Scatter(
+                x=outside["transaction_date"], y=outside[column], mode="markers", showlegend=False,
+                marker=dict(color=C("status-critical", theme), size=7,
+                            line=dict(color=C("surface-card", theme), width=2)),
+                hovertemplate=(f"%{{x|%Y-%m-%d}} · {label} %{{y:.2f}}<br>"
+                               f"정상 범위 {bound['lower']:.2f} ~ {bound['upper']:.2f}<extra></extra>")),
+                row=r, col=1)
     # 밴드는 shapes로 한 번에 넘긴다 — 구간마다 add_vrect()를 호출하면 호출마다
     # figure 전체를 다시 검증해 2분이 넘게 걸린다(일괄 할당은 30ms 수준).
     fig.update_layout(
         template=_figure_template(theme), height=SMULT_BODY_H, margin=dict(l=0, r=0, t=0, b=SMULT_AXIS_H),
         shapes=_band_shapes(df["transaction_date"], df["is_high_risk_day"], C("chart-band-critical", theme)),
+        hovermode="closest",
     )
     fig.update_xaxes(visible=False)
     fig.update_yaxes(visible=False)

@@ -209,3 +209,34 @@ def test_heatmap_card_has_unit_buttons_and_reset():
     ids = [n.id for n in _walk(layout) if isinstance(getattr(n, 'id', None), dict)]
     assert [i['index'] for i in ids if i.get('group') == 'heat_unit'] == [0, 1, 2, 3]
     assert {'type': 'heat-reset-btn', 'index': 'screen1'} in ids
+
+
+def test_sensor_outlier_bounds_follow_robust_normal_baseline():
+    """정상 범위 = 학습 구간 정상일의 중앙값 ± 3 × 1.4826 × MAD(설비 이상 실험과 같은 기준)."""
+    import pytest
+
+    from src.dashboard_data import OUTLIER_Z, SENSOR_COLUMNS, load_sensor_outlier_bounds
+    bounds = load_sensor_outlier_bounds('AST-2031')
+    assert list(bounds) == list(SENSOR_COLUMNS)
+    bearing = bounds['temp_bearing_degC']
+    assert (bearing['median'], round(bearing['scale'], 5)) == (68.2, 2.37216)
+    for b in bounds.values():
+        assert b['upper'] - b['lower'] == pytest.approx(2 * OUTLIER_Z * b['scale'])
+    with pytest.raises(ValueError):
+        load_sensor_outlier_bounds('AST-9999')
+
+
+def test_sensor_card_marks_outside_days_and_drops_old_note():
+    filters = _filters(machine='AST-2031', period_index=LAST_30_DAYS)
+    _, start, end = w._filter_scope(filters)
+    layout = w.screen_2(asset_tag='AST-2031', start=start, end=end)
+    text = _text(layout)
+    assert '센서 8종 종합 지표' in text and '스몰 멀티플' not in text and 'x축 공유' not in text
+    graph = next(n for n in _walk(layout) if isinstance(n, dcc.Graph) and n.id['type'] == 'smult-chart')
+    dashed = [t for t in graph.figure.data if t.mode == 'lines' and t.line.dash == 'dash']
+    markers = [t for t in graph.figure.data if t.mode == 'markers']
+    assert len(dashed) == 2 * 8
+    # 라벨 열의 "경계 밖 N일" 합계 = 차트에 찍힌 빨간 점 수(최근 30일 AST-2031: 16개).
+    counts = [int(t.split('경계 밖 ')[1].rstrip('일')) for t in
+              (_text(n) for n in _walk(layout) if isinstance(n, html.Span)) if t.startswith('경계 밖 ') and t != '경계 밖 없음']
+    assert sum(len(t.x) for t in markers) == sum(counts) == 16

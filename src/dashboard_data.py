@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import confusion_matrix, precision_recall_curve
 
+from .asset_anomaly_features import RobustNormalBaseline
 from .asset_features import add_asset_severity, build_asset_daily
 from .family_features import FAMILY_NAMES, build_family_daily
 from .industrial_data import (
@@ -585,6 +586,38 @@ def load_asset_detail_kpis(asset_tag: str, start: pd.Timestamp | None = None,
         "failure_days_count": int((period_daily["failure_points"] > 0).sum()),
         "avg_power_kw": float(period_daily["power_consumption_kw"].mean()),
     }
+
+
+# 화면 ② 센서 이상치 경계 — 설비 이상 실험(asset_anomaly_features.RobustNormalBaseline)과 같은
+# 기준을 쓴다. 학습 구간(OUTLIER_BASELINE_END 이전)의 정상일(failure_points == 0) 값으로 기계·센서별
+# 중앙값과 척도(1.4826 × MAD)를 정하고, 중앙값 ± OUTLIER_Z × 척도를 정상 범위로 본다(강건 z 3).
+OUTLIER_BASELINE_END = pd.Timestamp("2024-01-01")
+OUTLIER_Z = 3
+
+
+@lru_cache(maxsize=1)
+def _sensor_baseline_table() -> pd.DataFrame:
+    daily = _daily()
+    train = daily.loc[daily["label_end_date"].lt(OUTLIER_BASELINE_END)]
+    return RobustNormalBaseline(min_normal_rows=30).fit(train).baseline_table()
+
+
+def load_sensor_outlier_bounds(asset_tag: str) -> dict[str, dict[str, float]]:
+    """화면 ② 센서별 정상 범위 — {센서: {"median", "scale", "lower", "upper"}}, SENSOR_COLUMNS 순서.
+
+    Raises:
+        ValueError: asset_tag가 데이터에 없을 때.
+    """
+    if asset_tag not in load_asset_list():
+        raise ValueError(f"알 수 없는 asset_tag입니다: {asset_tag}")
+    table = _sensor_baseline_table()
+    rows = table[table[ASSET_COLUMN].eq(asset_tag)].set_index("sensor")
+    bounds = {}
+    for sensor in SENSOR_COLUMNS:
+        median, scale = float(rows.loc[sensor, "median"]), float(rows.loc[sensor, "scale"])
+        bounds[sensor] = {"median": median, "scale": scale,
+                          "lower": median - OUTLIER_Z * scale, "upper": median + OUTLIER_Z * scale}
+    return bounds
 
 
 def load_asset_sensor_series(asset_tag: str, start: pd.Timestamp | None = None,
