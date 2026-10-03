@@ -1,0 +1,32 @@
+{
+  "task": "part_current",
+  "label": "당일 breakdown_flag",
+  "grain": "기계·부품·일",
+  "split": {
+    "train_end": "2023-12-31",
+    "validation": "2024-01-01~2024-06-30",
+    "test": "2024-07-01~2025-01-01"
+  },
+  "features": [
+    "machine_type",
+    "temp_bearing_degC",
+    "temp_motor_degC",
+    "vibration_h_mms",
+    "vibration_v_mms",
+    "oil_pressure_bar",
+    "load_pct",
+    "shaft_rpm",
+    "power_consumption_kw"
+  ],
+  "feature_time": "당일 센서 8종 + 기계 종류(부품 식별 정보 없음)",
+  "test_period": "2024-07-01 ~ 2025-01-01",
+  "cutoff_policy": "검증 구간 F1 최대(industrial_training.choose_threshold)",
+  "selection": "학습 모델이 HGB 하나",
+  "production": null,
+  "reproduce": "git checkout 02d4489 && python -m src.industrial_training --mode current --scope all",
+  "baseline_b_keys": [
+    "asset_tag",
+    "part_no"
+  ],
+  "source": "src/model_comparison.py"
+}

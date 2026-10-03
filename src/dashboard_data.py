@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -33,19 +34,6 @@ DEFAULT_DATA_PATH = (
     PROJECT_ROOT / "data" / "raw" / "synthetic_industrial_machine_data.csv"
 )
 
-# 화면 ③ "현재 고장 표시 분류" 과제의 모델 비교 지표 원본.
-DEFAULT_CLASSIFICATION_METRICS_PATH = (
-    PROJECT_ROOT / "outputs" / "current_state" / "metrics.csv"
-)
-CLASSIFICATION_METRIC_COLUMNS = [
-    "accuracy", "precision", "recall", "f1", "roc_auc", "average_precision",
-]
-
-# 화면 ③ "현재 고장 표시 분류" 과제의 테스트 구간 원자료 예측 로그(PR곡선·혼동행렬용).
-DEFAULT_CLASSIFICATION_PREDICTIONS_PATH = (
-    PROJECT_ROOT / "outputs" / "current_state" / "test_predictions.csv"
-)
-
 # 화면 ③ "부품군 진단" 과제의 자산별 부품군(9종) 이상탐지 지표 원본.
 DEFAULT_FAMILY_METRICS_PATH = (
     PROJECT_ROOT / "outputs" / "family_current" / "metrics.csv"
@@ -54,13 +42,15 @@ FAMILY_DIAGNOSIS_METRIC_COLUMNS = [
     "support", "positive_rate", "precision", "recall", "average_precision", "roc_auc",
 ]
 
-# 화면 ③ "부품 고장 탐지" 과제 원본. pf_within_7d(평가구간 2024-07-21~2024-12-25,
-# 부품·일 그레인, 향후 7일 내 고장 여부 이진분류)를 쓴다 — 후보(pf_next_day/
-# pf_within_3d/pf_count_7d/pf_first_day_class) 중 유일하게 두 모델 모두
-# Precision·Recall이 0이 아닌 결과를 낸다(나머지는 임계값 0.5에서 퇴화된
-# 예측이라 데모에 부적합).
-DEFAULT_PART_FAILURE_DIR = PROJECT_ROOT / "outputs" / "pf_within_7d"
-PART_FAILURE_METRIC_COLUMNS = ["average_precision", "precision", "recall", "f1"]
+# 화면 ③ 과제 ①~③ 모델 비교 — src/model_comparison.py가 만든 결과를 읽기만 한다.
+COMPARISON_TASKS = {
+    "machine_risk": PROJECT_ROOT / "outputs" / "machine_risk",
+    "part_within_7d": PROJECT_ROOT / "outputs" / "pf_within_7d",
+    "part_current": PROJECT_ROOT / "outputs" / "current_state",
+}
+COMPARISON_MODEL_ORDER = ["baseline_a", "baseline_b", "logistic_regression", "random_forest",
+                          "hist_gradient_boosting"]
+PR_CURVE_MAX_POINTS = 600
 
 # 화면 ③ "부품군 진단" 드릴다운(PR곡선·혼동행렬) 원본 — 일별 예측 로그.
 DEFAULT_FAMILY_TEST_PREDICTIONS_PATH = (
@@ -71,8 +61,8 @@ DEFAULT_FAMILY_FEATURE_IMPORTANCE_PATH = (
     PROJECT_ROOT / "outputs" / "family_current" / "feature_importance.csv"
 )
 
-# 화면 ③ 세그먼트 컨트롤의 위험 기준선(12/13/14) 중 기본값과 동일하게 고정한다.
-# 세그먼트와의 연동은 이번 작업 범위 밖이다.
+# 화면 ①②의 기계 등급(severity_level "high_risk")에 쓰는 위험 기준선 — 12점 고정.
+# 화면 ③의 12/13/14 토글은 모델 비교 결과만 바꾸고 이 값에는 영향을 주지 않는다.
 HIGH_RISK_THRESHOLD = 12
 
 # 화면 ②의 "현재 등급" 표시 전용 — severity_level(영문) 매핑. load_screen1_kpis()/
@@ -210,233 +200,101 @@ def load_screen5_kpis() -> dict:
     }
 
 
-@lru_cache(maxsize=1)
-def load_current_classification_metrics() -> dict:
-    """화면 ③ "현재 고장 표시 분류" 과제의 모델 비교 지표(prior vs
-    hist_gradient_boosting). scope_kind == "overall" 행만 사용한다.
-
-    ``load_failure_trend()``와 같은 방식으로 캐싱한다 — 테마 전환·탭 전환
-    시마다 재계산하지 않기 위함.
-
-    Raises:
-        FileNotFoundError: outputs/current_state/metrics.csv가 없을 때.
-        ValueError: overall 스코프에 필요한 모델이 없을 때.
-    """
-    path = DEFAULT_CLASSIFICATION_METRICS_PATH
-    if not path.exists():
-        raise FileNotFoundError(
-            "분류 지표 metrics.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
-            "python -m src.industrial_training --mode current"
-        )
-    metrics = pd.read_csv(path)
-    overall = metrics.loc[metrics["scope_kind"].eq("overall")]
-    result = {}
-    for model in ("prior", "hist_gradient_boosting"):
-        row = overall.loc[overall["model"].eq(model)]
-        if row.empty:
-            raise ValueError(f"metrics.csv에 필요한 모델이 없습니다: {model}")
-        r = row.iloc[0]
-        result[model] = {col: float(r[col]) for col in CLASSIFICATION_METRIC_COLUMNS}
-    return result
+def _comparison_dir(task: str) -> Path:
+    if task not in COMPARISON_TASKS:
+        raise ValueError(f"알 수 없는 비교 과제입니다: {task}")
+    return COMPARISON_TASKS[task]
 
 
-@lru_cache(maxsize=1)
-def _current_classification_predictions_raw() -> pd.DataFrame:
-    path = DEFAULT_CLASSIFICATION_PREDICTIONS_PATH
-    if not path.exists():
-        raise FileNotFoundError(
-            "분류 예측 로그 test_predictions.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
-            "python -m src.industrial_training --mode current"
-        )
-    return pd.read_csv(path)
+def _threshold_mask(frame: pd.DataFrame, threshold: int | None) -> pd.Series:
+    """기준(12/13/14)이 있는 과제는 그 값으로, 없는 과제는 빈 값 행으로 거른다."""
+    if threshold is None:
+        return frame["severity_threshold"].isna()
+    return frame["severity_threshold"].eq(threshold)
 
 
-def load_current_classification_pr_curve_and_confusion(model: str = "hist_gradient_boosting") -> dict:
-    """화면 ③ "현재 고장 표시 분류" 과제 — 선택 모델의 PR곡선 좌표와 혼동행렬
-    (scope_kind=="overall" 전체 테스트 구간 기준).
+@lru_cache(maxsize=None)
+def _comparison_raw(task: str) -> pd.DataFrame:
+    return pd.read_csv(_comparison_dir(task) / "comparison.csv")
+
+
+@lru_cache(maxsize=None)
+def _comparison_predictions(task: str) -> pd.DataFrame:
+    return pd.read_csv(_comparison_dir(task) / "comparison_predictions.csv")
+
+
+@lru_cache(maxsize=None)
+def load_comparison_config(task: str) -> dict:
+    """과제 설명·분할·판정 기준 정책 — comparison_config.json."""
+    return json.loads((_comparison_dir(task) / "comparison_config.json").read_text(encoding="utf-8"))
+
+
+def load_model_comparison(task: str, threshold: int | None = None) -> list[dict]:
+    """화면 ③ 비교표 행 — 기준 A, 기준 B, LR, RF, HGB 순서(결과가 있는 모델만).
 
     Raises:
-        ValueError: model이 prior/hist_gradient_boosting이 아닐 때.
+        ValueError: 과제·기준에 해당하는 결과가 없을 때.
     """
-    if model not in ("prior", "hist_gradient_boosting"):
-        raise ValueError(f"알 수 없는 model입니다: {model}")
-
-    metrics = pd.read_csv(DEFAULT_CLASSIFICATION_METRICS_PATH)
-    overall_row = metrics.loc[metrics["scope_kind"].eq("overall") & metrics["model"].eq(model)].iloc[0]
-    cutoff = float(overall_row["threshold"])
-    confusion = {
-        "tn": int(overall_row["true_negative"]), "fp": int(overall_row["false_positive"]),
-        "fn": int(overall_row["false_negative"]), "tp": int(overall_row["true_positive"]),
-    }
-
-    preds = _current_classification_predictions_raw()
-    sub = preds.loc[
-        preds["scope_kind"].eq("overall") & preds["scope_name"].eq("all") & preds["model"].eq(model)
-    ]
-    precision, recall, _ = precision_recall_curve(sub["breakdown_flag"], sub["risk_score"])
-
-    return {
-        "model": model,
-        "precision_curve": precision.tolist(),
-        "recall_curve": recall.tolist(),
-        "cutoff": cutoff,
-        "confusion": confusion,
-    }
+    frame = _comparison_raw(task)
+    frame = frame[_threshold_mask(frame, threshold)]
+    if frame.empty:
+        raise ValueError(f"{task}: 기준 {threshold}의 비교 결과가 없습니다.")
+    order = {model: i for i, model in enumerate(COMPARISON_MODEL_ORDER)}
+    frame = frame.assign(_order=frame["model"].map(order)).sort_values("_order").drop(columns="_order")
+    return frame.to_dict("records")
 
 
-@lru_cache(maxsize=1)
-def _part_failure_overall_raw() -> pd.DataFrame:
-    path = DEFAULT_PART_FAILURE_DIR / "overall_results.csv"
-    if not path.exists():
-        raise FileNotFoundError(
-            "부품 고장 탐지 overall_results.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
-            "python -m src.pf_within_7d"
-        )
-    return pd.read_csv(path)
+def load_focus_model(task: str, threshold: int | None = None) -> str:
+    """KPI·PR 곡선·혼동행렬·임계값 카드가 보여 줄 모델 — 운영 모델(팀 결정), 없으면 검증 선택 모델."""
+    rows = load_model_comparison(task, threshold)
+    for flag in ("production", "selected_by_validation"):
+        chosen = [row["model"] for row in rows if bool(row[flag])]
+        if chosen:
+            return chosen[0]
+    raise ValueError(f"{task}: 운영·선택 모델이 없습니다.")
 
 
-def load_part_failure_metrics() -> dict:
-    """화면 ③ "부품 고장 탐지" 과제 — 모델별(로지스틱 회귀/랜덤 포레스트)
-    AP(PR_AUC)·정밀도·재현율·F1. Accuracy는 양성률이 낮아 부풀려지므로 넣지 않는다.
-    """
-    overall = _part_failure_overall_raw()
-    result = {}
-    for _, r in overall.iterrows():
-        result[r["model"]] = {
-            "average_precision": float(r["PR_AUC"]),
-            "precision": float(r["Precision"]),
-            "recall": float(r["Recall"]),
-            "f1": float(r["F1"]),
-        }
-    return result
+def _comparison_scores(task: str, model: str, threshold: int | None) -> tuple[np.ndarray, np.ndarray]:
+    frame = _comparison_predictions(task)
+    subset = frame[_threshold_mask(frame, threshold) & frame["model"].eq(model)]
+    if subset.empty:
+        raise ValueError(f"{task}: {model}의 Test 점수가 없습니다.")
+    return subset["actual"].to_numpy(dtype=int), subset["score"].to_numpy(dtype=float)
 
 
-def _confusion_at_threshold(actual: pd.Series, score: pd.Series, threshold: float) -> dict:
-    """화면 ③ "판정 임계값 조정" 슬라이더 — 임의 임계값에서의 혼동행렬·지표를
-    즉시 재계산한다. 학습·평가를 다시 하지 않는다 — 이미 저장된 예측 확률을
-    다시 이진화할 뿐이다."""
-    predicted = (score >= threshold).astype(int)
-    tp = int(((predicted == 1) & (actual == 1)).sum())
-    fp = int(((predicted == 1) & (actual == 0)).sum())
-    fn = int(((predicted == 0) & (actual == 1)).sum())
-    tn = int(((predicted == 0) & (actual == 0)).sum())
-    precision = tp / (tp + fp) if (tp + fp) else 0.0
-    recall = tp / (tp + fn) if (tp + fn) else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
-    return {
-        "precision": precision, "recall": recall, "f1": f1,
-        "predicted_alerts": tp + fp, "false_alarms": fp, "missed_failures": fn,
-        "total_rows": tp + fp + fn + tn,
-    }
+def load_comparison_pr_curve(task: str, model: str, threshold: int | None = None) -> dict:
+    """PR 곡선(최대 PR_CURVE_MAX_POINTS점으로 솎음)과 Test 양성 비율."""
+    actual, score = _comparison_scores(task, model, threshold)
+    precision, recall, _ = precision_recall_curve(actual, score)
+    keep = np.unique(np.linspace(0, len(precision) - 1, min(len(precision), PR_CURVE_MAX_POINTS)).astype(int))
+    return {"precision_curve": precision[keep].tolist(), "recall_curve": recall[keep].tolist(),
+            "positive_rate": float(actual.mean())}
 
 
-def load_current_classification_at_threshold(model: str, threshold: float) -> dict:
-    """화면 ③ "판정 임계값 조정" — "현재 고장 표시 분류" 과제, 임의 임계값에서의
-    실시간 재계산.
-
-    Raises:
-        ValueError: model이 prior/hist_gradient_boosting이 아닐 때.
-    """
-    if model not in ("prior", "hist_gradient_boosting"):
-        raise ValueError(f"알 수 없는 model입니다: {model}")
-    preds = _current_classification_predictions_raw()
-    sub = preds.loc[
-        preds["scope_kind"].eq("overall") & preds["scope_name"].eq("all") & preds["model"].eq(model)
-    ]
-    return _confusion_at_threshold(sub["breakdown_flag"], sub["risk_score"], threshold)
+def load_comparison_at_cutoff(task: str, model: str, cutoff: float, threshold: int | None = None) -> dict:
+    """판정 기준 ``cutoff``(점수 ≥ cutoff → 경보)를 Test 점수에 다시 적용한 혼동행렬·지표."""
+    actual, score = _comparison_scores(task, model, threshold)
+    predicted = score >= cutoff
+    tp = int((predicted & (actual == 1)).sum())
+    fp = int((predicted & (actual == 0)).sum())
+    fn = int((~predicted & (actual == 1)).sum())
+    tn = int((~predicted & (actual == 0)).sum())
+    return {"tp": tp, "fp": fp, "fn": fn, "tn": tn, "rows": int(len(actual)), "alerts": tp + fp,
+            "alert_rate": (tp + fp) / len(actual), "precision": tp / (tp + fp) if tp + fp else 0.0,
+            "recall": tp / (tp + fn) if tp + fn else 0.0, "positive_rate": float(actual.mean()),
+            "cutoff": float(cutoff)}
 
 
-def load_part_failure_at_threshold(model: str | None, threshold: float) -> dict:
-    """화면 ③ "판정 임계값 조정" — "부품 고장 탐지" 과제, 임의 임계값에서의
-    실시간 재계산. ``model``이 ``None``이면 선택 모델을 쓴다.
-
-    Raises:
-        ValueError: model이 predictions.csv에 없을 때.
-    """
-    overall = _part_failure_overall_raw()
-    model = model or load_part_failure_selected_model()
-    if model not in overall["model"].to_numpy():
-        raise ValueError(f"알 수 없는 model입니다: {model}")
-    preds = _part_failure_predictions_raw()
-    sub = preds.loc[preds["model"].eq(model)]
-    return _confusion_at_threshold(sub["target"], sub["probability"], threshold)
-
-
-def load_current_classification_actual_rate(model: str = "hist_gradient_boosting") -> float:
-    """화면 ③ "모델 해석 요약" — "현재 고장 표시 분류" 과제의 실제 고장률
-    (테스트 구간 양성 비율). AP÷실제 고장률(무작위 기준 대비 배수) 계산에 쓴다.
-
-    Raises:
-        ValueError: model이 prior/hist_gradient_boosting이 아닐 때.
-    """
-    if model not in ("prior", "hist_gradient_boosting"):
-        raise ValueError(f"알 수 없는 model입니다: {model}")
-    metrics = pd.read_csv(DEFAULT_CLASSIFICATION_METRICS_PATH)
-    row = metrics.loc[metrics["scope_kind"].eq("overall") & metrics["model"].eq(model)].iloc[0]
-    return float(row["test_positive_rate"])
-
-
-def load_part_failure_actual_rate(model: str | None = None) -> float:
-    """화면 ③ "모델 해석 요약" — "부품 고장 탐지" 과제의 실제 고장률
-    (테스트 구간 양성 비율). ``model``이 ``None``이면 선택 모델을 쓴다.
-
-    Raises:
-        ValueError: model이 overall_results.csv에 없을 때.
-    """
-    overall = _part_failure_overall_raw()
-    model = model or load_part_failure_selected_model()
-    row = overall.loc[overall["model"].eq(model)]
-    if row.empty:
-        raise ValueError(f"알 수 없는 model입니다: {model}")
-    return float(row.iloc[0]["failure_rate"])
-
-
-def load_part_failure_selected_model() -> str:
-    """"선택 여부" 열의 기준 — AP(PR_AUC)가 가장 높은 모델을 선택 모델로 삼는다."""
-    metrics = load_part_failure_metrics()
-    return max(metrics, key=lambda m: metrics[m]["average_precision"])
-
-
-@lru_cache(maxsize=1)
-def _part_failure_predictions_raw() -> pd.DataFrame:
-    path = DEFAULT_PART_FAILURE_DIR / "predictions.csv"
-    if not path.exists():
-        raise FileNotFoundError(
-            "부품 고장 탐지 predictions.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
-            "python -m src.pf_within_7d"
-        )
-    return pd.read_csv(path)
-
-
-def load_part_failure_pr_curve_and_confusion(model: str | None = None) -> dict:
-    """화면 ③ "부품 고장 탐지" 과제 — 선택 모델의 PR곡선 좌표와 혼동행렬.
-
-    Args:
-        model: ``None``이면 :func:`load_part_failure_selected_model`이 고른 모델.
-
-    Raises:
-        ValueError: model이 overall_results.csv에 없을 때.
-    """
-    overall = _part_failure_overall_raw()
-    model = model or load_part_failure_selected_model()
-    row = overall.loc[overall["model"].eq(model)]
-    if row.empty:
-        raise ValueError(f"알 수 없는 model입니다: {model}")
-    r = row.iloc[0]
-    cutoff = float(r["probability_cutoff"])
-    confusion = {"tn": int(r["TN"]), "fp": int(r["FP"]), "fn": int(r["FN"]), "tp": int(r["TP"])}
-
-    preds = _part_failure_predictions_raw()
-    sub = preds.loc[preds["model"].eq(model)]
-    precision, recall, _ = precision_recall_curve(sub["target"], sub["probability"])
-
-    return {
-        "model": model,
-        "precision_curve": precision.tolist(),
-        "recall_curve": recall.tolist(),
-        "cutoff": cutoff,
-        "confusion": confusion,
-    }
+def load_comparison_feature_importance(task: str, threshold: int | None = None, top: int = 10) -> list[dict]:
+    """운영·선택 모델의 검증 구간 permutation importance(scoring=AP) 상위 ``top``개.
+    파일이 없으면 빈 목록."""
+    path = _comparison_dir(task) / "feature_importance.csv"
+    if not path.is_file():
+        return []
+    frame = pd.read_csv(path)
+    frame = frame[_threshold_mask(frame, threshold)]
+    return (frame.sort_values("importance_mean", ascending=False).head(top)
+            [["feature", "importance_mean", "importance_std", "model"]].to_dict("records"))
 
 
 @lru_cache(maxsize=1)

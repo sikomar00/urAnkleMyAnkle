@@ -102,19 +102,6 @@ def test_asset_failure_onset_trend_rejects_unknown_asset():
         dd.load_asset_failure_onset_trend('AST-9999')
 
 
-def test_current_classification_metrics_has_prior_and_hist_gradient_boosting():
-    metrics = dd.load_current_classification_metrics()
-    assert set(metrics) == {'prior', 'hist_gradient_boosting'}
-    for model_metrics in metrics.values():
-        assert set(model_metrics) == set(dd.CLASSIFICATION_METRIC_COLUMNS)
-
-
-def test_current_classification_metrics_hist_gradient_boosting_values():
-    hgb = dd.load_current_classification_metrics()['hist_gradient_boosting']
-    assert hgb['roc_auc'] == pytest.approx(0.6815, abs=1e-4)
-    assert hgb['average_precision'] == pytest.approx(0.1534, abs=1e-4)
-
-
 def test_asset_family_diagnosis_has_nine_part_families():
     rows = dd.load_asset_family_diagnosis('AST-1041')
     assert len(rows) == 9
@@ -237,105 +224,6 @@ def test_asset_failure_heatmap_shape_and_ast1041_total():
     assert (heat['failed_part_count'] >= 0).all()
 
 
-def test_current_classification_pr_curve_and_confusion_matches_metrics():
-    result = dd.load_current_classification_pr_curve_and_confusion('hist_gradient_boosting')
-    c = result['confusion']
-    assert c == {'tn': 15079, 'fp': 18233, 'fn': 641, 'tp': 3047}
-    precision = c['tp'] / (c['tp'] + c['fp'])
-    recall = c['tp'] / (c['tp'] + c['fn'])
-    assert precision == pytest.approx(0.14319, abs=1e-4)
-    assert recall == pytest.approx(0.82619, abs=1e-4)
-    assert len(result['precision_curve']) == len(result['recall_curve'])
-
-
-def test_current_classification_pr_curve_and_confusion_rejects_unknown_model():
-    with pytest.raises(ValueError):
-        dd.load_current_classification_pr_curve_and_confusion('not_a_model')
-
-
-def test_part_failure_metrics_has_both_models():
-    metrics = dd.load_part_failure_metrics()
-    assert set(metrics) == {'로지스틱 회귀', '랜덤 포레스트'}
-    for m in metrics.values():
-        assert set(m) == {'average_precision', 'precision', 'recall', 'f1'}
-    lr = metrics['로지스틱 회귀']
-    assert lr['average_precision'] == pytest.approx(0.61258, abs=1e-4)
-    assert lr['precision'] == pytest.approx(0.59586, abs=1e-4)
-    assert lr['recall'] == pytest.approx(0.60201, abs=1e-4)
-    assert lr['f1'] == pytest.approx(0.59892, abs=1e-4)
-
-
-def test_part_failure_selected_model_is_highest_average_precision():
-    assert dd.load_part_failure_selected_model() == '로지스틱 회귀'
-
-
-def test_part_failure_pr_curve_and_confusion_defaults_to_selected_model():
-    result = dd.load_part_failure_pr_curve_and_confusion()
-    assert result['model'] == '로지스틱 회귀'
-    assert result['confusion'] == {'tn': 8185, 'fp': 5894, 'fn': 5745, 'tp': 8690}
-    assert result['cutoff'] == pytest.approx(0.5)
-    assert len(result['precision_curve']) == len(result['recall_curve'])
-
-
-def test_part_failure_pr_curve_and_confusion_rejects_unknown_model():
-    with pytest.raises(ValueError):
-        dd.load_part_failure_pr_curve_and_confusion('not_a_model')
-
-
-def test_current_classification_actual_rate_matches_test_positive_rate():
-    rate = dd.load_current_classification_actual_rate('hist_gradient_boosting')
-    assert rate == pytest.approx(0.099676, abs=1e-5)
-
-
-def test_current_classification_actual_rate_rejects_unknown_model():
-    with pytest.raises(ValueError):
-        dd.load_current_classification_actual_rate('not_a_model')
-
-
-def test_part_failure_actual_rate_defaults_to_selected_model():
-    rate = dd.load_part_failure_actual_rate()
-    assert rate == pytest.approx(0.5062425475205162, abs=1e-6)
-
-
-def test_part_failure_actual_rate_rejects_unknown_model():
-    with pytest.raises(ValueError):
-        dd.load_part_failure_actual_rate('not_a_model')
-
-
-def test_current_classification_at_threshold_recomputes_confusion():
-    result = dd.load_current_classification_at_threshold('hist_gradient_boosting', 0.2)
-    assert result['predicted_alerts'] == 111 + 549
-    assert result['false_alarms'] == 549
-    assert result['missed_failures'] == 3577
-    assert result['total_rows'] == 37000
-    assert result['precision'] == pytest.approx(111 / (111 + 549))
-    assert result['recall'] == pytest.approx(111 / (111 + 3577))
-
-
-def test_current_classification_at_threshold_rejects_unknown_model():
-    with pytest.raises(ValueError):
-        dd.load_current_classification_at_threshold('not_a_model', 0.5)
-
-
-def test_part_failure_at_threshold_matches_default_cutoff_confusion():
-    result = dd.load_part_failure_at_threshold('로지스틱 회귀', 0.5)
-    assert result['predicted_alerts'] == 8690 + 5894
-    assert result['false_alarms'] == 5894
-    assert result['missed_failures'] == 5745
-    assert result['total_rows'] == 28514
-
-
-def test_part_failure_at_threshold_defaults_to_selected_model():
-    result = dd.load_part_failure_at_threshold(None, 0.3)
-    assert result['predicted_alerts'] == 14410 + 14037
-    assert result['missed_failures'] == 25
-
-
-def test_part_failure_at_threshold_rejects_unknown_model():
-    with pytest.raises(ValueError):
-        dd.load_part_failure_at_threshold('not_a_model', 0.5)
-
-
 # ------------------------------------------------------------
 # 필터바(공장·기계 종류·기계·기간) 적용
 # ------------------------------------------------------------
@@ -385,3 +273,87 @@ def test_table_page_and_csv_scoped_to_filters():
     assert page['total_rows'] == 30
     csv_bytes, _ = dd.export_table_csv('daily', assets=['AST-2031'], start=start)
     assert csv_bytes.decode('utf-8-sig').strip().count('\n') == 30  # 헤더 + 30행
+
+
+
+# ------------------------------------------------------------
+# 화면 ③ 모델 비교 — 화면 수치는 src/model_comparison.py 산출 CSV와 같아야 한다
+# ------------------------------------------------------------
+import pandas as pd  # noqa: E402
+
+COMPARISON = root / 'outputs/machine_risk/comparison.csv'
+needs_comparison = pytest.mark.skipif(not COMPARISON.is_file(), reason='모델 비교 결과가 없습니다.')
+
+
+@needs_comparison
+def test_model_comparison_rows_follow_baseline_then_model_order():
+    rows = dd.load_model_comparison('machine_risk', 12)
+    assert [r['model'] for r in rows] == ['baseline_a', 'baseline_b', 'logistic_regression',
+                                          'random_forest', 'hist_gradient_boosting']
+    assert [r['model'] for r in dd.load_model_comparison('part_current')] == [
+        'baseline_a', 'baseline_b', 'hist_gradient_boosting']
+
+
+@needs_comparison
+def test_machine_risk_lr_reproduces_existing_logistic_result():
+    existing = pd.read_csv(root / 'outputs/logistic_7_10_11_12_13_14_results.csv')
+    for threshold in (12, 13, 14):
+        lr = next(r for r in dd.load_model_comparison('machine_risk', threshold) if r['model'] == 'logistic_regression')
+        old = existing[existing.severity_threshold.eq(threshold) & existing.model.eq('기본')].iloc[0]
+        # 같은 코드·데이터로 다시 학습한 값 — 수치 연산 차이만 허용한다(소수 넷째 자리).
+        assert lr['average_precision'] == pytest.approx(old.AP, abs=1e-4)
+        assert lr['roc_auc'] == pytest.approx(old.ROC_AUC, abs=1e-4)
+
+
+@needs_comparison
+def test_focus_model_is_production_rf_or_validation_choice():
+    assert dd.load_focus_model('machine_risk', 12) == 'random_forest'
+    assert dd.load_focus_model('part_within_7d') == 'random_forest'
+    assert dd.load_focus_model('part_current') == 'hist_gradient_boosting'
+
+
+@needs_comparison
+def test_metrics_at_stored_cutoff_match_comparison_csv():
+    for task, threshold in [('machine_risk', 12), ('machine_risk', 14), ('part_within_7d', None), ('part_current', None)]:
+        for row in dd.load_model_comparison(task, threshold):
+            at = dd.load_comparison_at_cutoff(task, row['model'], row['cutoff'], threshold)
+            assert (at['tp'], at['fp'], at['fn'], at['tn']) == (row['tp'], row['fp'], row['fn'], row['tn'])
+            assert at['alert_rate'] == pytest.approx(row['alert_rate'])
+
+
+@needs_comparison
+def test_baseline_b_tables_count_train_rows_only():
+    machine = pd.read_csv(root / 'outputs/machine_risk/baselines.csv')
+    assert machine.groupby('severity_threshold').train_rows.sum().unique().tolist() == [7660]  # Train 7,660행
+    part_current = pd.read_csv(root / 'outputs/current_state/baselines.csv')
+    assert part_current.train_rows.sum() == 145600  # 2023-12-31 이전 부품·일 행
+
+
+@needs_comparison
+def test_screen3_kpis_equal_comparison_csv_values():
+    from src import wireframe_app as w
+
+    def texts(node):
+        children = getattr(node, 'children', None)
+        if isinstance(children, (str, int, float)):
+            yield str(children)
+        for child in children if isinstance(children, (list, tuple)) else ([children] if children is not None else []):
+            if not isinstance(child, (str, int, float)):
+                yield from texts(child)
+            else:
+                yield str(child)
+
+    layout = w.screen_3(seg_state={**w.DEFAULT_SEG, 'task': 0, 'threshold': 0})
+    shown = list(texts(layout))
+    rf = next(r for r in dd.load_model_comparison('machine_risk', 12) if r['model'] == 'random_forest')
+    for value in (f"{rf['average_precision']:.3f}", f"{rf['ap_lift']:.2f}",
+                  f"{rf['alert_rate'] * 100:.1f}", f"{rf['recall']:.3f}"):
+        assert value in shown
+
+
+@needs_comparison
+def test_comparison_feature_importance_is_sorted_and_present():
+    rows = dd.load_comparison_feature_importance('machine_risk', 12)
+    assert len(rows) == 10
+    values = [r['importance_mean'] for r in rows]
+    assert values == sorted(values, reverse=True)

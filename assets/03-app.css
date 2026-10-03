@@ -232,3 +232,14 @@
   /* 좌측(시스템명·기준일·배지)은 내용 폭을 다 받고, 탭 다음 남는 폭을 우측이 받는다. */
   .pf-header--grid { grid-template-columns: max-content max-content minmax(0, 1fr); }
 }
+
+/* 판정 임계값 슬라이더 — dcc.Slider(rc-slider) 기본 색을 토큰으로 덮는다.
+   트랙(선택 구간)은 series-1, 레일은 surface-sunken. */
+.pf-app .rc-slider-rail { background: var(--border-hairline); height: 4px; }
+.pf-app .rc-slider-track { background: var(--series-1); height: 4px; }
+.pf-app .rc-slider-handle {
+  width: 16px; height: 16px; margin-top: -6px; opacity: 1;
+  background: var(--surface-card); border: var(--stroke-mark) solid var(--accent);
+}
+.pf-app .rc-slider-handle:active, .pf-app .rc-slider-handle-dragging { box-shadow: none !important; border-color: var(--accent); }
+.pf-app .rc-slider-tooltip-inner { background: var(--surface-raised); color: var(--ink); box-shadow: var(--shadow-popover); }
