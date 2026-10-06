@@ -533,7 +533,7 @@ for _t in ("light", "dark"):
 | 1 | `tokens.json`, `bundle.css` | **`tokens.css`와 타이포 클래스 정의 파일이 존재하지 않는다.** 아티팩트 뷰어가 런타임 생성한다 | §1.2, §4.1로 직접 생성 |
 | 2 | `AssetTile/README.md` vs `10-layout.md` | 타일 치수가 **347×88 / 367×72**로, 스파크라인이 **120×32 / 112×28**로 충돌 | `10-layout.md`와 `bundle.css`(`112×28`)가 맞다. README를 버린다 |
 | 3 | `README.md` "행 높이는 세 가지만 쓴다" | 정작 화면 ②③④가 88·520·288·32·524를 쓴다 | 실제 규칙은 **"행 높이 합 + 거터 = 928"**이다. 세 가지 제한은 무시 |
-| 4 | `README.md` 모델 계열 배정 | `Logistic Regression / Random Forest / XGBoost`로 적혀 있다 | 팀 결정은 **RandomForest가 production**, LR·HGB·XGB는 기준선. 계열 배정을 팀 결정에 맞춰 다시 고정하고, **한 번 고정한 뒤에는 바꾸지 않는다** |
+| 4 | `README.md` 모델 계열 배정 | `Logistic Regression / Random Forest / XGBoost`로 적혀 있다 | 팀 결정은 **RandomForest가 production**, LR·HGB·XGB는 기준선. 계열 배정을 팀 결정에 맞춰 다시 고정하고, **한 번 고정한 뒤에는 바꾸지 않는다** (2026-10-06 변경: 기계 고위험일 판별의 운영 모델은 검증 구간 AP 1위인 LR — `docs/decision_log.md`) |
 | 5 | `10-layout.md` FilterBar | `공장(plant_code, 4곳 선택)` | 데이터는 **공장 3곳**이다. 3으로 고친다 |
 | 6 | 전반 | 부품 단위 위험 우선순위 전제(`부품 출고 금액` KPI 등) | 팀 방향은 **기계 단위 고위험일 분류**로 전환됨. 시각 양식은 그대로 쓰되 라벨·지표를 기계 단위로 다시 쓴다 |
 | 7 | `status-warning` / `-serious` | 라이트 표면 대비 1.79:1 / 2.57:1로 **3:1 미달** | 원본 팔레트 값을 유지한다. 대신 **점 + 글자 라벨이 접근성 보완 장치**이므로 라벨을 빼는 코드는 회귀로 취급 |

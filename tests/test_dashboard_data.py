@@ -302,10 +302,24 @@ def test_machine_risk_lr_reproduces_existing_logistic_result():
 
 
 @needs_comparison
-def test_focus_model_is_production_rf_or_validation_choice():
-    assert dd.load_focus_model('machine_risk', 12) == 'random_forest'
+def test_focus_model_is_production_or_validation_choice():
+    assert dd.load_focus_model('machine_risk', 12) == 'logistic_regression'
     assert dd.load_focus_model('part_within_7d') == 'random_forest'
     assert dd.load_focus_model('part_current') == 'hist_gradient_boosting'
+
+
+@needs_comparison
+def test_machine_risk_production_is_validation_ap_choice():
+    # 2026-10-06 결정: 기계 고위험일 판별의 운영 모델 = 기준마다 검증 구간 AP 1위 학습 모델.
+    for threshold in (12, 13, 14):
+        rows = dd.load_model_comparison('machine_risk', threshold)
+        production = [r['model'] for r in rows if r['production']]
+        best = max((r for r in rows if r['role'] == 'model'), key=lambda r: r['validation_ap'])
+        assert production == [best['model']]
+        assert bool(best['selected_by_validation'])
+    importance = pd.read_csv(root / 'outputs/machine_risk/feature_importance.csv')
+    for threshold, group in importance.groupby('severity_threshold'):
+        assert group.model.unique().tolist() == [dd.load_focus_model('machine_risk', int(threshold))]
 
 
 @needs_comparison
@@ -341,9 +355,10 @@ def test_screen3_kpis_equal_comparison_csv_values():
 
     layout = w.screen_3(seg_state={**w.DEFAULT_SEG, 'task': 0, 'threshold': 0})
     shown = list(texts(layout))
-    rf = next(r for r in dd.load_model_comparison('machine_risk', 12) if r['model'] == 'random_forest')
-    for value in (f"{rf['average_precision']:.3f}", f"{rf['ap_lift']:.2f}",
-                  f"{rf['alert_rate'] * 100:.1f}", f"{rf['recall']:.3f}"):
+    focus = dd.load_focus_model('machine_risk', 12)
+    row = next(r for r in dd.load_model_comparison('machine_risk', 12) if r['model'] == focus)
+    for value in (f"{row['average_precision']:.3f}", f"{row['ap_lift']:.2f}",
+                  f"{row['alert_rate'] * 100:.1f}", f"{row['recall']:.3f}"):
         assert value in shown
 
 

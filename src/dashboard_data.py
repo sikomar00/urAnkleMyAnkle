@@ -276,7 +276,7 @@ def load_model_comparison(task: str, threshold: int | None = None) -> list[dict]
 
 
 def load_focus_model(task: str, threshold: int | None = None) -> str:
-    """KPI·PR 곡선·혼동행렬·임계값 카드가 보여 줄 모델 — 운영 모델(팀 결정), 없으면 검증 선택 모델."""
+    """KPI·PR 곡선·혼동행렬·임계값 카드가 보여 줄 모델 — 운영 모델(comparison.csv의 production), 없으면 검증 선택 모델."""
     rows = load_model_comparison(task, threshold)
     for flag in ("production", "selected_by_validation"):
         chosen = [row["model"] for row in rows if bool(row[flag])]

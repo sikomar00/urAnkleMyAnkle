@@ -94,8 +94,12 @@
   "feature_time": "당일 센서 8종 + 전일까지 이력(diff1·mean7·std7·vs_mean30) + 기계 종류·공장",
   "cutoff_policy": "검증 구간 F1 최대(huijae_example.choose_validation_cutoff)",
   "selection": "검증 구간 AP 최대(학습 모델 중)",
-  "production": "random_forest",
-  "production_note": "팀 결정. TODO(사용자 확인: RF production 근거)",
+  "production": {
+    "12": "logistic_regression",
+    "13": "logistic_regression",
+    "14": "logistic_regression"
+  },
+  "production_note": "기준마다 검증 구간 AP 1위 모델(2026-10-06 결정). 마감 제출본(2026-09-30)은 랜덤 포레스트(팀 결정)",
   "baseline_b_keys": [
     "asset_tag"
   ],

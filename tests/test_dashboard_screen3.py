@@ -71,11 +71,19 @@ def test_performance_sentence_uses_comparison_numbers():
     insight = next(n for n in _walk(layout) if 'pf-insight' in _classes(n))
     text = _text(insight)
     rows = {r['model']: r for r in load_model_comparison('machine_risk', 12)}
-    rf, base_b = rows['random_forest'], rows['baseline_b']
-    assert f"AP는 {rf['average_precision']:.3f}" in text
-    assert f"{rf['ap_lift']:.2f}배" in text
-    assert f"{rf['recall']:.1%}를 잡고" in text
+    focus, base_b = rows['logistic_regression'], rows['baseline_b']
+    assert f"{focus['model_label']}의 AP는 {focus['average_precision']:.3f}" in text
+    assert f"{focus['ap_lift']:.2f}배" in text
+    assert f"{focus['recall']:.1%}를 잡고" in text
     assert f"기준 B(기계별 과거 비율)의 AP는 {base_b['average_precision']:.3f}" in text
+
+
+def test_machine_risk_production_label_is_validation_choice_without_todo():
+    text = _text(screen_3({"task": 0, "threshold": 0}))
+    assert '운영 모델은 검증 AP 1위' in text
+    assert 'TODO' not in text and '팀 결정' not in text
+    # 부품 7일 내 과제는 검증 구간이 없어 팀 결정을 그대로 표기한다.
+    assert '운영(팀 결정)' in _text(screen_3({"task": 1, "threshold": 0}))
 
 
 def test_model_table_sorts_by_column_and_bolds_rank_metric_best():
@@ -123,8 +131,10 @@ def test_every_shown_feature_has_a_korean_label_and_raw_name_on_hover():
     assert untranslated == []
     assert feature_label('oil_pressure_bar_residual_robust_z_lag7') == '오일 압력 · 기대값 대비 잔차 · 강건 z · 7일 전 값'
     layout = screen_3({"task": 0, "threshold": 0})
-    labelled = [n for n in _walk(layout) if isinstance(n, html.Span) and getattr(n, 'title', None) == 'power_consumption_kw']
-    assert [_text(n) for n in labelled] == ['소비 전력']
+    # 기계 고위험일 판별(기준 12)의 운영 모델 LR에서 영향 변수 1위는 plant_code다.
+    assert load_comparison_feature_importance('machine_risk', 12)[0]['feature'] == 'plant_code'
+    labelled = [n for n in _walk(layout) if isinstance(n, html.Span) and getattr(n, 'title', None) == 'plant_code']
+    assert [_text(n) for n in labelled] == ['공장']
 
 
 @pytest.mark.parametrize("lift, precision, recall, verdict", [

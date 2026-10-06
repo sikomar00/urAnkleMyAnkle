@@ -38,7 +38,11 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA = ROOT / "data" / "raw" / "synthetic_industrial_machine_data.csv"
 OUTPUTS = ROOT / "outputs"
 RANDOM_STATE = 42
-PRODUCTION_MODEL = "random_forest"  # 팀 결정(DESIGN.md §9). 근거: TODO(사용자 확인: RF production 근거)
+# 운영 모델
+# - 기계 고위험일 판별: 기준(12·13·14)마다 검증 구간 AP 1위 학습 모델(2026-10-06 결정, docs/decision_log.md).
+#   마감 제출본(2026-09-30)은 랜덤 포레스트(팀 결정)였다.
+# - 부품 7일 내: 원 실험이 검증 구간을 쓰지 않아 같은 규칙을 쓸 수 없다 — 팀 결정을 그대로 둔다.
+PART_WITHIN_7D_PRODUCTION = "random_forest"  # 팀 결정(DESIGN.md §9). 근거: TODO(사용자 확인: RF production 근거)
 MODEL_LABELS = {
     "baseline_a": "기준 A · 학습 구간 양성 비율",
     "logistic_regression": "로지스틱 회귀",
@@ -134,6 +138,7 @@ def build_machine_risk(raw: pd.DataFrame, output: Path, thresholds=(12, 13, 14))
                                                                  random_state=RANDOM_STATE),
     }
     rows, predictions, baselines, importance, type_rows = [], [], [], [], []
+    production = {}
     for threshold in thresholds:
         target = f"severity_{threshold}"
         scores: dict[str, tuple[np.ndarray, np.ndarray]] = {}
@@ -153,15 +158,16 @@ def build_machine_risk(raw: pd.DataFrame, output: Path, thresholds=(12, 13, 14))
             scores[name] = (pipeline.predict_proba(valid[columns])[:, 1], pipeline.predict_proba(test[columns])[:, 1])
         validation_ap = {name: float(average_precision_score(valid[target], scores[name][0])) for name in scores}
         selected = max(estimators, key=lambda name: validation_ap[name])
+        production[str(threshold)] = selected
         for name, (valid_score, test_score) in scores.items():
             cutoff, _ = choose_validation_cutoff(valid[target], valid_score)
             role = "baseline" if name.startswith("baseline") else "model"
             label = "기준 B · 기계별 과거 비율" if name == "baseline_b" else MODEL_LABELS[name]
             rows.append(_row("machine_risk", threshold, name, label, role, cutoff, "validation_f1",
                              test[target], test_score, validation_ap=validation_ap[name],
-                             selected_by_validation=name == selected, production=name == PRODUCTION_MODEL))
+                             selected_by_validation=name == selected, production=name == selected))
             predictions.append(_predictions(threshold, name, test[target], test_score))
-        importance.append(_importance(fitted[PRODUCTION_MODEL], valid, target, columns, threshold, PRODUCTION_MODEL))
+        importance.append(_importance(fitted[selected], valid, target, columns, threshold, selected))
         # 참고: 기계 종류별로 따로 학습한 RF와, 전체 RF를 같은 종류 행으로 잘라 본 값.
         for machine_type, train_type in train.groupby("machine_type"):
             test_type = test[test.machine_type.eq(machine_type)]
@@ -183,8 +189,8 @@ def build_machine_risk(raw: pd.DataFrame, output: Path, thresholds=(12, 13, 14))
         "test_period": f"{test.transaction_date.min():%Y-%m-%d} ~ {test.transaction_date.max():%Y-%m-%d}",
         "feature_time": "당일 센서 8종 + 전일까지 이력(diff1·mean7·std7·vs_mean30) + 기계 종류·공장",
         "cutoff_policy": "검증 구간 F1 최대(huijae_example.choose_validation_cutoff)",
-        "selection": "검증 구간 AP 최대(학습 모델 중)", "production": PRODUCTION_MODEL,
-        "production_note": "팀 결정. TODO(사용자 확인: RF production 근거)",
+        "selection": "검증 구간 AP 최대(학습 모델 중)", "production": production,
+        "production_note": "기준마다 검증 구간 AP 1위 모델(2026-10-06 결정). 마감 제출본(2026-09-30)은 랜덤 포레스트(팀 결정)",
         "baseline_b_keys": ["asset_tag"], "source": "src/model_comparison.py",
     }
     _write(output, rows, predictions, baselines, importance, config)
@@ -222,7 +228,7 @@ def build_part_within_7d(raw: pd.DataFrame, output: Path) -> pd.DataFrame:
         role = "baseline" if name.startswith("baseline") else "model"
         label = "기준 B · 기계×부품별 과거 비율" if name == "baseline_b" else MODEL_LABELS[name]
         rows.append(_row("part_within_7d", None, name, label, role, 0.5, "fixed_0.5", test.target, score,
-                         validation_ap=np.nan, selected_by_validation=False, production=name == PRODUCTION_MODEL))
+                         validation_ap=np.nan, selected_by_validation=False, production=name == PART_WITHIN_7D_PRODUCTION))
         predictions.append(_predictions(None, name, test.target, score))
 
     # 영향 변수 — 같은 설정(random_state=42)으로 RF를 다시 학습해 저장된 Test 예측과 같은지 확인한다.
@@ -230,14 +236,14 @@ def build_part_within_7d(raw: pd.DataFrame, output: Path) -> pd.DataFrame:
     model.fit(train[columns], train.target)
     reproduced = model.predict_proba(test[columns])[:, 1]
     max_diff = float(np.max(np.abs(reproduced - stored_scores["random_forest"])))
-    importance = _importance(model, valid, "target", columns, None, PRODUCTION_MODEL)
+    importance = _importance(model, valid, "target", columns, None, PART_WITHIN_7D_PRODUCTION)
     config = {
         "task": "part_within_7d", "label": "향후 1~7일 안에 고장 표시 1회 이상(오늘 고장 표시 행 제외)",
         "grain": "기계·부품·일", "split": dates.to_dict("records"), "features": columns,
         "test_period": f"{test.transaction_date.min():%Y-%m-%d} ~ {test.transaction_date.max():%Y-%m-%d}",
         "feature_time": "당일 센서 + 전일까지 고장 이력 + 부품 정보",
         "cutoff_policy": "0.5 고정(원 실험이 검증 구간을 쓰지 않음)", "selection": "검증 미사용",
-        "production": PRODUCTION_MODEL, "production_note": "팀 결정. TODO(사용자 확인: RF production 근거)",
+        "production": PART_WITHIN_7D_PRODUCTION, "production_note": "팀 결정. TODO(사용자 확인: RF production 근거)",
         "baseline_b_keys": ["asset_tag", "part_no"],
         "rf_reproduction_max_abs_diff": max_diff, "source": "src/model_comparison.py",
     }

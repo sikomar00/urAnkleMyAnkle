@@ -134,7 +134,7 @@ def _screen3_task_key(seg_state):
 def _selection_text(row):
     labels = []
     if bool(row["production"]):
-        labels.append("운영(팀 결정)")
+        labels.append("운영" if bool(row["selected_by_validation"]) else "운영(팀 결정)")
     if bool(row["selected_by_validation"]):
         labels.append("검증 AP 최고")
     return " · ".join(labels) or "—"
@@ -447,7 +447,9 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
 
     policy = CUTOFF_POLICY_TEXT.get(focus_row["cutoff_policy"], focus_row["cutoff_policy"])
     table_note = f"같은 Test 구간 · 판정 기준 {policy}"
-    if any(bool(r["production"]) for r in rows):
+    if any(bool(r["production"]) and bool(r["selected_by_validation"]) for r in rows):
+        table_note += " · 운영 모델은 검증 AP 1위"
+    elif any(bool(r["production"]) for r in rows):
         table_note += " · 운영 모델 RF는 팀 결정 — 근거 TODO(사용자 확인)"
     comparison = card("모델 비교", 1880, 276, model_table_block(table_sort, seg_state),
                       right=html.Div([note(table_note), help_icon(MODEL_TABLE_HELP)],
