@@ -13,7 +13,6 @@
 마지막 수단입니다.
 """
 import sys
-from pathlib import Path
 
 ok = True
 

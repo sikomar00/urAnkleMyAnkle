@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 import joblib
-import numpy as np
 import pandas as pd
 import sklearn
 from sklearn.dummy import DummyClassifier

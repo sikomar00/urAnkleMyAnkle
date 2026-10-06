@@ -22,11 +22,10 @@ from .industrial_data import (
     MACHINE_COLUMN,
     PART_COLUMN,
     PLANT_COLUMN,
-    REQUIRED_COLUMNS,
     SENSOR_COLUMNS,
-    iter_scopes,
-    load_industrial_data,
-    split_by_date,
+    iter_scopes,  # noqa: F401 — industrial_training이 여기서 가져간다
+    load_industrial_data,  # noqa: F401
+    split_by_date,  # noqa: F401
 )
 
 # This is deliberately close to the feature_data the user started with.

@@ -198,12 +198,6 @@ def render_experiment_summary(
     overall = selected.loc[
         selected.get("scope_kind", pd.Series(index=selected.index)).eq("overall")
     ].copy()
-    representative = overall.loc[
-        overall.get(
-            "selected_feature_set", pd.Series(False, index=overall.index)
-        ).eq(True)  # noqa: E712
-    ].copy()
-
     profile_test = profile.loc[profile["split"].eq("test")].copy()
     machine_profile = profile_test.loc[
         profile_test["scope_kind"].eq("machine_type")

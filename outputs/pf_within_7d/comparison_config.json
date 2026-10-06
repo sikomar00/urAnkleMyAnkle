@@ -1,0 +1,56 @@
+{
+  "task": "part_within_7d",
+  "label": "향후 1~7일 안에 고장 표시 1회 이상(오늘 고장 표시 행 제외)",
+  "grain": "기계·부품·일",
+  "split": [
+    {
+      "split": "train",
+      "date_start": "2022-02-02",
+      "date_end": "2024-01-31",
+      "rows": 131364
+    },
+    {
+      "split": "validation",
+      "date_start": "2024-02-08",
+      "date_end": "2024-07-13",
+      "rows": 28327
+    },
+    {
+      "split": "test",
+      "date_start": "2024-07-21",
+      "date_end": "2024-12-25",
+      "rows": 28514
+    }
+  ],
+  "features": [
+    "unit_cost_inr",
+    "breakdown_days_prev_7d",
+    "breakdown_days_prev_30d",
+    "days_since_last_observed_breakdown",
+    "has_prior_observed_breakdown",
+    "temp_bearing_degC",
+    "temp_motor_degC",
+    "vibration_h_mms",
+    "vibration_v_mms",
+    "oil_pressure_bar",
+    "load_pct",
+    "shaft_rpm",
+    "power_consumption_kw",
+    "part_no",
+    "part_family",
+    "criticality",
+    "uom"
+  ],
+  "test_period": "2024-07-21 ~ 2024-12-25",
+  "feature_time": "당일 센서 + 전일까지 고장 이력 + 부품 정보",
+  "cutoff_policy": "0.5 고정(원 실험이 검증 구간을 쓰지 않음)",
+  "selection": "검증 미사용",
+  "production": "random_forest",
+  "production_note": "팀 결정. TODO(사용자 확인: RF production 근거)",
+  "baseline_b_keys": [
+    "asset_tag",
+    "part_no"
+  ],
+  "rf_reproduction_max_abs_diff": 0.28,
+  "source": "src/model_comparison.py"
+}

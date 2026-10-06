@@ -1,0 +1,337 @@
+/* KYS-dashboard 전용 확장 — 인증·관리 UI. DESIGN.md 7절.
+   Plantfloor에 없는 것(로그인 폼, 버튼 변형, 모달, 토스트, 권한 배지)만 기존
+   토큰으로 파생시킨 것이다. 새 색을 도입하지 않는다 — 하드코딩 색 0건이 수용 기준이다.
+   02-bundle.css 다음에 로드된다. */
+
+/* ── 버튼 변형 (7.1) ─────────────────────────────────────────────── */
+/* 한 화면에 --primary 는 하나다. --danger 는 되돌릴 수 없는 조작 전용이며
+   항상 확인 모달을 거친다. 버튼 글자는 label-12, --lg 만 body-14. */
+
+.pf-btn--danger {
+  background: var(--danger-fill);
+  color: var(--ink-on-danger);
+  border-color: var(--danger-fill);
+}
+.pf-btn--ghost {              /* 취소, 뒤로 — 테두리 없는 중립 */
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-secondary);
+}
+.pf-btn--ghost:hover { background: var(--surface-hover); color: var(--ink); }
+.pf-btn--lg { height: 40px; padding: 0 var(--space-5); }   /* 로그인 제출 전용 */
+
+/* ── 폼 필드 (7.2) ───────────────────────────────────────────────── */
+/* 오류를 테두리 색만으로 표시하지 않는다 — aria-invalid 와 .pf-field__error 글자를
+   항상 같이 둔다. 라벨은 필드 위에 label-12 + ink-secondary, placeholder 로 대체하지 않는다.
+   비밀번호 강도 미터(색 그라데이션 막대)를 넣지 않는다. */
+
+.pf-field--stack { display: flex; flex-direction: column; gap: var(--space-1); align-items: stretch; }
+.pf-control--lg { height: 44px; font-size: 14px; line-height: 20px; }
+.pf-control[aria-invalid="true"] { border-color: var(--status-critical); }
+.pf-field__error { color: var(--status-critical-text); }      /* micro-11 */
+.pf-field__hint  { color: var(--ink-muted); }                 /* micro-11 */
+
+/* ── 기간 직접 지정 ───────────────────────────────────────────────── */
+/* 네이티브 날짜 칸. 필터바 한 줄에 들어가도록 폭을 줄인다. */
+.pf-date { width: 128px; flex-shrink: 0; }
+/* 달력 아이콘은 브라우저가 그리므로 다크 테마에서는 반전시켜야 보인다. */
+:root[data-theme="dark"] .pf-date::-webkit-calendar-picker-indicator { filter: invert(1); }
+
+/* ── 알림 (7.5) ──────────────────────────────────────────────────── */
+/* 조작의 결과는 그 조작이 일어난 자리 근처에 .pf-notice 로 띄운다. 토스트는 화면을
+   떠난 뒤 결과가 나오는 경우에만 쓰고 동시에 하나만 띄운다(shadow-popover 는 화면에 하나).
+   오류 토스트는 자동으로 사라지지 않게 한다. 등장·퇴장 애니메이션을 넣지 않는다. */
+
+.pf-notice {
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--stroke-hairline) solid transparent;
+  border-radius: var(--radius-sm);
+}
+.pf-notice--critical { background: var(--status-critical-tint); border-color: var(--status-critical-border); color: var(--status-critical-text); }
+.pf-notice--warning  { background: var(--status-warning-tint);  border-color: var(--status-warning-border);  color: var(--status-warning-text); }
+.pf-notice--good     { background: var(--status-good-tint);     border-color: var(--status-good-border);     color: var(--status-good-text); }
+
+.pf-toast { background: var(--surface-raised); border: var(--stroke-hairline) solid var(--border-hairline);
+            border-radius: var(--radius-md); box-shadow: var(--shadow-popover); padding: var(--space-3) var(--space-4); }
+
+/* ── 모달 (7.6) ──────────────────────────────────────────────────── */
+/* 제목 title-16, 본문 body-14, 버튼은 우측 정렬로 [취소 = --ghost] [실행 = --primary 또는 --danger].
+   모달이 떠 있는 동안 배경 카드에 그림자를 추가하지 않는다.
+   세션 만료는 모달로 알리고 만료된 값을 흐리게 남기지 않는다 — opacity-refetch 는
+   "갱신 중"을 뜻하므로 의미가 충돌한다. */
+
+.pf-scrim { position: fixed; inset: 0; background: var(--surface-scrim); }
+.pf-modal { background: var(--surface-raised); border: var(--stroke-hairline) solid var(--border-hairline);
+            border-radius: var(--radius-lg); box-shadow: var(--shadow-popover); padding: var(--space-6); }
+
+/* ════════════════════════════════════════════════════════════════════
+   대시보드 화면(src/wireframe_app.py) — Dash 컴포넌트를 토큰에 연결한다.
+   Dash 기본 컴포넌트(dcc.Tabs·Dropdown·DataTable)는 자체 CSS를 싣고 오므로
+   그보다 구체적인 선택자로 덮는다. !important는 react-select 기본 규칙의
+   선택자 구체성이 높아 덮을 방법이 없는 곳에만 쓴다.
+   ════════════════════════════════════════════════════════════════════ */
+
+.pf-card__title, .pf-header__brand { margin: 0; }
+/* 카드 머리 오른쪽(보조 설명·버튼·슬라이더)은 남는 폭을 받아 오른쪽에 붙는다. */
+.pf-card__actions { flex: 1 1 auto; min-width: 0; justify-content: flex-end; text-align: right; }
+.pf-strong { font-weight: 600; }
+.pf-seg { flex-shrink: 0; }
+.pf-seg__item { white-space: nowrap; }
+/* 다크 테마에서 accent-text는 accent-subtle 위 대비가 3.85:1이라 12px 글자에 모자란다.
+   토큰 설명("그 위 텍스트는 accent-text 또는 ink")대로 눌린 세그먼트 글자만 ink로 바꾼다(8.1:1). */
+:root[data-theme="dark"] .pf-seg__item[aria-pressed="true"] { color: var(--ink); }
+.pf-app button:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+
+/* 헤더 탭 — dcc.Tabs 기본 스타일(styled-jsx)보다 구체적이어야 해서 id를 쓴다. */
+#screen-tabs-parent, #screen-tabs { width: max-content !important; }
+#screen-tabs { flex-wrap: nowrap !important; }
+#screen-tabs .tab {
+  flex: 0 0 auto !important; width: auto !important;
+  display: flex; align-items: center; height: var(--layout-header-h); padding: 0 11px;
+  background: none; border: 0; border-bottom: var(--stroke-mark) solid transparent;
+  color: var(--ink-secondary); white-space: nowrap; transition: none;
+  font-family: var(--font-sans); font-size: 14px; line-height: 20px; font-weight: 500;
+}
+#screen-tabs .tab:hover { background: var(--surface-hover); color: var(--ink); }
+#screen-tabs .tab--selected { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+
+/* 테마 버튼 — 누르면 바뀔 테마를 글리프로 보여 준다. */
+#theme-btn::before { content: "☾"; }
+:root[data-theme="dark"] #theme-btn::before { content: "☀"; }
+
+
+/* 드롭다운 — Dash 2.x dcc.Dropdown(react-select v1) */
+.pf-app .Select { font-family: inherit; font-size: 13px; }
+.pf-app .Select-control {
+  background: var(--surface-card); border-color: var(--border-control);
+  border-radius: var(--radius-sm); color: var(--ink);
+}
+.pf-app .Select-control:hover { box-shadow: none; }
+.pf-app .is-focused:not(.is-open) > .Select-control { border-color: var(--border-focus); box-shadow: none; }
+.pf-app .Select-placeholder,
+.pf-app .Select--single > .Select-control .Select-value { color: var(--ink-muted) !important; }
+.pf-app .has-value.Select--single > .Select-control .Select-value .Select-value-label { color: var(--ink) !important; }
+.pf-app .Select-input > input { color: var(--ink); }
+.pf-app .Select-arrow { border-top-color: var(--ink-muted); }
+.pf-app .Select-clear-zone { color: var(--ink-muted); }
+.pf-app .is-disabled > .Select-control { background: var(--surface-sunken); opacity: var(--opacity-disabled); cursor: not-allowed; }
+.pf-app .Select-menu-outer {
+  background: var(--surface-raised); border-color: var(--border-hairline);
+  box-shadow: var(--shadow-popover); z-index: 1000 !important; position: absolute !important;
+}
+.pf-app .Select-option { background: var(--surface-raised); color: var(--ink); }
+.pf-app .Select-option.is-focused { background: var(--surface-hover); color: var(--ink); }
+.pf-app .Select-option.is-selected { background: var(--surface-selected); color: var(--ink); }
+.pf-app .Select-noresults { color: var(--ink-muted); }
+
+/* KPI 타일 — 클릭하면 표 정렬이 바뀌는 타일 */
+/* KPI 라벨 옆 물음표 — 설명은 브라우저 기본 툴팁(title)이 띄운다. */
+.pf-help {
+  width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+  display: inline-grid; place-items: center; cursor: help;
+  border: var(--stroke-hairline) solid var(--border-control); color: var(--ink-secondary);
+}
+
+/* ── 표 정렬 — 열 제목 자체가 버튼이다 ───────────────────────────────── */
+/* 누를 때마다 오름차순 → 내림차순 → 기본 순서로 돈다. 정렬 중인 열만 제목을 ink·굵게,
+   화살표(▲▼)를 accent-text로 둔다. 화살표 칸은 비어 있어도 폭을 잡아 열 폭이 흔들리지 않는다.
+   방향 표시는 이 버튼이 맡으므로 02-bundle.css의 th[aria-sort]::after 글리프는 끈다. */
+.pf-table th.pf-th--sortable { color: var(--ink-secondary); cursor: default; }
+.pf-table th.pf-th--sortable::after { content: none; }
+.pf-th-sort {
+  display: flex; align-items: center; gap: var(--space-1);
+  width: 100%; height: 100%; min-height: inherit; padding: 0; margin: 0;
+  border: 0; background: none; color: inherit; font: inherit; text-align: inherit;
+  white-space: nowrap; cursor: pointer;
+}
+.pf-th-sort:hover { color: var(--ink); }
+.pf-th-sort--active { color: var(--ink); font-weight: 600; }
+.pf-th-sort__arrow { display: inline-block; width: 10px; font-size: 9px; color: var(--accent-text); }
+
+/* 화면 ② 센서 8종 종합 지표 — 센서 사이 구분선(라벨 열 + 차트 전체 폭). 마우스는 아래 차트로 통과시킨다. */
+.pf-smult-sep {
+  position: absolute; left: 0; right: 0; height: 0; pointer-events: none;
+  border-top: var(--stroke-hairline) solid var(--chart-axis);
+}
+
+/* 카드 머리 범례 표식 — 02-bundle.css의 .pf-legend__key(12×2 선)·--dot(8px 점)에 색과 모양만 더한다. */
+.pf-key--line { background: var(--series-1); }
+.pf-key--dash { width: 18px; height: 0; background: none; border-top: var(--stroke-mark) dashed var(--chart-muted); }
+.pf-key--critical { background: var(--status-critical); }
+.pf-key--warning { background: var(--status-warning); }
+.pf-key--health, .pf-key--operating, .pf-key--other { width: 10px; height: 7px; border-radius: var(--radius-sm); }
+.pf-key--health { background: var(--series-1); }
+.pf-key--operating { background: var(--series-2); }
+.pf-key--other { background: var(--chart-muted); }
+.pf-key--band { width: 10px; height: 10px; border-radius: 0; background: var(--chart-band-critical);
+                border: var(--stroke-hairline) solid var(--status-critical-border); }
+
+/* 압축 표 — 막대 목록처럼 행이 많은 좁은 카드(① 기계별 평균 소비 전력).
+   높이는 구분선 1px을 포함해 머리 28 + 행 24 × 10 = 268px — 카드 본문(270px)에 스크롤 없이 들어간다. */
+.pf-table--compact th { height: 27px; }
+.pf-table--compact td { height: 23px; }
+.pf-table--compact .pf-risk { height: 23px; }
+
+/* 기계 상태 타일 — 상태는 배지(점 + 글자)가 나르고 타일 배경은 칠하지 않는다. */
+.pf-machinetile {
+  background: var(--surface-card);
+  border: var(--stroke-hairline) solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+}
+
+/* 화면 ③ 성능 해석 줄 — 카드와 같은 면·선, 왼쪽에 굵은 라벨 하나. */
+.pf-insight {
+  display: flex; align-items: center; gap: var(--space-4); flex-shrink: 0;
+  padding: 0 var(--layout-card-pad); background: var(--surface-card);
+  border: var(--stroke-hairline) solid var(--border-hairline); border-radius: var(--radius-sm);
+}
+.pf-insight__label { flex-shrink: 0; color: var(--ink); }
+.pf-insight__text { margin: 0; color: var(--ink); }
+/* KPI 보조 비교의 추세 — 글리프와 증가·감소 글자를 함께 쓴다. 나빠짐 = critical, 좋아짐 = good. */
+.pf-delta { font-weight: 600; }
+.pf-delta--worse  { color: var(--status-critical-text); }
+.pf-delta--better { color: var(--status-good-text); }
+/* 한국어 문장은 어절 단위로 줄을 바꾼다(단어 중간에서 끊지 않는다). */
+.pf-sentence { word-break: keep-all; overflow-wrap: anywhere; }
+
+/* 혼동행렬 — 4×4 격자(머리 줄·칸 2×2·행 합계·각주). 칸은 결과 이름 글자 + 상태 tint:
+   맞게 판정 = good, 오경보 = warning, 놓친 고장 = critical(이름 글자는 status-*-text). */
+.pf-cm {
+  display: grid; height: 100%; gap: var(--space-2);
+  grid-template-columns: 64px 1fr 1fr 56px; grid-template-rows: 24px 1fr 1fr auto;
+}
+.pf-cm-head { align-self: end; text-align: center; }
+.pf-cm-side { align-self: center; }
+.pf-cm-cell {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-1);
+  border-radius: var(--radius-sm); background: var(--surface-sunken);
+}
+/* 칸 둘레에 구분용 테두리를 그리지 않는다(DESIGN §8) — 칸 사이 간격과 tint로만 나눈다. */
+.pf-cm-cell--good     { background: var(--status-good-tint); }
+.pf-cm-cell--warning  { background: var(--status-warning-tint); }
+.pf-cm-cell--critical { background: var(--status-critical-tint); }
+.pf-cm-cell--good .pf-cm-cell__name     { color: var(--status-good-text); }
+.pf-cm-cell--warning .pf-cm-cell__name  { color: var(--status-warning-text); }
+.pf-cm-cell--critical .pf-cm-cell__name { color: var(--status-critical-text); }
+.pf-cm-cell__name { font-weight: 600; }
+.pf-cm-total { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-1); }
+.pf-cm-foot { grid-column: 1 / -1; }
+
+/* 카드 안 작은 값 칸 묶음(판정 임계값·운영 판단) — 라벨 위, 값 아래. */
+.pf-metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-2); }
+.pf-metric {
+  display: flex; flex-direction: column; gap: var(--space-1); min-width: 0;
+  padding: var(--space-2) var(--space-3); background: var(--surface-sunken); border-radius: var(--radius-sm);
+}
+.pf-verdict {
+  display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-4);
+  border: var(--stroke-hairline) solid var(--border-hairline); border-radius: var(--radius-sm);
+}
+
+/* 주요 영향 변수 — 한 줄에 순위·이름·값, 그 아래 막대. 범주색은 series 토큰을 고정 순서로 쓴다. */
+.pf-fi-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.pf-fi__head { display: flex; align-items: baseline; gap: var(--space-2); }
+.pf-fi__rank { width: 16px; flex-shrink: 0; text-align: right; }
+.pf-fi__value { margin-left: auto; flex-shrink: 0; }
+.pf-fi__track { margin: 2px 0 0 24px; height: 7px; background: var(--surface-sunken); border-radius: var(--radius-sm); }
+.pf-fi-bar { height: 7px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.pf-fi--health   { background: var(--series-1); }
+.pf-fi--operating { background: var(--series-2); }
+.pf-fi--other    { background: var(--chart-muted); }
+.pf-fi-foot { margin-top: auto; padding-top: var(--space-2); }
+
+/* 아직 채우지 않은 자리(보고서 요약 참조 화면) */
+.pf-placeholder {
+  background: var(--surface-sunken); color: var(--ink-secondary);
+  border: var(--stroke-hairline) solid var(--border-hairline);
+}
+
+
+/* 데이터 조회 표 — dash_table.DataTable */
+.pf-dtable .dash-spreadsheet-container .dash-spreadsheet-inner th {
+  background: var(--surface-sunken) !important; color: var(--ink-secondary) !important;
+  border: 0 !important; border-bottom: var(--stroke-hairline) solid var(--border-hairline) !important;
+  font-family: var(--font-sans); font-size: 12px; font-weight: 500;
+}
+.pf-dtable .dash-spreadsheet-container .dash-spreadsheet-inner td {
+  background: var(--surface-card) !important; color: var(--ink) !important;
+  border: 0 !important; border-bottom: var(--stroke-hairline) solid var(--border-hairline) !important;
+  font-family: var(--font-sans); font-size: 12px;
+}
+.pf-dtable .dash-spreadsheet-container .dash-spreadsheet-inner tr:hover td { background: var(--surface-hover) !important; }
+/* DataTable 열 정렬 — 다른 표(.pf-th-sort)와 같게 열 제목 칸 전체를 누르면 정렬되고 방향은 ▲▼ 글리프로 보인다.
+   DataTable은 정렬 아이콘(span.column-header--sort)에만 클릭을 받으므로, 그 span의 ::after를 칸 전체로
+   펼쳐 클릭을 받게 한다(가상 요소 클릭은 원래 요소로 간다). FontAwesome 아이콘은 숨기고 data-icon으로
+   방향을 읽어 ::before에 글리프를 쓴다(sort-up = 오름차순). 이름 뒤에 화살표가 오도록 순서를 뒤집는다. */
+.pf-dtable th.dash-header { position: relative; cursor: pointer; }
+.pf-dtable th.dash-header > div { display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: var(--space-1); }
+.pf-dtable th.dash-header[style*="text-align: right"] > div { justify-content: flex-start; }
+.pf-dtable th.dash-header:hover { color: var(--ink); }
+.pf-dtable .column-header--sort { color: var(--accent-text); display: inline-block; width: 10px; font-size: 9px; }
+.pf-dtable .column-header--sort svg { display: none; }
+.pf-dtable .column-header--sort::after { content: ""; position: absolute; inset: 0; }
+.pf-dtable .column-header--sort:has(svg[data-icon="sort-up"])::before { content: "▲"; }
+.pf-dtable .column-header--sort:has(svg[data-icon="sort-down"])::before { content: "▼"; }
+.pf-dtable th.dash-header:has(svg[data-icon="sort-up"]),
+.pf-dtable th.dash-header:has(svg[data-icon="sort-down"]) { color: var(--ink); font-weight: 600; }
+.pf-dtable .previous-next-container { color: var(--ink-secondary); }
+.pf-dtable .previous-next-container button { background: none; color: var(--ink-secondary); border: 0; }
+.pf-dtable .previous-next-container .current-page,
+.pf-dtable .previous-next-container input.current-page {
+  background: var(--surface-card); color: var(--ink); border-color: var(--border-control);
+}
+/* DataTable 기본 규칙(.dash-table-container … .current-page-container input.current-page { color: black })이
+   위 규칙보다 우선해 다크 테마에서 쪽 번호가 검은 글자(대비 1.2:1)로 남는다. 같은 경로에 .pf-dtable을 더해
+   우선순위를 넘긴다. 쪽 번호는 입력칸의 placeholder로 보이므로 placeholder 색까지 덮는다. */
+.pf-dtable .dash-table-container .previous-next-container .page-number .current-page-container input.current-page {
+  color: var(--ink); background: var(--surface-card);
+}
+.pf-dtable .dash-table-container .previous-next-container .page-number .current-page-container input.current-page::placeholder {
+  color: var(--ink); opacity: 1;
+}
+/* 입력 중에는 DataTable 기본처럼 placeholder를 감춘다(위 규칙이 기본 :focus 규칙을 덮지 않게). */
+.pf-dtable .dash-table-container .previous-next-container .page-number .current-page-container input.current-page:focus::placeholder {
+  opacity: 0;
+}
+.pf-divider-top { border-top: var(--stroke-hairline) solid var(--border-hairline); }
+
+/* ── 반응형 1280~1920px ─────────────────────────────────────────────── */
+/* 02-bundle.css는 캔버스를 1920 고정(min-width: --layout-canvas-w)으로 둔다.
+   화면 폭 1280~1920px에서는 12열 그리드가 늘고 줄며, 그보다 넓으면 가운데 정렬한다. */
+.pf-app { min-width: 1280px; max-width: var(--layout-canvas-w); margin: 0 auto; }
+.pf-desktop-only { display: none; }
+@media (max-width: 1279px) {
+  .pf-desktop-only { display: flex; }
+}
+
+/* 헤더 내보내기 — 넓은 화면에서는 한 줄로 펼치고, 1600px 미만에서는 버튼 뒤 팝오버로 접는다.
+   계정 메뉴는 접지 않는다. */
+/* 헤더 3열 — 탭(가운데 열)은 내용 폭으로 못박아야 잘리지 않는다. */
+.pf-header--grid { display: grid; grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr); }
+.pf-export { display: flex; align-items: center; gap: var(--space-2); }
+.pf-export-toggle { display: none; }
+@media (max-width: 1599px) {
+  .pf-export-toggle { display: inline-block; }
+  .pf-export {
+    display: none; position: absolute; top: 44px; right: 0; z-index: 100;
+    padding: var(--space-3);
+    background: var(--surface-raised);
+    border: var(--stroke-hairline) solid var(--border-hairline);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-popover);
+  }
+  .pf-export.is-open { display: flex; }
+  /* 좌측(시스템명·기준일·배지)은 내용 폭을 다 받고, 탭 다음 남는 폭을 우측이 받는다. */
+  .pf-header--grid { grid-template-columns: max-content max-content minmax(0, 1fr); }
+}
+
+/* 판정 임계값 슬라이더 — dcc.Slider(rc-slider) 기본 색을 토큰으로 덮는다.
+   트랙(선택 구간)은 series-1, 레일은 surface-sunken. */
+.pf-app .rc-slider-rail { background: var(--border-hairline); height: 4px; }
+.pf-app .rc-slider-track { background: var(--series-1); height: 4px; }
+.pf-app .rc-slider-handle {
+  width: 16px; height: 16px; margin-top: -6px; opacity: 1;
+  background: var(--surface-card); border: var(--stroke-mark) solid var(--accent);
+}
+.pf-app .rc-slider-handle:active, .pf-app .rc-slider-handle-dragging { box-shadow: none !important; border-color: var(--accent); }
+.pf-app .rc-slider-tooltip-inner { background: var(--surface-raised); color: var(--ink); box-shadow: var(--shadow-popover); }

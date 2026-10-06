@@ -1,0 +1,1240 @@
+part_family,target,feature_set,model,feature,importance_mean,importance_std
+Bearing,affected,B,logistic_regression,machine_type,0.024333204967829664,0.0046772048562579915
+Bearing,affected,B,logistic_regression,asset_tag,0.009252056942220921,0.01076974485042696
+Bearing,affected,B,logistic_regression,temp_bearing_degC,0.0166933142799562,0.003268815506586053
+Bearing,affected,B,logistic_regression,temp_motor_degC,0.010403864132019288,0.0044250638147018
+Bearing,affected,B,logistic_regression,vibration_h_mms,-0.0003146472461509342,0.002670670892827891
+Bearing,affected,B,logistic_regression,vibration_v_mms,-0.0005081359094111967,0.0012639273942849718
+Bearing,affected,B,logistic_regression,oil_pressure_bar,-0.0013325673312406527,0.0020491834053885777
+Bearing,affected,B,logistic_regression,load_pct,0.016484577892998304,0.0033419082166084744
+Bearing,affected,B,logistic_regression,shaft_rpm,0.07713188226852118,0.010633554850111124
+Bearing,affected,B,logistic_regression,power_consumption_kw,4.2219660911594716e-05,0.0017655336365729776
+Bearing,affected,B,logistic_regression,day_of_week,0.03672551320447256,0.008022178945700231
+Bearing,affected,B,logistic_regression,month_sin,-0.00019478586323255312,0.00022480342507106044
+Bearing,affected,B,logistic_regression,month_cos,0.002888971934907484,0.002040343710006888
+Bearing,affected,B,logistic_regression,temp_bearing_degC_lag1,0.023077742482216484,0.004498526007432832
+Bearing,affected,B,logistic_regression,temp_bearing_degC_lag3,0.014399821330132678,0.0026587887175181053
+Bearing,affected,B,logistic_regression,temp_bearing_degC_lag7,0.03055270166601498,0.001913715437282144
+Bearing,affected,B,logistic_regression,temp_bearing_degC_diff1,-0.006620359296503102,0.006629679850375032
+Bearing,affected,B,logistic_regression,temp_bearing_degC_diff7,-0.002689048509346037,0.006375789042133686
+Bearing,affected,B,logistic_regression,temp_bearing_degC_median3,0.001356244773190703,0.003490776112062228
+Bearing,affected,B,logistic_regression,temp_bearing_degC_median7,0.023485690759096345,0.0014834827171280953
+Bearing,affected,B,logistic_regression,temp_bearing_degC_mad7,-0.00229205985320291,0.0011660203991587566
+Bearing,affected,B,logistic_regression,temp_bearing_degC_slope7,0.0019808853617119073,0.0027379097128480087
+Bearing,affected,B,logistic_regression,temp_motor_degC_lag1,0.03399725194749722,0.006811185610378572
+Bearing,affected,B,logistic_regression,temp_motor_degC_lag3,0.017920130255461648,0.0029925060262143153
+Bearing,affected,B,logistic_regression,temp_motor_degC_lag7,0.017728903759537246,0.005208320072799224
+Bearing,affected,B,logistic_regression,temp_motor_degC_diff1,0.02828154009631484,0.00483647986023686
+Bearing,affected,B,logistic_regression,temp_motor_degC_diff7,-0.0002148293415282776,0.007801926218743049
+Bearing,affected,B,logistic_regression,temp_motor_degC_median3,0.005944583084705228,0.00297176209777644
+Bearing,affected,B,logistic_regression,temp_motor_degC_median7,0.012183063966760147,0.0051827716764189635
+Bearing,affected,B,logistic_regression,temp_motor_degC_mad7,0.0012456064910050246,0.0004974065452115186
+Bearing,affected,B,logistic_regression,temp_motor_degC_slope7,-0.0001013744323904812,0.00022255950241208114
+Bearing,affected,B,logistic_regression,vibration_h_mms_lag1,0.0008288503467073586,0.001410278973629871
+Bearing,affected,B,logistic_regression,vibration_h_mms_lag3,0.00019568863781949108,0.00010921617551366718
+Bearing,affected,B,logistic_regression,vibration_h_mms_lag7,-0.006082723129475609,0.014813149452290227
+Bearing,affected,B,logistic_regression,vibration_h_mms_diff1,0.003379223716621175,0.0017903136146243757
+Bearing,affected,B,logistic_regression,vibration_h_mms_diff7,0.03605854775172881,0.002076101042982126
+Bearing,affected,B,logistic_regression,vibration_h_mms_median3,0.004077002536738965,0.006686322589294501
+Bearing,affected,B,logistic_regression,vibration_h_mms_median7,0.005106516005421428,0.002689995102203135
+Bearing,affected,B,logistic_regression,vibration_h_mms_mad7,-0.00032712724531499166,0.00022990521966391342
+Bearing,affected,B,logistic_regression,vibration_h_mms_slope7,0.015227558146931367,0.0023653946578313483
+Bearing,affected,B,logistic_regression,vibration_v_mms_lag1,1.2095228397290825e-05,0.0031675358571202922
+Bearing,affected,B,logistic_regression,vibration_v_mms_lag3,0.0012859673921284769,0.000385443085782323
+Bearing,affected,B,logistic_regression,vibration_v_mms_lag7,0.014945585553662155,0.004266619041867102
+Bearing,affected,B,logistic_regression,vibration_v_mms_diff1,0.0023919344436747294,0.0009108205327435912
+Bearing,affected,B,logistic_regression,vibration_v_mms_diff7,-0.0060705253407312325,0.002304462158287694
+Bearing,affected,B,logistic_regression,vibration_v_mms_median3,0.004333715570856452,0.006063590145968865
+Bearing,affected,B,logistic_regression,vibration_v_mms_median7,0.012183166247117405,0.005671925145245865
+Bearing,affected,B,logistic_regression,vibration_v_mms_mad7,0.00412182118775456,0.0002271529167147492
+Bearing,affected,B,logistic_regression,vibration_v_mms_slope7,-0.008218484370738096,0.006808841953867332
+Bearing,affected,B,logistic_regression,oil_pressure_bar_lag1,0.04647373003082763,0.006202751164719008
+Bearing,affected,B,logistic_regression,oil_pressure_bar_lag3,-0.0011164265157617888,0.0018291742587806736
+Bearing,affected,B,logistic_regression,oil_pressure_bar_lag7,-0.0014425813144090527,0.008024986045906901
+Bearing,affected,B,logistic_regression,oil_pressure_bar_diff1,0.00028331281861541474,0.0027818401170723174
+Bearing,affected,B,logistic_regression,oil_pressure_bar_diff7,0.002707304835786073,0.0005053413249108591
+Bearing,affected,B,logistic_regression,oil_pressure_bar_median3,-0.003052188550740409,0.004914051415964222
+Bearing,affected,B,logistic_regression,oil_pressure_bar_median7,0.006064266178776108,0.0032518766068793696
+Bearing,affected,B,logistic_regression,oil_pressure_bar_mad7,0.000367067292983414,0.0003509091567134049
+Bearing,affected,B,logistic_regression,oil_pressure_bar_slope7,0.0007329507303932004,0.0009210390140051448
+Bearing,affected,B,logistic_regression,load_pct_lag1,0.040049941123026365,0.0077596852759225
+Bearing,affected,B,logistic_regression,load_pct_lag3,0.006103179441680151,0.0006921773123730696
+Bearing,affected,B,logistic_regression,load_pct_lag7,0.05439582000785916,0.004698272562645718
+Bearing,affected,B,logistic_regression,load_pct_diff1,-0.0017659049160337152,0.004203935294256421
+Bearing,affected,B,logistic_regression,load_pct_diff7,0.002563517492206254,0.0017953591299022182
+Bearing,affected,B,logistic_regression,load_pct_median3,-0.0020268283900569304,0.00118924271832349
+Bearing,affected,B,logistic_regression,load_pct_median7,0.01911424977141224,0.007074272694613728
+Bearing,affected,B,logistic_regression,load_pct_mad7,-0.0010420599628017297,0.0019116582951265568
+Bearing,affected,B,logistic_regression,load_pct_slope7,0.02758617556447594,0.0035333499876887844
+Bearing,affected,B,logistic_regression,shaft_rpm_lag1,0.07682890689868825,0.010646155156452283
+Bearing,affected,B,logistic_regression,shaft_rpm_lag3,0.04803685265623647,0.0040618857108843335
+Bearing,affected,B,logistic_regression,shaft_rpm_lag7,0.016624721476399835,0.008030000020610321
+Bearing,affected,B,logistic_regression,shaft_rpm_diff1,-0.0018488697126313365,0.012120902309422622
+Bearing,affected,B,logistic_regression,shaft_rpm_diff7,0.013349706152525545,0.005071010607363845
+Bearing,affected,B,logistic_regression,shaft_rpm_median3,0.05009071353061804,0.0035211795873506787
+Bearing,affected,B,logistic_regression,shaft_rpm_median7,0.0005057597675450961,0.002030907742529562
+Bearing,affected,B,logistic_regression,shaft_rpm_mad7,0.0016689792357189963,0.0010980020664617493
+Bearing,affected,B,logistic_regression,shaft_rpm_slope7,0.02991449180856272,0.0035565966369204226
+Bearing,affected,B,logistic_regression,power_consumption_kw_lag1,0.03488293235622362,0.009503849117699841
+Bearing,affected,B,logistic_regression,power_consumption_kw_lag3,0.016391455877380706,0.007981227388540341
+Bearing,affected,B,logistic_regression,power_consumption_kw_lag7,0.0004680163849621888,0.003021647877790642
+Bearing,affected,B,logistic_regression,power_consumption_kw_diff1,0.0011233718296993673,0.0039884840021054265
+Bearing,affected,B,logistic_regression,power_consumption_kw_diff7,0.0007643026696977362,0.0020127757653712057
+Bearing,affected,B,logistic_regression,power_consumption_kw_median3,0.04830726119475479,0.011716339065236486
+Bearing,affected,B,logistic_regression,power_consumption_kw_median7,0.012882641565709433,0.007557197205523013
+Bearing,affected,B,logistic_regression,power_consumption_kw_mad7,0.000631441648690371,0.0002528712624770305
+Bearing,affected,B,logistic_regression,power_consumption_kw_slope7,0.0005011269800813123,0.0001162180968984897
+Bearing,affected,B,logistic_regression,affected_lag1,0.0008704937128040102,0.0004283866554979762
+Bearing,affected,B,logistic_regression,affected_count_7d,0.000324440296798012,0.0004901617808113348
+Bearing,affected,B,logistic_regression,affected_count_30d,-0.0002871915099150746,0.0006200282008284128
+Bearing,affected,B,logistic_regression,days_since_last_affected,0.0028933209552279107,0.0007183209893020228
+Bearing,affected,B,logistic_regression,severe_lag1,0.0008704937128040102,0.0004283866554979762
+Bearing,affected,B,logistic_regression,severe_count_30d,-0.0002871915099150746,0.0006200282008284128
+Bearing,severe,B,logistic_regression,machine_type,0.024333204967829664,0.0046772048562579915
+Bearing,severe,B,logistic_regression,asset_tag,0.009252056942220921,0.01076974485042696
+Bearing,severe,B,logistic_regression,temp_bearing_degC,0.0166933142799562,0.003268815506586053
+Bearing,severe,B,logistic_regression,temp_motor_degC,0.010403864132019288,0.0044250638147018
+Bearing,severe,B,logistic_regression,vibration_h_mms,-0.0003146472461509342,0.002670670892827891
+Bearing,severe,B,logistic_regression,vibration_v_mms,-0.0005081359094111967,0.0012639273942849718
+Bearing,severe,B,logistic_regression,oil_pressure_bar,-0.0013325673312406527,0.0020491834053885777
+Bearing,severe,B,logistic_regression,load_pct,0.016484577892998304,0.0033419082166084744
+Bearing,severe,B,logistic_regression,shaft_rpm,0.07713188226852118,0.010633554850111124
+Bearing,severe,B,logistic_regression,power_consumption_kw,4.2219660911594716e-05,0.0017655336365729776
+Bearing,severe,B,logistic_regression,day_of_week,0.03672551320447256,0.008022178945700231
+Bearing,severe,B,logistic_regression,month_sin,-0.00019478586323255312,0.00022480342507106044
+Bearing,severe,B,logistic_regression,month_cos,0.002888971934907484,0.002040343710006888
+Bearing,severe,B,logistic_regression,temp_bearing_degC_lag1,0.023077742482216484,0.004498526007432832
+Bearing,severe,B,logistic_regression,temp_bearing_degC_lag3,0.014399821330132678,0.0026587887175181053
+Bearing,severe,B,logistic_regression,temp_bearing_degC_lag7,0.03055270166601498,0.001913715437282144
+Bearing,severe,B,logistic_regression,temp_bearing_degC_diff1,-0.006620359296503102,0.006629679850375032
+Bearing,severe,B,logistic_regression,temp_bearing_degC_diff7,-0.002689048509346037,0.006375789042133686
+Bearing,severe,B,logistic_regression,temp_bearing_degC_median3,0.001356244773190703,0.003490776112062228
+Bearing,severe,B,logistic_regression,temp_bearing_degC_median7,0.023485690759096345,0.0014834827171280953
+Bearing,severe,B,logistic_regression,temp_bearing_degC_mad7,-0.00229205985320291,0.0011660203991587566
+Bearing,severe,B,logistic_regression,temp_bearing_degC_slope7,0.0019808853617119073,0.0027379097128480087
+Bearing,severe,B,logistic_regression,temp_motor_degC_lag1,0.03399725194749722,0.006811185610378572
+Bearing,severe,B,logistic_regression,temp_motor_degC_lag3,0.017920130255461648,0.0029925060262143153
+Bearing,severe,B,logistic_regression,temp_motor_degC_lag7,0.017728903759537246,0.005208320072799224
+Bearing,severe,B,logistic_regression,temp_motor_degC_diff1,0.02828154009631484,0.00483647986023686
+Bearing,severe,B,logistic_regression,temp_motor_degC_diff7,-0.0002148293415282776,0.007801926218743049
+Bearing,severe,B,logistic_regression,temp_motor_degC_median3,0.005944583084705228,0.00297176209777644
+Bearing,severe,B,logistic_regression,temp_motor_degC_median7,0.012183063966760147,0.0051827716764189635
+Bearing,severe,B,logistic_regression,temp_motor_degC_mad7,0.0012456064910050246,0.0004974065452115186
+Bearing,severe,B,logistic_regression,temp_motor_degC_slope7,-0.0001013744323904812,0.00022255950241208114
+Bearing,severe,B,logistic_regression,vibration_h_mms_lag1,0.0008288503467073586,0.001410278973629871
+Bearing,severe,B,logistic_regression,vibration_h_mms_lag3,0.00019568863781949108,0.00010921617551366718
+Bearing,severe,B,logistic_regression,vibration_h_mms_lag7,-0.006082723129475609,0.014813149452290227
+Bearing,severe,B,logistic_regression,vibration_h_mms_diff1,0.003379223716621175,0.0017903136146243757
+Bearing,severe,B,logistic_regression,vibration_h_mms_diff7,0.03605854775172881,0.002076101042982126
+Bearing,severe,B,logistic_regression,vibration_h_mms_median3,0.004077002536738965,0.006686322589294501
+Bearing,severe,B,logistic_regression,vibration_h_mms_median7,0.005106516005421428,0.002689995102203135
+Bearing,severe,B,logistic_regression,vibration_h_mms_mad7,-0.00032712724531499166,0.00022990521966391342
+Bearing,severe,B,logistic_regression,vibration_h_mms_slope7,0.015227558146931367,0.0023653946578313483
+Bearing,severe,B,logistic_regression,vibration_v_mms_lag1,1.2095228397290825e-05,0.0031675358571202922
+Bearing,severe,B,logistic_regression,vibration_v_mms_lag3,0.0012859673921284769,0.000385443085782323
+Bearing,severe,B,logistic_regression,vibration_v_mms_lag7,0.014945585553662155,0.004266619041867102
+Bearing,severe,B,logistic_regression,vibration_v_mms_diff1,0.0023919344436747294,0.0009108205327435912
+Bearing,severe,B,logistic_regression,vibration_v_mms_diff7,-0.0060705253407312325,0.002304462158287694
+Bearing,severe,B,logistic_regression,vibration_v_mms_median3,0.004333715570856452,0.006063590145968865
+Bearing,severe,B,logistic_regression,vibration_v_mms_median7,0.012183166247117405,0.005671925145245865
+Bearing,severe,B,logistic_regression,vibration_v_mms_mad7,0.00412182118775456,0.0002271529167147492
+Bearing,severe,B,logistic_regression,vibration_v_mms_slope7,-0.008218484370738096,0.006808841953867332
+Bearing,severe,B,logistic_regression,oil_pressure_bar_lag1,0.04647373003082763,0.006202751164719008
+Bearing,severe,B,logistic_regression,oil_pressure_bar_lag3,-0.0011164265157617888,0.0018291742587806736
+Bearing,severe,B,logistic_regression,oil_pressure_bar_lag7,-0.0014425813144090527,0.008024986045906901
+Bearing,severe,B,logistic_regression,oil_pressure_bar_diff1,0.00028331281861541474,0.0027818401170723174
+Bearing,severe,B,logistic_regression,oil_pressure_bar_diff7,0.002707304835786073,0.0005053413249108591
+Bearing,severe,B,logistic_regression,oil_pressure_bar_median3,-0.003052188550740409,0.004914051415964222
+Bearing,severe,B,logistic_regression,oil_pressure_bar_median7,0.006064266178776108,0.0032518766068793696
+Bearing,severe,B,logistic_regression,oil_pressure_bar_mad7,0.000367067292983414,0.0003509091567134049
+Bearing,severe,B,logistic_regression,oil_pressure_bar_slope7,0.0007329507303932004,0.0009210390140051448
+Bearing,severe,B,logistic_regression,load_pct_lag1,0.040049941123026365,0.0077596852759225
+Bearing,severe,B,logistic_regression,load_pct_lag3,0.006103179441680151,0.0006921773123730696
+Bearing,severe,B,logistic_regression,load_pct_lag7,0.05439582000785916,0.004698272562645718
+Bearing,severe,B,logistic_regression,load_pct_diff1,-0.0017659049160337152,0.004203935294256421
+Bearing,severe,B,logistic_regression,load_pct_diff7,0.002563517492206254,0.0017953591299022182
+Bearing,severe,B,logistic_regression,load_pct_median3,-0.0020268283900569304,0.00118924271832349
+Bearing,severe,B,logistic_regression,load_pct_median7,0.01911424977141224,0.007074272694613728
+Bearing,severe,B,logistic_regression,load_pct_mad7,-0.0010420599628017297,0.0019116582951265568
+Bearing,severe,B,logistic_regression,load_pct_slope7,0.02758617556447594,0.0035333499876887844
+Bearing,severe,B,logistic_regression,shaft_rpm_lag1,0.07682890689868825,0.010646155156452283
+Bearing,severe,B,logistic_regression,shaft_rpm_lag3,0.04803685265623647,0.0040618857108843335
+Bearing,severe,B,logistic_regression,shaft_rpm_lag7,0.016624721476399835,0.008030000020610321
+Bearing,severe,B,logistic_regression,shaft_rpm_diff1,-0.0018488697126313365,0.012120902309422622
+Bearing,severe,B,logistic_regression,shaft_rpm_diff7,0.013349706152525545,0.005071010607363845
+Bearing,severe,B,logistic_regression,shaft_rpm_median3,0.05009071353061804,0.0035211795873506787
+Bearing,severe,B,logistic_regression,shaft_rpm_median7,0.0005057597675450961,0.002030907742529562
+Bearing,severe,B,logistic_regression,shaft_rpm_mad7,0.0016689792357189963,0.0010980020664617493
+Bearing,severe,B,logistic_regression,shaft_rpm_slope7,0.02991449180856272,0.0035565966369204226
+Bearing,severe,B,logistic_regression,power_consumption_kw_lag1,0.03488293235622362,0.009503849117699841
+Bearing,severe,B,logistic_regression,power_consumption_kw_lag3,0.016391455877380706,0.007981227388540341
+Bearing,severe,B,logistic_regression,power_consumption_kw_lag7,0.0004680163849621888,0.003021647877790642
+Bearing,severe,B,logistic_regression,power_consumption_kw_diff1,0.0011233718296993673,0.0039884840021054265
+Bearing,severe,B,logistic_regression,power_consumption_kw_diff7,0.0007643026696977362,0.0020127757653712057
+Bearing,severe,B,logistic_regression,power_consumption_kw_median3,0.04830726119475479,0.011716339065236486
+Bearing,severe,B,logistic_regression,power_consumption_kw_median7,0.012882641565709433,0.007557197205523013
+Bearing,severe,B,logistic_regression,power_consumption_kw_mad7,0.000631441648690371,0.0002528712624770305
+Bearing,severe,B,logistic_regression,power_consumption_kw_slope7,0.0005011269800813123,0.0001162180968984897
+Bearing,severe,B,logistic_regression,affected_lag1,0.0008704937128040102,0.0004283866554979762
+Bearing,severe,B,logistic_regression,affected_count_7d,0.000324440296798012,0.0004901617808113348
+Bearing,severe,B,logistic_regression,affected_count_30d,-0.0002871915099150746,0.0006200282008284128
+Bearing,severe,B,logistic_regression,days_since_last_affected,0.0028933209552279107,0.0007183209893020228
+Bearing,severe,B,logistic_regression,severe_lag1,0.0008704937128040102,0.0004283866554979762
+Bearing,severe,B,logistic_regression,severe_count_30d,-0.0002871915099150746,0.0006200282008284128
+Seal & Gasket,affected,A,logistic_regression,machine_type,0.06412379841674165,0.00637972083359473
+Seal & Gasket,affected,A,logistic_regression,asset_tag,0.03371697224772596,0.0051462032473397175
+Seal & Gasket,affected,A,logistic_regression,temp_bearing_degC,-0.005768837761484198,0.00476642017298524
+Seal & Gasket,affected,A,logistic_regression,temp_motor_degC,-0.0007825247183451678,9.761793279289749e-05
+Seal & Gasket,affected,A,logistic_regression,vibration_h_mms,-0.0019353792970336163,0.003284032160033539
+Seal & Gasket,affected,A,logistic_regression,vibration_v_mms,0.0055375478652586185,0.006645669269830356
+Seal & Gasket,affected,A,logistic_regression,oil_pressure_bar,0.013167747523966674,0.001977292141483991
+Seal & Gasket,affected,A,logistic_regression,load_pct,0.09216414610036654,0.0028296023733064704
+Seal & Gasket,affected,A,logistic_regression,shaft_rpm,0.09279972405285446,0.004233414906528146
+Seal & Gasket,affected,A,logistic_regression,power_consumption_kw,-0.0030045194250440943,0.001158856525170036
+Seal & Gasket,affected,A,logistic_regression,day_of_week,-0.0016422058899171106,0.0030875697508934946
+Seal & Gasket,affected,A,logistic_regression,month_sin,-1.558261394165224e-05,0.0011191554021639642
+Seal & Gasket,affected,A,logistic_regression,month_cos,-0.002973702988933772,0.0016289890057553194
+Seal & Gasket,severe,B,hist_gradient_boosting,machine_type,0.0,0.0
+Seal & Gasket,severe,B,hist_gradient_boosting,asset_tag,-0.00010093079522952945,0.0002845298513527683
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_bearing_degC,-0.004690482353770638,0.0023689581654790424
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_motor_degC,-0.003493389343916677,0.001603420981489164
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_h_mms,-4.934019122958729e-05,0.0002587798689181094
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_v_mms,0.004376547403271591,0.0009594841616985189
+Seal & Gasket,severe,B,hist_gradient_boosting,oil_pressure_bar,0.001370077435769575,0.0010882623597101963
+Seal & Gasket,severe,B,hist_gradient_boosting,load_pct,-0.004932083009648387,0.0025546297320292893
+Seal & Gasket,severe,B,hist_gradient_boosting,shaft_rpm,0.0017877443233869454,0.0014038753675271755
+Seal & Gasket,severe,B,hist_gradient_boosting,power_consumption_kw,-0.0005875553402017453,0.0006870171429348529
+Seal & Gasket,severe,B,hist_gradient_boosting,day_of_week,0.0484951423483338,0.00537824610757776
+Seal & Gasket,severe,B,hist_gradient_boosting,month_sin,-0.008386614054152955,0.0025630042571849615
+Seal & Gasket,severe,B,hist_gradient_boosting,month_cos,-0.0006296097859666838,0.0007286460058578561
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_bearing_degC_lag1,0.0009533358436927819,0.0025232438380268104
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_bearing_degC_lag3,0.0003575776802093496,0.0022946700103238997
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_bearing_degC_lag7,-0.011692529670956889,0.0024914353023310727
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_bearing_degC_diff1,-0.003226243554759173,0.002872089862207757
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_bearing_degC_diff7,-0.0009472231433827194,0.0009717692244306338
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_bearing_degC_median3,0.00028858430161814624,0.0010446683014086345
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_bearing_degC_median7,-0.001585884770063134,0.001850121784449937
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_bearing_degC_mad7,0.0034029050611734855,0.001231995535222679
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_bearing_degC_slope7,0.0014264720613713089,0.00265608149750413
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_motor_degC_lag1,0.0011098635017529983,0.0008400539849270782
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_motor_degC_lag3,-0.0004761260605848361,0.0009691357879598443
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_motor_degC_lag7,-0.0003719592781777729,0.00030624267734288233
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_motor_degC_diff1,-0.0010035090762101906,0.0020272734961484067
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_motor_degC_diff7,0.0016924028370856419,0.003638277573456629
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_motor_degC_median3,0.00048105360579139833,0.0003470199766046146
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_motor_degC_median7,0.0016691057515711611,0.001337006211208463
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_motor_degC_mad7,-0.003114702420311727,0.0009766849453027692
+Seal & Gasket,severe,B,hist_gradient_boosting,temp_motor_degC_slope7,-0.0022310312266064503,0.0036819023846302265
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_h_mms_lag1,-0.0005567062942363291,0.0003667556586810851
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_h_mms_lag3,-0.0026005057062282178,0.00048559756599155597
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_h_mms_lag7,-0.0006598381835412245,0.0011081165661299506
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_h_mms_diff1,0.00039198794425299166,0.0005131638471926336
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_h_mms_diff7,0.000546076536244916,0.0012938450183760768
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_h_mms_median3,0.0030412186197530944,0.0023660440847969406
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_h_mms_median7,0.0010553652333374168,0.00048590287053621784
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_h_mms_mad7,-0.003750119964785951,0.0019600095252233257
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_h_mms_slope7,0.0008810715825384452,0.000796753234375733
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_v_mms_lag1,0.0007667634432403555,0.002017754202032057
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_v_mms_lag3,0.0003907344307643353,0.0006145771333798798
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_v_mms_lag7,-0.001725207937440761,0.002540384092774527
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_v_mms_diff1,-0.0009956989227933588,0.0014152409203918711
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_v_mms_diff7,0.0030451584653857964,0.0008793391265822285
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_v_mms_median3,0.0009078813409629608,0.0007725710507113239
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_v_mms_median7,0.001894733533845644,0.0001636714193138567
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_v_mms_mad7,0.0005739661076250661,2.7952411978019793e-05
+Seal & Gasket,severe,B,hist_gradient_boosting,vibration_v_mms_slope7,-0.002926570108999086,0.0015244383928686336
+Seal & Gasket,severe,B,hist_gradient_boosting,oil_pressure_bar_lag1,-0.0011546410348412435,0.0011335667536836683
+Seal & Gasket,severe,B,hist_gradient_boosting,oil_pressure_bar_lag3,0.002842831355693668,0.0017291354986256917
+Seal & Gasket,severe,B,hist_gradient_boosting,oil_pressure_bar_lag7,0.00014319071123891636,0.0009212962064787195
+Seal & Gasket,severe,B,hist_gradient_boosting,oil_pressure_bar_diff1,-0.001222067766567932,0.0010202789949334753
+Seal & Gasket,severe,B,hist_gradient_boosting,oil_pressure_bar_diff7,-0.003119005829175144,0.003158792223071392
+Seal & Gasket,severe,B,hist_gradient_boosting,oil_pressure_bar_median3,-0.00030060974733076934,0.0013193013578043267
+Seal & Gasket,severe,B,hist_gradient_boosting,oil_pressure_bar_median7,-0.0009743263542992727,0.0008579229096456647
+Seal & Gasket,severe,B,hist_gradient_boosting,oil_pressure_bar_mad7,0.0003730696115871642,0.0010373209160711469
+Seal & Gasket,severe,B,hist_gradient_boosting,oil_pressure_bar_slope7,-0.000542718122477461,0.0017114353231957565
+Seal & Gasket,severe,B,hist_gradient_boosting,load_pct_lag1,0.002139493325167265,0.001362941033906626
+Seal & Gasket,severe,B,hist_gradient_boosting,load_pct_lag3,-0.00016379591346014447,0.003492053139108607
+Seal & Gasket,severe,B,hist_gradient_boosting,load_pct_lag7,0.0005276059716329365,0.0017896436604425588
+Seal & Gasket,severe,B,hist_gradient_boosting,load_pct_diff1,-0.0031945633199194448,0.0005240054165457664
+Seal & Gasket,severe,B,hist_gradient_boosting,load_pct_diff7,0.0037793202860294064,0.0008986082953843234
+Seal & Gasket,severe,B,hist_gradient_boosting,load_pct_median3,-0.0010382205103496949,0.0015204340931510576
+Seal & Gasket,severe,B,hist_gradient_boosting,load_pct_median7,-0.0028765498463464434,0.0002777817267707632
+Seal & Gasket,severe,B,hist_gradient_boosting,load_pct_mad7,0.0015127088486589408,0.0009729574721613264
+Seal & Gasket,severe,B,hist_gradient_boosting,load_pct_slope7,-0.005971280062174872,0.0036475681561352617
+Seal & Gasket,severe,B,hist_gradient_boosting,shaft_rpm_lag1,-0.00033505146096377003,0.0010388429342282866
+Seal & Gasket,severe,B,hist_gradient_boosting,shaft_rpm_lag3,-0.0006590484994629294,0.0019860676021168796
+Seal & Gasket,severe,B,hist_gradient_boosting,shaft_rpm_lag7,-0.00015139173380892176,0.0008199536005741309
+Seal & Gasket,severe,B,hist_gradient_boosting,shaft_rpm_diff1,-0.001783419199523184,0.0011482323733222996
+Seal & Gasket,severe,B,hist_gradient_boosting,shaft_rpm_diff7,-0.002243809089453338,0.0014604118170683917
+Seal & Gasket,severe,B,hist_gradient_boosting,shaft_rpm_median3,9.660147638962391e-05,0.00027944088072605344
+Seal & Gasket,severe,B,hist_gradient_boosting,shaft_rpm_median7,-0.0014314626846170704,0.0007604355176509326
+Seal & Gasket,severe,B,hist_gradient_boosting,shaft_rpm_mad7,-0.0011852877987523307,0.000665779594706012
+Seal & Gasket,severe,B,hist_gradient_boosting,shaft_rpm_slope7,-0.0013261537750824393,0.000880806049723611
+Seal & Gasket,severe,B,hist_gradient_boosting,power_consumption_kw_lag1,-0.006113421624845229,0.00030312298063418276
+Seal & Gasket,severe,B,hist_gradient_boosting,power_consumption_kw_lag3,-0.002524751474478115,0.0005230402781605678
+Seal & Gasket,severe,B,hist_gradient_boosting,power_consumption_kw_lag7,0.00030696014443981623,0.001620658858302089
+Seal & Gasket,severe,B,hist_gradient_boosting,power_consumption_kw_diff1,-0.0014834200029342122,0.0013230305537059541
+Seal & Gasket,severe,B,hist_gradient_boosting,power_consumption_kw_diff7,0.0005810845179220295,0.0021957528766995004
+Seal & Gasket,severe,B,hist_gradient_boosting,power_consumption_kw_median3,0.0011429747107094084,0.0015238343695471981
+Seal & Gasket,severe,B,hist_gradient_boosting,power_consumption_kw_median7,-0.00022492166409904257,0.0027497235901299166
+Seal & Gasket,severe,B,hist_gradient_boosting,power_consumption_kw_mad7,0.0014870720604768701,0.0005712965581690996
+Seal & Gasket,severe,B,hist_gradient_boosting,power_consumption_kw_slope7,-0.0001905042366507718,0.0011694591934144254
+Seal & Gasket,severe,B,hist_gradient_boosting,affected_lag1,0.00017733290837188923,7.015507679038839e-05
+Seal & Gasket,severe,B,hist_gradient_boosting,affected_count_7d,-0.0004226397995833279,0.0005544856354381256
+Seal & Gasket,severe,B,hist_gradient_boosting,affected_count_30d,-0.000496971395941718,0.0023742977931816667
+Seal & Gasket,severe,B,hist_gradient_boosting,days_since_last_affected,0.0013464504148196037,0.0011177960488842485
+Seal & Gasket,severe,B,hist_gradient_boosting,severe_lag1,0.0005259938358429805,0.00013956652577704553
+Seal & Gasket,severe,B,hist_gradient_boosting,severe_count_30d,0.0017483569224279645,0.0004776897442517815
+Drive Belt,affected,A,logistic_regression,machine_type,0.02431403184429461,0.008372321412001981
+Drive Belt,affected,A,logistic_regression,asset_tag,0.02030052541988118,0.007243706336385151
+Drive Belt,affected,A,logistic_regression,temp_bearing_degC,-0.02094303880101071,0.0016717778206669063
+Drive Belt,affected,A,logistic_regression,temp_motor_degC,0.0027533208075895543,0.0020748880552941755
+Drive Belt,affected,A,logistic_regression,vibration_h_mms,-0.000762069789590647,0.00035330507713092317
+Drive Belt,affected,A,logistic_regression,vibration_v_mms,0.00381759322016223,0.000400859190526699
+Drive Belt,affected,A,logistic_regression,oil_pressure_bar,-0.0014676462294166415,0.0015791631456901385
+Drive Belt,affected,A,logistic_regression,load_pct,0.061778415236010804,0.016208532970786498
+Drive Belt,affected,A,logistic_regression,shaft_rpm,0.08326126660799317,0.005465207586521782
+Drive Belt,affected,A,logistic_regression,power_consumption_kw,0.01220833489493132,0.008711939851383868
+Drive Belt,affected,A,logistic_regression,day_of_week,0.00929242804688877,0.006769221359715336
+Drive Belt,affected,A,logistic_regression,month_sin,0.0004356416264130562,0.0006584390574946191
+Drive Belt,affected,A,logistic_regression,month_cos,-0.001374181674394274,0.0012198633351290066
+Drive Belt,severe,B,logistic_regression,machine_type,-2.9955653145231676e-05,0.0013262079582217494
+Drive Belt,severe,B,logistic_regression,asset_tag,0.002659857087349745,0.0029427193419717906
+Drive Belt,severe,B,logistic_regression,temp_bearing_degC,-0.017168142273427296,0.014328024336212195
+Drive Belt,severe,B,logistic_regression,temp_motor_degC,-0.0026357036713824957,0.0017992081187868242
+Drive Belt,severe,B,logistic_regression,vibration_h_mms,-0.0001666281226886899,0.001076572044163443
+Drive Belt,severe,B,logistic_regression,vibration_v_mms,-1.3689380911179513e-05,0.0007887798406123257
+Drive Belt,severe,B,logistic_regression,oil_pressure_bar,0.0011877008417550093,0.0023685738033251045
+Drive Belt,severe,B,logistic_regression,load_pct,0.0015798208244886397,0.0008080376801216936
+Drive Belt,severe,B,logistic_regression,shaft_rpm,-0.006095796072106221,0.004382544264105162
+Drive Belt,severe,B,logistic_regression,power_consumption_kw,-0.0017069302373518176,0.0015112351725969347
+Drive Belt,severe,B,logistic_regression,day_of_week,0.0004041781068496152,0.000450709740616075
+Drive Belt,severe,B,logistic_regression,month_sin,-0.00019265998929611275,0.00036210785765508255
+Drive Belt,severe,B,logistic_regression,month_cos,-0.00016624419520881728,0.0002195410350083184
+Drive Belt,severe,B,logistic_regression,temp_bearing_degC_lag1,-0.00501878209638239,0.001069171272348981
+Drive Belt,severe,B,logistic_regression,temp_bearing_degC_lag3,3.826414478550038e-05,0.00016744810178209
+Drive Belt,severe,B,logistic_regression,temp_bearing_degC_lag7,1.3791915276742395e-05,0.00295287906501457
+Drive Belt,severe,B,logistic_regression,temp_bearing_degC_diff1,3.184473319262545e-05,0.0002478418153451217
+Drive Belt,severe,B,logistic_regression,temp_bearing_degC_diff7,-0.0029822817525578457,0.004102762041729459
+Drive Belt,severe,B,logistic_regression,temp_bearing_degC_median3,-0.000585097669066257,0.0005239273695699986
+Drive Belt,severe,B,logistic_regression,temp_bearing_degC_median7,0.00020000247713763153,0.0022612194096576785
+Drive Belt,severe,B,logistic_regression,temp_bearing_degC_mad7,-0.0004545282853453414,0.00019778244128640352
+Drive Belt,severe,B,logistic_regression,temp_bearing_degC_slope7,-3.529779376379785e-05,0.00011662760339857542
+Drive Belt,severe,B,logistic_regression,temp_motor_degC_lag1,0.0028075044514365836,0.000574797314975295
+Drive Belt,severe,B,logistic_regression,temp_motor_degC_lag3,0.0016920759556625943,0.00042561002508402274
+Drive Belt,severe,B,logistic_regression,temp_motor_degC_lag7,0.004075848188717811,0.0008792588453960577
+Drive Belt,severe,B,logistic_regression,temp_motor_degC_diff1,0.0012803689830915264,0.00023512224467993006
+Drive Belt,severe,B,logistic_regression,temp_motor_degC_diff7,-0.0040602663483437496,0.0007996718274343331
+Drive Belt,severe,B,logistic_regression,temp_motor_degC_median3,-0.003421501631349693,0.0016542149133307682
+Drive Belt,severe,B,logistic_regression,temp_motor_degC_median7,-0.006769595276420235,0.003655629536781188
+Drive Belt,severe,B,logistic_regression,temp_motor_degC_mad7,0.00014144793907905234,4.396948462749594e-05
+Drive Belt,severe,B,logistic_regression,temp_motor_degC_slope7,0.0008387122664958146,0.0007298441056257056
+Drive Belt,severe,B,logistic_regression,vibration_h_mms_lag1,4.3157347418447865e-05,0.00029995235027304644
+Drive Belt,severe,B,logistic_regression,vibration_h_mms_lag3,0.0017550007484988725,0.0020380360230478757
+Drive Belt,severe,B,logistic_regression,vibration_h_mms_lag7,-0.009388191389313344,0.000992642788004571
+Drive Belt,severe,B,logistic_regression,vibration_h_mms_diff1,0.0002992965397383626,0.0010560445720343473
+Drive Belt,severe,B,logistic_regression,vibration_h_mms_diff7,-0.0021216712149994994,0.00038656407499859945
+Drive Belt,severe,B,logistic_regression,vibration_h_mms_median3,1.8167609524293953e-05,0.0017157738590989676
+Drive Belt,severe,B,logistic_regression,vibration_h_mms_median7,-0.0018568620064545402,0.0027885327644683678
+Drive Belt,severe,B,logistic_regression,vibration_h_mms_mad7,-0.00021692893100904118,0.0009127713685132064
+Drive Belt,severe,B,logistic_regression,vibration_h_mms_slope7,0.0022649018792839024,0.0011010490427036694
+Drive Belt,severe,B,logistic_regression,vibration_v_mms_lag1,-0.0014513349647582534,0.003426996129167286
+Drive Belt,severe,B,logistic_regression,vibration_v_mms_lag3,-0.0002760438232591994,0.003100971381264283
+Drive Belt,severe,B,logistic_regression,vibration_v_mms_lag7,0.0027105370611069817,0.0012836695446066624
+Drive Belt,severe,B,logistic_regression,vibration_v_mms_diff1,-7.834609664730703e-05,0.0009503366174031351
+Drive Belt,severe,B,logistic_regression,vibration_v_mms_diff7,0.0025436382616850378,0.0012260593490443822
+Drive Belt,severe,B,logistic_regression,vibration_v_mms_median3,-0.002202987181841211,0.006371890186555924
+Drive Belt,severe,B,logistic_regression,vibration_v_mms_median7,-0.006306841226316642,0.011337918831500286
+Drive Belt,severe,B,logistic_regression,vibration_v_mms_mad7,0.0008672335186783118,7.642711630300169e-05
+Drive Belt,severe,B,logistic_regression,vibration_v_mms_slope7,0.0017608049290769878,0.0025870600007338123
+Drive Belt,severe,B,logistic_regression,oil_pressure_bar_lag1,0.0005516770973542558,0.002404132895689266
+Drive Belt,severe,B,logistic_regression,oil_pressure_bar_lag3,-3.9711702746996154e-05,0.0024762896319660654
+Drive Belt,severe,B,logistic_regression,oil_pressure_bar_lag7,4.5867114121962245e-06,0.00250652133642195
+Drive Belt,severe,B,logistic_regression,oil_pressure_bar_diff1,3.343274430922874e-05,0.0004891612526368356
+Drive Belt,severe,B,logistic_regression,oil_pressure_bar_diff7,6.702980356208463e-05,0.00023355600497056465
+Drive Belt,severe,B,logistic_regression,oil_pressure_bar_median3,-0.0018072477549400505,0.0013410234715091362
+Drive Belt,severe,B,logistic_regression,oil_pressure_bar_median7,0.0008342826205282617,0.004493441441739149
+Drive Belt,severe,B,logistic_regression,oil_pressure_bar_mad7,-4.076780027173257e-05,0.00012088765489809521
+Drive Belt,severe,B,logistic_regression,oil_pressure_bar_slope7,0.0007540518090952096,0.0008896786669714383
+Drive Belt,severe,B,logistic_regression,load_pct_lag1,-6.024609828959628e-05,0.0004854200249268998
+Drive Belt,severe,B,logistic_regression,load_pct_lag3,-0.0043015419332331495,0.0004255902606465399
+Drive Belt,severe,B,logistic_regression,load_pct_lag7,0.0028168882447128798,0.002518312636320244
+Drive Belt,severe,B,logistic_regression,load_pct_diff1,0.0016545763549099524,0.0007905639744213577
+Drive Belt,severe,B,logistic_regression,load_pct_diff7,0.00035380209383973027,0.00012418471032073355
+Drive Belt,severe,B,logistic_regression,load_pct_median3,0.00027891246206808326,0.0010825965646824702
+Drive Belt,severe,B,logistic_regression,load_pct_median7,-0.005506767603382178,0.0018398338320013215
+Drive Belt,severe,B,logistic_regression,load_pct_mad7,-4.3063022832752484e-05,5.455182276881982e-05
+Drive Belt,severe,B,logistic_regression,load_pct_slope7,-0.0016446719679642345,0.0004801806667072613
+Drive Belt,severe,B,logistic_regression,shaft_rpm_lag1,-0.0065529246613446,0.0042015580392160004
+Drive Belt,severe,B,logistic_regression,shaft_rpm_lag3,-0.0013922737721854053,0.004653112265292029
+Drive Belt,severe,B,logistic_regression,shaft_rpm_lag7,-0.005789159864207826,0.0043015374339861415
+Drive Belt,severe,B,logistic_regression,shaft_rpm_diff1,0.0010123812445405219,0.000918682915889769
+Drive Belt,severe,B,logistic_regression,shaft_rpm_diff7,0.000593614609003436,0.00032661059284997453
+Drive Belt,severe,B,logistic_regression,shaft_rpm_median3,-0.006199404373039788,0.0045036493065952
+Drive Belt,severe,B,logistic_regression,shaft_rpm_median7,-0.0014310072342629207,0.004462395759552295
+Drive Belt,severe,B,logistic_regression,shaft_rpm_mad7,-0.0010219834127849169,0.00046930549998398417
+Drive Belt,severe,B,logistic_regression,shaft_rpm_slope7,-0.0005328553173463134,0.00028698175333791913
+Drive Belt,severe,B,logistic_regression,power_consumption_kw_lag1,-0.0003164955403577689,0.00043311919316418987
+Drive Belt,severe,B,logistic_regression,power_consumption_kw_lag3,0.0006896770729289484,0.002476354905340127
+Drive Belt,severe,B,logistic_regression,power_consumption_kw_lag7,-0.0009158793920046407,0.005480721200571138
+Drive Belt,severe,B,logistic_regression,power_consumption_kw_diff1,-0.0004179114415091001,0.0002585612373609149
+Drive Belt,severe,B,logistic_regression,power_consumption_kw_diff7,-0.000995007604322302,0.0001452984894162291
+Drive Belt,severe,B,logistic_regression,power_consumption_kw_median3,-0.0012227852383169594,0.0018496084631821406
+Drive Belt,severe,B,logistic_regression,power_consumption_kw_median7,-0.002659628468689649,0.0020587267405831116
+Drive Belt,severe,B,logistic_regression,power_consumption_kw_mad7,-0.00022940916011967086,0.0007765356990029811
+Drive Belt,severe,B,logistic_regression,power_consumption_kw_slope7,0.0001922607765247978,5.562912063608062e-05
+Drive Belt,severe,B,logistic_regression,affected_lag1,-5.471749010353688e-05,7.913859617836948e-05
+Drive Belt,severe,B,logistic_regression,affected_count_7d,0.0006830635243927248,0.0003671560749042634
+Drive Belt,severe,B,logistic_regression,affected_count_30d,2.9586687065128597e-05,3.824392145951394e-05
+Drive Belt,severe,B,logistic_regression,days_since_last_affected,0.0002258306267982936,8.92937576635675e-05
+Drive Belt,severe,B,logistic_regression,severe_lag1,0.00031083544744181627,0.0002530926658702795
+Drive Belt,severe,B,logistic_regression,severe_count_30d,-6.253338580558543e-05,0.00040859039772337617
+Filter,affected,A,logistic_regression,machine_type,0.0273323349974062,0.007667611964942497
+Filter,affected,A,logistic_regression,asset_tag,0.01429178968077452,0.004211324214389195
+Filter,affected,A,logistic_regression,temp_bearing_degC,-2.595554477828147e-06,0.0003136834344036849
+Filter,affected,A,logistic_regression,temp_motor_degC,-0.0002671620252206001,0.0006426920787021312
+Filter,affected,A,logistic_regression,vibration_h_mms,0.008633317405818372,0.008486668898854704
+Filter,affected,A,logistic_regression,vibration_v_mms,-0.00907094116145335,0.0033846211807037198
+Filter,affected,A,logistic_regression,oil_pressure_bar,0.010149072718525479,0.005842527839003011
+Filter,affected,A,logistic_regression,load_pct,0.025221226447039863,0.01062822325030454
+Filter,affected,A,logistic_regression,shaft_rpm,0.035067343284300806,0.004561528900589656
+Filter,affected,A,logistic_regression,power_consumption_kw,0.011884634159969229,0.009539459847863802
+Filter,affected,A,logistic_regression,day_of_week,-0.004690881704611692,0.006622860237015104
+Filter,affected,A,logistic_regression,month_sin,-0.00010694257488160404,0.0007516361644612772
+Filter,affected,A,logistic_regression,month_cos,-0.00028780195122480684,0.0012318581995291308
+Filter,severe,A,random_forest,machine_type,-0.0019165102664973344,0.0009876740377275145
+Filter,severe,A,random_forest,asset_tag,0.0020386191796225917,0.0007824619970396072
+Filter,severe,A,random_forest,temp_bearing_degC,-0.000940857181575841,0.002098810752752534
+Filter,severe,A,random_forest,temp_motor_degC,0.0009357124451252821,0.002579630177208006
+Filter,severe,A,random_forest,vibration_h_mms,-0.003082680566502826,0.0036331261583425266
+Filter,severe,A,random_forest,vibration_v_mms,-0.003255790285629561,0.000666809578007208
+Filter,severe,A,random_forest,oil_pressure_bar,0.00026419335403673913,0.0015929739685422743
+Filter,severe,A,random_forest,load_pct,0.0008783760282752608,0.002003603534769976
+Filter,severe,A,random_forest,shaft_rpm,-0.0035951590453745922,0.0010085576751020153
+Filter,severe,A,random_forest,power_consumption_kw,-0.002093269174241061,0.001548330618111453
+Filter,severe,A,random_forest,day_of_week,0.004072280037728211,0.0020530693467472223
+Filter,severe,A,random_forest,month_sin,-0.0020307188580971046,0.0009281185298329727
+Filter,severe,A,random_forest,month_cos,-0.0008322559909226304,0.0021254521654835734
+Electrical,affected,B,logistic_regression,machine_type,0.01957979380604639,0.004099944212228761
+Electrical,affected,B,logistic_regression,asset_tag,0.012056058759921292,0.0013721819653733861
+Electrical,affected,B,logistic_regression,temp_bearing_degC,-0.00014300219377240872,0.002080560751953324
+Electrical,affected,B,logistic_regression,temp_motor_degC,0.0009960588759914308,0.0007686642924865498
+Electrical,affected,B,logistic_regression,vibration_h_mms,-0.0012310618667938367,0.002028789043053043
+Electrical,affected,B,logistic_regression,vibration_v_mms,0.0003195398726180317,0.00021719445215722234
+Electrical,affected,B,logistic_regression,oil_pressure_bar,-0.004760136897477489,0.0021606187776495736
+Electrical,affected,B,logistic_regression,load_pct,0.022855859948112844,0.002936490843320894
+Electrical,affected,B,logistic_regression,shaft_rpm,0.03659036181161226,0.01326060957645096
+Electrical,affected,B,logistic_regression,power_consumption_kw,0.01306130744832675,0.005389890845704787
+Electrical,affected,B,logistic_regression,day_of_week,0.043069567765391704,0.011930401845131503
+Electrical,affected,B,logistic_regression,month_sin,-0.0004724492267755842,0.0006738222276867783
+Electrical,affected,B,logistic_regression,month_cos,0.0021778729385819964,0.0033939495933419084
+Electrical,affected,B,logistic_regression,temp_bearing_degC_lag1,4.139886672094306e-05,0.0014431193763542122
+Electrical,affected,B,logistic_regression,temp_bearing_degC_lag3,0.00048142726433592076,0.004379277214697008
+Electrical,affected,B,logistic_regression,temp_bearing_degC_lag7,0.0017541610644174848,0.0021497843646792214
+Electrical,affected,B,logistic_regression,temp_bearing_degC_diff1,-0.0020171585676627504,0.004943215361399424
+Electrical,affected,B,logistic_regression,temp_bearing_degC_diff7,-0.0015152976329847838,0.006047021200500035
+Electrical,affected,B,logistic_regression,temp_bearing_degC_median3,0.005368997459463991,0.006748785612856232
+Electrical,affected,B,logistic_regression,temp_bearing_degC_median7,0.014342662813841833,0.01514864612673604
+Electrical,affected,B,logistic_regression,temp_bearing_degC_mad7,0.002480213077479032,0.0021691807100235262
+Electrical,affected,B,logistic_regression,temp_bearing_degC_slope7,0.00914942517717269,0.0028274997551620286
+Electrical,affected,B,logistic_regression,temp_motor_degC_lag1,0.001744549916387857,0.00041364799928376826
+Electrical,affected,B,logistic_regression,temp_motor_degC_lag3,-0.0004701406298019961,0.003550038542326127
+Electrical,affected,B,logistic_regression,temp_motor_degC_lag7,0.002839033547060832,0.0009315142208692304
+Electrical,affected,B,logistic_regression,temp_motor_degC_diff1,0.00018914479478295462,0.00020274034477864742
+Electrical,affected,B,logistic_regression,temp_motor_degC_diff7,0.003578914308410471,0.003087968613279168
+Electrical,affected,B,logistic_regression,temp_motor_degC_median3,0.020412831647138585,0.009290491681806144
+Electrical,affected,B,logistic_regression,temp_motor_degC_median7,-0.0008763859904765322,0.00045449533773141284
+Electrical,affected,B,logistic_regression,temp_motor_degC_mad7,8.861766121951812e-06,3.9086623135026216e-05
+Electrical,affected,B,logistic_regression,temp_motor_degC_slope7,0.0008894511429180704,0.002848518610760407
+Electrical,affected,B,logistic_regression,vibration_h_mms_lag1,0.015948690083106436,0.0024310988079183377
+Electrical,affected,B,logistic_regression,vibration_h_mms_lag3,0.00574009068606975,0.002014589618890748
+Electrical,affected,B,logistic_regression,vibration_h_mms_lag7,-0.0008795158622515823,0.0016983402476962808
+Electrical,affected,B,logistic_regression,vibration_h_mms_diff1,-0.00477212540238664,0.004175330855923242
+Electrical,affected,B,logistic_regression,vibration_h_mms_diff7,0.01367305733050117,0.0032511929160243713
+Electrical,affected,B,logistic_regression,vibration_h_mms_median3,-0.0006177035739822015,0.0013293949669812562
+Electrical,affected,B,logistic_regression,vibration_h_mms_median7,0.0010656794559318894,0.0003679982005144136
+Electrical,affected,B,logistic_regression,vibration_h_mms_mad7,0.0018953622220219495,0.0008348357152510445
+Electrical,affected,B,logistic_regression,vibration_h_mms_slope7,0.008900904288299372,0.0034848539066245445
+Electrical,affected,B,logistic_regression,vibration_v_mms_lag1,0.003044575254058398,0.001146842271441344
+Electrical,affected,B,logistic_regression,vibration_v_mms_lag3,-0.002776926844000216,0.00020638652805638597
+Electrical,affected,B,logistic_regression,vibration_v_mms_lag7,0.012456486231461431,0.00570761924648755
+Electrical,affected,B,logistic_regression,vibration_v_mms_diff1,-0.006052163119940483,0.004371959732198226
+Electrical,affected,B,logistic_regression,vibration_v_mms_diff7,0.02211375670514748,0.0036657767312134842
+Electrical,affected,B,logistic_regression,vibration_v_mms_median3,0.0013202661153171036,0.0004571249018227631
+Electrical,affected,B,logistic_regression,vibration_v_mms_median7,0.0008770987051388568,0.0002601159567835353
+Electrical,affected,B,logistic_regression,vibration_v_mms_mad7,0.0013025408528659261,0.0004958221814839025
+Electrical,affected,B,logistic_regression,vibration_v_mms_slope7,-0.0029469652378245246,0.00906596739989807
+Electrical,affected,B,logistic_regression,oil_pressure_bar_lag1,0.022630581861071253,0.005363629695617463
+Electrical,affected,B,logistic_regression,oil_pressure_bar_lag3,-0.004143760920975441,0.0023507213385782736
+Electrical,affected,B,logistic_regression,oil_pressure_bar_lag7,0.015966313123073117,0.005377260751194595
+Electrical,affected,B,logistic_regression,oil_pressure_bar_diff1,0.0010718709539325744,0.00039216372152137136
+Electrical,affected,B,logistic_regression,oil_pressure_bar_diff7,0.0005367856083836978,0.0009530613378313693
+Electrical,affected,B,logistic_regression,oil_pressure_bar_median3,0.010768472049315211,0.0033710536963803377
+Electrical,affected,B,logistic_regression,oil_pressure_bar_median7,-0.006981814641849955,0.0027327332424888044
+Electrical,affected,B,logistic_regression,oil_pressure_bar_mad7,0.002248125695887948,0.0006281251338209592
+Electrical,affected,B,logistic_regression,oil_pressure_bar_slope7,-0.00013283601650515564,0.00014539932315941158
+Electrical,affected,B,logistic_regression,load_pct_lag1,0.02725682924614914,0.0013786292558944607
+Electrical,affected,B,logistic_regression,load_pct_lag3,0.012005078570069513,0.006416655808723447
+Electrical,affected,B,logistic_regression,load_pct_lag7,0.015018523473939857,0.003932310930695148
+Electrical,affected,B,logistic_regression,load_pct_diff1,0.02194497524070686,0.00646897647495762
+Electrical,affected,B,logistic_regression,load_pct_diff7,0.028524851878823754,0.005930190028065598
+Electrical,affected,B,logistic_regression,load_pct_median3,0.003382314692467525,0.002956015947052071
+Electrical,affected,B,logistic_regression,load_pct_median7,0.014562673550146529,0.006718677668383088
+Electrical,affected,B,logistic_regression,load_pct_mad7,0.0014164682326386162,0.0020666501577880185
+Electrical,affected,B,logistic_regression,load_pct_slope7,-0.005771274779603837,0.013695461947248697
+Electrical,affected,B,logistic_regression,shaft_rpm_lag1,0.016883517977107892,0.013973177141617613
+Electrical,affected,B,logistic_regression,shaft_rpm_lag3,0.02630216200914054,0.002954624103760363
+Electrical,affected,B,logistic_regression,shaft_rpm_lag7,0.02197540652539313,0.01441647509028768
+Electrical,affected,B,logistic_regression,shaft_rpm_diff1,0.0040974123318317885,0.009502984605436792
+Electrical,affected,B,logistic_regression,shaft_rpm_diff7,0.007676729857373388,0.0023597264433366594
+Electrical,affected,B,logistic_regression,shaft_rpm_median3,0.020243066769803513,0.002769618517152076
+Electrical,affected,B,logistic_regression,shaft_rpm_median7,0.022373844517943258,0.002816227032422525
+Electrical,affected,B,logistic_regression,shaft_rpm_mad7,-0.0020833003271829944,0.0006246646698104418
+Electrical,affected,B,logistic_regression,shaft_rpm_slope7,0.0019199496080726426,0.005832009508363274
+Electrical,affected,B,logistic_regression,power_consumption_kw_lag1,2.672138425150831e-05,0.004295036665150485
+Electrical,affected,B,logistic_regression,power_consumption_kw_lag3,0.0011845642048259146,0.0038915170405689906
+Electrical,affected,B,logistic_regression,power_consumption_kw_lag7,-0.00287701080145362,0.004243838945632523
+Electrical,affected,B,logistic_regression,power_consumption_kw_diff1,0.002331905903144249,0.002825555367719984
+Electrical,affected,B,logistic_regression,power_consumption_kw_diff7,-0.002720609197544669,0.0022876218167028994
+Electrical,affected,B,logistic_regression,power_consumption_kw_median3,0.027059046628846155,0.006458976069061595
+Electrical,affected,B,logistic_regression,power_consumption_kw_median7,-0.0013110060500387728,0.002231158812593812
+Electrical,affected,B,logistic_regression,power_consumption_kw_mad7,0.0026949140355082926,0.0027070159871438997
+Electrical,affected,B,logistic_regression,power_consumption_kw_slope7,0.004186340323106423,0.0015581965013559183
+Electrical,affected,B,logistic_regression,affected_lag1,0.0005208515290710166,0.00021478872403393078
+Electrical,affected,B,logistic_regression,affected_count_7d,0.0016410099643060505,0.00022748535341676982
+Electrical,affected,B,logistic_regression,affected_count_30d,0.00027711479747494216,0.0001415551372081584
+Electrical,affected,B,logistic_regression,days_since_last_affected,-0.00016654528774412425,0.0010996856238179135
+Electrical,affected,B,logistic_regression,severe_lag1,0.00010589858361984932,0.0001455400376775724
+Electrical,affected,B,logistic_regression,severe_count_30d,-5.007328465724455e-05,0.00021612070898014834
+Electrical,severe,A,logistic_regression,machine_type,0.027844074151034414,0.002574708904505144
+Electrical,severe,A,logistic_regression,asset_tag,0.015511712396165342,0.005250453299833776
+Electrical,severe,A,logistic_regression,temp_bearing_degC,-0.006235330213743599,0.0015935576632207292
+Electrical,severe,A,logistic_regression,temp_motor_degC,-0.001691973524278606,0.0019971546226421138
+Electrical,severe,A,logistic_regression,vibration_h_mms,-0.0007382671347886394,0.0007490680680556729
+Electrical,severe,A,logistic_regression,vibration_v_mms,-0.00021916209736614714,8.737025152120465e-05
+Electrical,severe,A,logistic_regression,oil_pressure_bar,0.021216536872634324,0.004349559503818788
+Electrical,severe,A,logistic_regression,load_pct,0.032194538308449844,0.0036330234834304215
+Electrical,severe,A,logistic_regression,shaft_rpm,0.04446218137485264,0.010040252567749548
+Electrical,severe,A,logistic_regression,power_consumption_kw,-0.003692662933666805,0.0035132568471462674
+Electrical,severe,A,logistic_regression,day_of_week,0.006963427991520573,0.008383288261070406
+Electrical,severe,A,logistic_regression,month_sin,-0.0003710492062469299,0.00020706045740223427
+Electrical,severe,A,logistic_regression,month_cos,0.00017802377113497933,0.0004963712101520591
+Coupling,affected,A,logistic_regression,machine_type,0.05541515163343038,0.010824541612599122
+Coupling,affected,A,logistic_regression,asset_tag,0.034706185054175935,0.007555297367559981
+Coupling,affected,A,logistic_regression,temp_bearing_degC,0.0019792366588250268,0.002756738817920099
+Coupling,affected,A,logistic_regression,temp_motor_degC,0.00474187755818591,0.00034100477162358594
+Coupling,affected,A,logistic_regression,vibration_h_mms,-0.01240834157185794,0.0016435906786728004
+Coupling,affected,A,logistic_regression,vibration_v_mms,0.015277584659312698,0.0007675961926268274
+Coupling,affected,A,logistic_regression,oil_pressure_bar,0.01156628409231226,0.006021251498818038
+Coupling,affected,A,logistic_regression,load_pct,0.04830437937059504,0.008612164616113813
+Coupling,affected,A,logistic_regression,shaft_rpm,0.04556971621641862,0.004714412732226463
+Coupling,affected,A,logistic_regression,power_consumption_kw,-0.006077432405727852,0.002009350927142056
+Coupling,affected,A,logistic_regression,day_of_week,0.004322452697642569,0.0031086165507314078
+Coupling,affected,A,logistic_regression,month_sin,0.00017742619088402986,0.0006285457130331584
+Coupling,affected,A,logistic_regression,month_cos,-0.00017525079398309865,0.0002897530866708935
+Coupling,severe,A,random_forest,machine_type,0.02712984778001813,0.017452583857558535
+Coupling,severe,A,random_forest,asset_tag,0.02923428918743649,0.020145388473560844
+Coupling,severe,A,random_forest,temp_bearing_degC,0.04386815525317556,0.004880963149383576
+Coupling,severe,A,random_forest,temp_motor_degC,0.030315316772387677,0.014269914720964299
+Coupling,severe,A,random_forest,vibration_h_mms,0.04969475035198628,0.0015596176802721393
+Coupling,severe,A,random_forest,vibration_v_mms,0.015949979104652668,0.02294657158975594
+Coupling,severe,A,random_forest,oil_pressure_bar,0.05536414774582569,0.004816196863199594
+Coupling,severe,A,random_forest,load_pct,0.016045834647287593,0.012970175347636108
+Coupling,severe,A,random_forest,shaft_rpm,0.030387993111773075,0.020463794630758408
+Coupling,severe,A,random_forest,power_consumption_kw,0.021881085031053914,0.022841708531701557
+Coupling,severe,A,random_forest,day_of_week,0.05661267878410908,0.0030449762932809607
+Coupling,severe,A,random_forest,month_sin,0.028481096374450645,0.01831400353486829
+Coupling,severe,A,random_forest,month_cos,0.05535605856295691,0.0020864930612972915
+Lubrication,affected,B,random_forest,machine_type,5.053728798363558e-05,0.0003401000426791189
+Lubrication,affected,B,random_forest,asset_tag,-0.00022630608267598662,0.0004618183336207794
+Lubrication,affected,B,random_forest,temp_bearing_degC,-0.0006301144086075331,0.0022470053557684445
+Lubrication,affected,B,random_forest,temp_motor_degC,0.0026005087358990744,0.0021750783699079268
+Lubrication,affected,B,random_forest,vibration_h_mms,0.004855490636314195,0.0010645631940644769
+Lubrication,affected,B,random_forest,vibration_v_mms,0.007076008060302656,0.0016641611243024565
+Lubrication,affected,B,random_forest,oil_pressure_bar,0.002199692615692158,0.0005890779412357095
+Lubrication,affected,B,random_forest,load_pct,-0.0005547805264825753,0.004459468770597849
+Lubrication,affected,B,random_forest,shaft_rpm,0.0006526859258713472,0.003928512257763557
+Lubrication,affected,B,random_forest,power_consumption_kw,0.003018430710485409,0.0007368350152679602
+Lubrication,affected,B,random_forest,day_of_week,0.023844713056396405,0.00941833085240404
+Lubrication,affected,B,random_forest,month_sin,0.00016376501312873049,0.0008862851046306169
+Lubrication,affected,B,random_forest,month_cos,-0.0005007906952715265,0.00045380905816299347
+Lubrication,affected,B,random_forest,temp_bearing_degC_lag1,-0.0005930371780171565,0.0003856289218756373
+Lubrication,affected,B,random_forest,temp_bearing_degC_lag3,0.002041891502360125,0.0005522355684629449
+Lubrication,affected,B,random_forest,temp_bearing_degC_lag7,0.0017082604913823223,0.0006972853479299076
+Lubrication,affected,B,random_forest,temp_bearing_degC_diff1,0.002606943416234566,0.002165293077006878
+Lubrication,affected,B,random_forest,temp_bearing_degC_diff7,0.0023875918874400326,0.0013560536090135122
+Lubrication,affected,B,random_forest,temp_bearing_degC_median3,0.0034517821797254897,0.0005344122898168734
+Lubrication,affected,B,random_forest,temp_bearing_degC_median7,0.001267879719461786,0.0010123926474311187
+Lubrication,affected,B,random_forest,temp_bearing_degC_mad7,-0.00093698007299071,0.0009854614647083957
+Lubrication,affected,B,random_forest,temp_bearing_degC_slope7,0.001676769114994231,0.0008599076513668642
+Lubrication,affected,B,random_forest,temp_motor_degC_lag1,0.002483047162238563,0.0014769409344679181
+Lubrication,affected,B,random_forest,temp_motor_degC_lag3,0.002029091765826644,0.0007747338985454584
+Lubrication,affected,B,random_forest,temp_motor_degC_lag7,-0.001257244653881967,0.00427970357020768
+Lubrication,affected,B,random_forest,temp_motor_degC_diff1,0.001312238837629968,0.001139608415646576
+Lubrication,affected,B,random_forest,temp_motor_degC_diff7,0.0038381975814818503,0.0010201368300160121
+Lubrication,affected,B,random_forest,temp_motor_degC_median3,-0.0009474893952398459,0.0017622337002454083
+Lubrication,affected,B,random_forest,temp_motor_degC_median7,0.0001496703515352915,0.0007299067500119536
+Lubrication,affected,B,random_forest,temp_motor_degC_mad7,-0.003608546087187303,0.0019030951543872355
+Lubrication,affected,B,random_forest,temp_motor_degC_slope7,0.0010130512651162678,0.0016573381754616244
+Lubrication,affected,B,random_forest,vibration_h_mms_lag1,0.0011613555883140576,0.002292558947668883
+Lubrication,affected,B,random_forest,vibration_h_mms_lag3,-0.004182633686797684,0.0013092890276820695
+Lubrication,affected,B,random_forest,vibration_h_mms_lag7,0.000955461530866832,0.0008435142918725827
+Lubrication,affected,B,random_forest,vibration_h_mms_diff1,0.00014989688111706942,0.0018734746678192714
+Lubrication,affected,B,random_forest,vibration_h_mms_diff7,0.000840305427320794,0.001687985152290058
+Lubrication,affected,B,random_forest,vibration_h_mms_median3,0.0018718732305691617,0.002718479480795514
+Lubrication,affected,B,random_forest,vibration_h_mms_median7,0.0035614517676761195,0.0011113548246959328
+Lubrication,affected,B,random_forest,vibration_h_mms_mad7,0.0003787093495028389,0.0009035599729481886
+Lubrication,affected,B,random_forest,vibration_h_mms_slope7,-0.00019808776864879696,0.0011894955128189666
+Lubrication,affected,B,random_forest,vibration_v_mms_lag1,-0.00043375968013807203,0.000982721397228549
+Lubrication,affected,B,random_forest,vibration_v_mms_lag3,-0.004611548042532008,0.0022676881385638816
+Lubrication,affected,B,random_forest,vibration_v_mms_lag7,8.26366710751647e-06,0.0010340907848982903
+Lubrication,affected,B,random_forest,vibration_v_mms_diff1,0.0002471548532836376,0.0008111713674761955
+Lubrication,affected,B,random_forest,vibration_v_mms_diff7,-0.003753637809590297,0.0016779847192036216
+Lubrication,affected,B,random_forest,vibration_v_mms_median3,-0.001528053757677265,0.00044408177596941565
+Lubrication,affected,B,random_forest,vibration_v_mms_median7,0.004496772873913063,0.0010298798106558264
+Lubrication,affected,B,random_forest,vibration_v_mms_mad7,-0.0013040719127700717,0.003010212280179642
+Lubrication,affected,B,random_forest,vibration_v_mms_slope7,-0.002544032396196494,0.0010795297445358796
+Lubrication,affected,B,random_forest,oil_pressure_bar_lag1,-0.0028288433911573727,0.0023016988118943127
+Lubrication,affected,B,random_forest,oil_pressure_bar_lag3,0.0004197976917391562,0.00032656870438504905
+Lubrication,affected,B,random_forest,oil_pressure_bar_lag7,-0.0003577626857034962,0.0003560311559952712
+Lubrication,affected,B,random_forest,oil_pressure_bar_diff1,0.000564274006704446,0.0009646057936502538
+Lubrication,affected,B,random_forest,oil_pressure_bar_diff7,0.0014546269730506174,0.0013433656324561265
+Lubrication,affected,B,random_forest,oil_pressure_bar_median3,-0.002593186369874656,0.0013470948099598113
+Lubrication,affected,B,random_forest,oil_pressure_bar_median7,0.002693028317468695,0.0017413268928190152
+Lubrication,affected,B,random_forest,oil_pressure_bar_mad7,-0.0012483860455498412,0.0005761893571770544
+Lubrication,affected,B,random_forest,oil_pressure_bar_slope7,0.0009038517552572012,0.002437911572957895
+Lubrication,affected,B,random_forest,load_pct_lag1,-0.00033789245967979126,0.001954531245136758
+Lubrication,affected,B,random_forest,load_pct_lag3,-2.4573705598764557e-05,0.002028498265966933
+Lubrication,affected,B,random_forest,load_pct_lag7,-0.0028005343380048584,0.005477031196126583
+Lubrication,affected,B,random_forest,load_pct_diff1,0.0003012330205245846,0.0025900436348540667
+Lubrication,affected,B,random_forest,load_pct_diff7,0.0029797515279392874,0.0012481632609119859
+Lubrication,affected,B,random_forest,load_pct_median3,0.0024653656405391466,0.0005888392850829145
+Lubrication,affected,B,random_forest,load_pct_median7,0.002286380853936426,0.001113892101032608
+Lubrication,affected,B,random_forest,load_pct_mad7,2.812903227837153e-05,0.0015220942699239201
+Lubrication,affected,B,random_forest,load_pct_slope7,0.0010143326459380135,0.0029124299022711846
+Lubrication,affected,B,random_forest,shaft_rpm_lag1,-0.0020588277476984904,0.0016176516412353288
+Lubrication,affected,B,random_forest,shaft_rpm_lag3,-0.0008351157665436315,0.0012128189147583848
+Lubrication,affected,B,random_forest,shaft_rpm_lag7,0.0023512043774644533,0.0046505145824556225
+Lubrication,affected,B,random_forest,shaft_rpm_diff1,0.002588688822550108,0.0006738822566486916
+Lubrication,affected,B,random_forest,shaft_rpm_diff7,-0.00024437891804525896,0.0018633916318963216
+Lubrication,affected,B,random_forest,shaft_rpm_median3,-0.003243782908876882,0.000555234088565007
+Lubrication,affected,B,random_forest,shaft_rpm_median7,-0.0005151613400289542,0.0018927273240583453
+Lubrication,affected,B,random_forest,shaft_rpm_mad7,0.002339418854343911,0.0011733880116774323
+Lubrication,affected,B,random_forest,shaft_rpm_slope7,-0.00040769989182655914,0.0011623919152686912
+Lubrication,affected,B,random_forest,power_consumption_kw_lag1,0.001151914986554629,0.002613263973591825
+Lubrication,affected,B,random_forest,power_consumption_kw_lag3,-0.0019548573050166087,0.0004945242192937412
+Lubrication,affected,B,random_forest,power_consumption_kw_lag7,0.00307030546384765,0.0024607598914552697
+Lubrication,affected,B,random_forest,power_consumption_kw_diff1,0.0019180601780888391,0.0020851783133326238
+Lubrication,affected,B,random_forest,power_consumption_kw_diff7,0.0003431432150682682,0.0014102763117827244
+Lubrication,affected,B,random_forest,power_consumption_kw_median3,-0.001383165747394823,0.0026070573827687306
+Lubrication,affected,B,random_forest,power_consumption_kw_median7,-5.619169791444093e-05,0.0006871564317181765
+Lubrication,affected,B,random_forest,power_consumption_kw_mad7,0.004153071240377115,0.00026678296506616893
+Lubrication,affected,B,random_forest,power_consumption_kw_slope7,-0.0015834985189874622,0.0028118519513998263
+Lubrication,affected,B,random_forest,affected_lag1,9.499798315024122e-05,0.00021722916767073823
+Lubrication,affected,B,random_forest,affected_count_7d,0.0017714137167285278,0.0011591634151933879
+Lubrication,affected,B,random_forest,affected_count_30d,-0.0005608741233958381,0.000762446609599924
+Lubrication,affected,B,random_forest,days_since_last_affected,-0.0026085432127827455,0.0004500760184271427
+Lubrication,affected,B,random_forest,severe_lag1,-0.00015079736655599732,4.0132405407281355e-05
+Lubrication,affected,B,random_forest,severe_count_30d,-0.0008274298434698032,0.0003715199641818964
+Lubrication,severe,C,hist_gradient_boosting,machine_type,0.0,0.0
+Lubrication,severe,C,hist_gradient_boosting,asset_tag,-3.2524805856675005e-06,1.1421043188693673e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC,3.574884464399372e-05,1.4321267252416583e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC,2.9071585721000652e-05,5.147815622472721e-06
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms,0.0001339341184528964,0.00014341445214951127
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms,9.594857576533898e-05,0.00011891928704935852
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar,-8.234867763625905e-06,4.156136551511788e-07
+Lubrication,severe,C,hist_gradient_boosting,load_pct,-0.00011471864132074049,0.0002754336163531962
+Lubrication,severe,C,hist_gradient_boosting,shaft_rpm,6.744228851063034e-05,0.00035296949065479535
+Lubrication,severe,C,hist_gradient_boosting,power_consumption_kw,1.892834248591573e-05,1.4078378367524972e-05
+Lubrication,severe,C,hist_gradient_boosting,day_of_week,0.0012784101314405145,0.0008143419639777825
+Lubrication,severe,C,hist_gradient_boosting,month_sin,-9.105491185087764e-05,6.5243770092868e-05
+Lubrication,severe,C,hist_gradient_boosting,month_cos,-3.940133890577985e-05,4.299223238554928e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_lag1,-0.0001316437175661976,5.9687455295580235e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_lag3,6.0855393170972626e-05,8.785854404301458e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_lag7,-5.2873132735180066e-05,2.7227282107345793e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_diff1,-4.613635923910274e-05,4.547683886392071e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_diff7,3.523760081226354e-05,0.0001407345441885122
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_median3,1.9560521829702776e-05,2.2912501663732985e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_median7,-0.000257273759191235,0.00027055667782820175
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_mad7,0.00010917689050424229,0.00023427886368909573
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_slope7,-0.0003448949780586903,2.2822685804986228e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_lag1,9.329206781444044e-05,2.866962618956113e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_lag3,3.49699492066995e-05,1.0263963028751116e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_lag7,2.9885325035001558e-05,3.1731185035075354e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_diff1,-0.000703794063557937,0.00029705486921891613
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_diff7,-0.00044474190997587326,0.00014988287417129644
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_median3,-5.0497938226674054e-05,3.295092528406457e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_median7,-2.6242586469322573e-06,3.7112621696664665e-06
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_mad7,-3.4476996984584888e-06,7.481475115382561e-06
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_slope7,4.624857411742508e-05,1.3725731663288898e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_lag1,0.0001673230559877077,0.0003112150130470903
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_lag3,-1.6757898598709388e-05,2.1188181185186508e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_lag7,6.380630731770097e-05,1.293824564112319e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_diff1,-7.971857398136045e-05,4.9630722500156204e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_diff7,-0.0004541421606543787,0.00016389419989928898
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_median3,-0.0008369941045769498,0.00028582083269756525
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_median7,-2.7875099810104748e-05,0.0002551136716908344
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_mad7,7.404924658448078e-05,7.971481925954721e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_slope7,-0.00014894621768549802,0.00023084090216180385
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_lag1,3.6055997779220472e-06,3.871833256275379e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_lag3,1.9241673093952385e-05,1.0005977280909179e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_lag7,2.865561454604322e-05,0.0001245656150729744
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_diff1,-0.0002451525331993211,0.00018498280651225687
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_diff7,2.9994888322181352e-05,8.234845598481834e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_median3,0.00020390868966019154,0.0002479507747998512
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_median7,-3.0359740739790742e-05,1.2268752758996218e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_mad7,-0.0008746863618320347,0.0001590764120621606
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_slope7,-0.00014665858580490519,0.0001388219031364225
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_lag1,3.707962133644039e-05,5.070514021548101e-06
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_lag3,2.5810415886929592e-05,4.356263095061955e-06
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_lag7,6.376955619460337e-05,6.048427638597803e-05
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_diff1,0.0002964891182807526,0.0004476812070781842
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_diff7,4.348075745967192e-05,4.348817278812184e-05
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_median3,-6.8738370664588044e-06,9.743522300748665e-05
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_median7,-3.110442944789099e-06,4.782385883680616e-06
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_mad7,-4.401412582321374e-05,2.754837710754181e-05
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_slope7,-3.946058928102342e-05,2.5365883223542617e-05
+Lubrication,severe,C,hist_gradient_boosting,load_pct_lag1,-0.00038717220234477014,0.0006680121667860557
+Lubrication,severe,C,hist_gradient_boosting,load_pct_lag3,3.7640723332255155e-05,1.4445620917785451e-05
+Lubrication,severe,C,hist_gradient_boosting,load_pct_lag7,-4.8617790057887966e-05,7.171818696797579e-05
+Lubrication,severe,C,hist_gradient_boosting,load_pct_diff1,-2.2528273892805963e-05,0.00017350807652470845
+Lubrication,severe,C,hist_gradient_boosting,load_pct_diff7,-0.00010267538089981196,0.00020427695327178142
+Lubrication,severe,C,hist_gradient_boosting,load_pct_median3,0.00014346233103793767,0.00021150463120655659
+Lubrication,severe,C,hist_gradient_boosting,load_pct_median7,-0.0003471402644167328,0.0003712983805604936
+Lubrication,severe,C,hist_gradient_boosting,load_pct_mad7,-8.224684731157558e-05,0.00045796203997496997
+Lubrication,severe,C,hist_gradient_boosting,load_pct_slope7,4.944331440953544e-05,0.00011825007002560351
+Lubrication,severe,C,hist_gradient_boosting,shaft_rpm_lag1,-7.997833575745909e-05,7.54588711907035e-05
+Lubrication,severe,C,hist_gradient_boosting,shaft_rpm_lag3,-0.00010703888464444217,7.33766578949307e-05
+Lubrication,severe,C,hist_gradient_boosting,shaft_rpm_lag7,-0.0016691809529449687,0.0025353092981107296
+Lubrication,severe,C,hist_gradient_boosting,shaft_rpm_diff1,1.294516577473627e-05,0.0002572745244886214
+Lubrication,severe,C,hist_gradient_boosting,shaft_rpm_diff7,2.7025702564359086e-05,8.602118869724833e-05
+Lubrication,severe,C,hist_gradient_boosting,shaft_rpm_median3,0.0001395041238013347,9.105071934824737e-05
+Lubrication,severe,C,hist_gradient_boosting,shaft_rpm_median7,0.0005263886838868312,0.00011359648939381531
+Lubrication,severe,C,hist_gradient_boosting,shaft_rpm_mad7,2.3824427805669776e-06,3.434849757067965e-05
+Lubrication,severe,C,hist_gradient_boosting,shaft_rpm_slope7,-1.0528446961405776e-05,5.296623421756895e-05
+Lubrication,severe,C,hist_gradient_boosting,power_consumption_kw_lag1,-0.0008137062613698086,3.6917275749754525e-05
+Lubrication,severe,C,hist_gradient_boosting,power_consumption_kw_lag3,-0.00025337274620760783,0.00039604763340173944
+Lubrication,severe,C,hist_gradient_boosting,power_consumption_kw_lag7,-9.609653322765743e-05,0.0007768829469509523
+Lubrication,severe,C,hist_gradient_boosting,power_consumption_kw_diff1,-0.0004458556585698927,0.0003929553601467826
+Lubrication,severe,C,hist_gradient_boosting,power_consumption_kw_diff7,-0.00021115036947232275,0.00017656624678555943
+Lubrication,severe,C,hist_gradient_boosting,power_consumption_kw_median3,0.00013287308853947763,0.0001099416018139408
+Lubrication,severe,C,hist_gradient_boosting,power_consumption_kw_median7,-0.0004367401572436319,3.916930394215952e-05
+Lubrication,severe,C,hist_gradient_boosting,power_consumption_kw_mad7,-0.0006196291516913522,0.0015852046874169092
+Lubrication,severe,C,hist_gradient_boosting,power_consumption_kw_slope7,0.0002913946913984163,0.0005631256224328358
+Lubrication,severe,C,hist_gradient_boosting,affected_lag1,0.0,0.0
+Lubrication,severe,C,hist_gradient_boosting,affected_count_7d,-7.750295915328066e-06,4.5721867276900513e-07
+Lubrication,severe,C,hist_gradient_boosting,affected_count_30d,1.2257882536139547e-06,7.603213409058517e-06
+Lubrication,severe,C,hist_gradient_boosting,days_since_last_affected,-1.4873934444881743e-05,1.242808437321378e-05
+Lubrication,severe,C,hist_gradient_boosting,severe_lag1,0.0,0.0
+Lubrication,severe,C,hist_gradient_boosting,severe_count_30d,2.935054389624087e-05,7.726832038498223e-06
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_expected,0.000400634465884206,2.7121518855438388e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_residual,-0.0031912342364942277,0.002256463992252027
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_residual_robust_z,-0.00010126113284046265,6.889951797704653e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_expected,2.228265333615448e-05,6.7738017104746196e-06
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_residual,-7.437530209021837e-06,6.518702349176707e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_residual_robust_z,-0.0006009496155829252,6.602812896439586e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_expected,5.753744802111024e-06,4.359917030894215e-06
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_residual,-9.807723974845338e-05,5.732480114499743e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_residual_robust_z,-2.75052673950546e-05,1.1578263146059889e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_expected,2.2926754658880607e-05,5.323120215250922e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_residual,-0.000114212551390822,0.00015616583077029635
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_residual_robust_z,6.85621701047882e-05,9.790175901994947e-05
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_expected,-4.627228003970263e-06,7.707108032952e-07
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_residual,4.873243151878032e-05,2.5032005172693393e-05
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_residual_robust_z,3.75980243504017e-06,2.9280518577820294e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_residual_lag1,-1.060639637509546e-05,2.377372551602611e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_residual_lag3,-3.531123165327523e-05,3.693980842144164e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_residual_lag7,-0.0002383597467173797,0.00015825869764857505
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_residual_median7,-0.00039635027111123146,0.0010780083587076717
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_residual_mad7,-0.002484697090001827,0.001057512622613063
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_residual_slope7,7.211040915343764e-05,5.295142807096066e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_residual_robust_z_lag1,-5.6867592224832626e-05,0.00010488544080319979
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_residual_robust_z_lag3,0.0003554719151219159,0.00047963355514077307
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_residual_robust_z_lag7,0.00036685124642525164,0.0002169655561906338
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_residual_robust_z_median7,1.1248007396806418e-05,3.397519522861241e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_residual_robust_z_mad7,0.0013662172819713745,0.00029357361511915433
+Lubrication,severe,C,hist_gradient_boosting,temp_bearing_degC_residual_robust_z_slope7,-0.0004563722103237723,0.00033955481658598145
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_residual_lag1,-0.0011308380369268662,5.8072114635156526e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_residual_lag3,-9.371908270399837e-05,0.00010502518624199602
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_residual_lag7,-0.0007114306015130724,0.0004794971891436639
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_residual_median7,-0.00017261327783389102,0.00029751279189064745
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_residual_mad7,0.0003507772907883801,0.0004182827945289325
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_residual_slope7,1.4424355708324635e-05,6.709942783950683e-05
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_residual_robust_z_lag1,0.00023984513919927315,0.00028807895685649447
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_residual_robust_z_lag3,-0.0003765763932608865,0.0002962308372646246
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_residual_robust_z_lag7,1.6803759440636088e-05,0.00011528514729059421
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_residual_robust_z_median7,0.0001534312712637703,0.00013464505361650866
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_residual_robust_z_mad7,1.2470369300220571e-05,0.0001906509696688178
+Lubrication,severe,C,hist_gradient_boosting,temp_motor_degC_residual_robust_z_slope7,-0.00011709104879845256,0.00014825650068020269
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_residual_lag1,-0.00025579026097558743,0.0003341011797498909
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_residual_lag3,7.5573053274410424e-06,3.935830035579377e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_residual_lag7,0.0002330113626341513,0.0002263494250769455
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_residual_median7,-0.00018556715791547083,0.00022095375472693784
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_residual_mad7,-0.000767789181904986,0.0003875831838886235
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_residual_slope7,9.186694655916212e-05,6.933339544722205e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_residual_robust_z_lag1,-4.761752945375436e-06,8.813497535874713e-06
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_residual_robust_z_lag3,-5.270438669323392e-05,5.086914071039841e-06
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_residual_robust_z_lag7,0.0001358008935860086,0.00018636662594248823
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_residual_robust_z_median7,0.00017817318479764673,0.00026359427593036354
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_residual_robust_z_mad7,0.0003121090014600837,0.0002817563428462323
+Lubrication,severe,C,hist_gradient_boosting,vibration_h_mms_residual_robust_z_slope7,2.1407446119974204e-05,0.0003347428787786447
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_residual_lag1,-1.327563950606943e-05,1.215160765870172e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_residual_lag3,1.788108346601966e-05,0.0001677737538297776
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_residual_lag7,-2.756400450136069e-05,4.359909812819767e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_residual_median7,0.0014915263608069093,0.00013960046217981434
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_residual_mad7,2.7946048588274364e-05,5.491951277599459e-06
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_residual_slope7,1.7944616060396625e-05,3.4622552412650964e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_residual_robust_z_lag1,3.517794181731246e-05,1.2476682431043215e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_residual_robust_z_lag3,-0.00012501005943151271,9.293738397297085e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_residual_robust_z_lag7,-5.385670009146569e-05,8.905729908591459e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_residual_robust_z_median7,0.0005750922528874094,3.191691876140395e-05
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_residual_robust_z_mad7,-0.0003239488233932871,0.00026672117958145093
+Lubrication,severe,C,hist_gradient_boosting,vibration_v_mms_residual_robust_z_slope7,-0.00016908968580746017,0.0007242225113982193
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_residual_lag1,-2.2808034147435777e-05,2.6768915328921137e-06
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_residual_lag3,-0.00047422518668453474,0.00033090434073953894
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_residual_lag7,1.943510342519312e-06,6.887902205416816e-06
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_residual_median7,-9.873520231088185e-06,1.7608488557376587e-05
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_residual_mad7,0.0005813561511565348,0.00019781427357462139
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_residual_slope7,4.1709332714200825e-05,1.4035190480636481e-05
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_residual_robust_z_lag1,-0.00033153771441859006,0.0006603269366407419
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_residual_robust_z_lag3,8.533279135181787e-05,0.0003603013613412915
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_residual_robust_z_lag7,-7.726709138744225e-05,6.597094606374435e-05
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_residual_robust_z_median7,0.00023814866671975515,0.00014757886353347516
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_residual_robust_z_mad7,-0.0001751228797168498,0.00012121393657181813
+Lubrication,severe,C,hist_gradient_boosting,oil_pressure_bar_residual_robust_z_slope7,-6.291705583039615e-05,0.00010214354205443492
+Sensor,affected,C,logistic_regression,machine_type,0.007347897340781988,0.009091780794737244
+Sensor,affected,C,logistic_regression,asset_tag,0.003791126007076484,0.0030324162526310394
+Sensor,affected,C,logistic_regression,temp_bearing_degC,0.003491504553089164,0.001889646481259838
+Sensor,affected,C,logistic_regression,temp_motor_degC,-0.010820591361434059,0.0024809281257362117
+Sensor,affected,C,logistic_regression,vibration_h_mms,-0.007539442026091765,0.00405507398229717
+Sensor,affected,C,logistic_regression,vibration_v_mms,0.004102209277961011,0.0014888615146715497
+Sensor,affected,C,logistic_regression,oil_pressure_bar,0.02041954194361804,0.00968368830630809
+Sensor,affected,C,logistic_regression,load_pct,0.05971868563496685,0.00391780124594315
+Sensor,affected,C,logistic_regression,shaft_rpm,0.026162707101784127,0.008968430976135644
+Sensor,affected,C,logistic_regression,power_consumption_kw,0.0035195618670308217,0.0019076427382821305
+Sensor,affected,C,logistic_regression,day_of_week,0.017782804942260495,0.014957418488456652
+Sensor,affected,C,logistic_regression,month_sin,-0.00019591257906699985,0.0002566797454797679
+Sensor,affected,C,logistic_regression,month_cos,-0.0008171703382512385,0.002374292668720774
+Sensor,affected,C,logistic_regression,temp_bearing_degC_lag1,0.007348191224973266,0.004564990291040489
+Sensor,affected,C,logistic_regression,temp_bearing_degC_lag3,0.00359055208409631,0.0030416889474008664
+Sensor,affected,C,logistic_regression,temp_bearing_degC_lag7,0.006145700393394848,0.005897045099795583
+Sensor,affected,C,logistic_regression,temp_bearing_degC_diff1,0.01438757616123417,0.008272008711929664
+Sensor,affected,C,logistic_regression,temp_bearing_degC_diff7,-0.0008918724595656976,0.006352680401294784
+Sensor,affected,C,logistic_regression,temp_bearing_degC_median3,0.0024928411227533496,0.0025639881534708195
+Sensor,affected,C,logistic_regression,temp_bearing_degC_median7,0.009698893564665967,0.0032746179785148105
+Sensor,affected,C,logistic_regression,temp_bearing_degC_mad7,-0.0010734757982237737,0.001541814026757488
+Sensor,affected,C,logistic_regression,temp_bearing_degC_slope7,-0.0012592949351499978,0.002503181140367749
+Sensor,affected,C,logistic_regression,temp_motor_degC_lag1,-0.003768955720744168,0.008632907803208861
+Sensor,affected,C,logistic_regression,temp_motor_degC_lag3,0.012894030247347957,0.004408862861514319
+Sensor,affected,C,logistic_regression,temp_motor_degC_lag7,0.011824800512116243,0.0032631933087583507
+Sensor,affected,C,logistic_regression,temp_motor_degC_diff1,-0.003817662295640789,0.004859318228692611
+Sensor,affected,C,logistic_regression,temp_motor_degC_diff7,0.008243403967698163,0.004428998568233055
+Sensor,affected,C,logistic_regression,temp_motor_degC_median3,-0.0009313975453600909,0.00092205654587472
+Sensor,affected,C,logistic_regression,temp_motor_degC_median7,0.015807925840799392,0.005109013579529644
+Sensor,affected,C,logistic_regression,temp_motor_degC_mad7,-7.702782569703655e-05,0.00016636757465975086
+Sensor,affected,C,logistic_regression,temp_motor_degC_slope7,0.008188134059971283,0.0045678322749491945
+Sensor,affected,C,logistic_regression,vibration_h_mms_lag1,0.0016512447790741531,0.0023561761991900826
+Sensor,affected,C,logistic_regression,vibration_h_mms_lag3,-0.0014421142203971022,0.0013791890516736199
+Sensor,affected,C,logistic_regression,vibration_h_mms_lag7,0.0013894327464776997,0.0017864552297619462
+Sensor,affected,C,logistic_regression,vibration_h_mms_diff1,-0.008495100023275545,0.004684575561537899
+Sensor,affected,C,logistic_regression,vibration_h_mms_diff7,0.014913970103009174,0.0043231689458983645
+Sensor,affected,C,logistic_regression,vibration_h_mms_median3,0.0016072681791265975,0.001921293997348455
+Sensor,affected,C,logistic_regression,vibration_h_mms_median7,0.001305863361197368,0.0022384724524756113
+Sensor,affected,C,logistic_regression,vibration_h_mms_mad7,0.0006719149227064625,0.0014055204342989115
+Sensor,affected,C,logistic_regression,vibration_h_mms_slope7,-0.0025032636239164887,0.009374772533523241
+Sensor,affected,C,logistic_regression,vibration_v_mms_lag1,0.004018964929171032,0.004872644713623336
+Sensor,affected,C,logistic_regression,vibration_v_mms_lag3,0.008699127368600271,0.0018693009443402576
+Sensor,affected,C,logistic_regression,vibration_v_mms_lag7,0.0064124084219558215,0.005482165688576475
+Sensor,affected,C,logistic_regression,vibration_v_mms_diff1,-0.005738219422382469,0.0021600337578430305
+Sensor,affected,C,logistic_regression,vibration_v_mms_diff7,0.013174014546723956,0.003384499091065562
+Sensor,affected,C,logistic_regression,vibration_v_mms_median3,0.0001106859957732409,0.0031218658622687648
+Sensor,affected,C,logistic_regression,vibration_v_mms_median7,0.000836069379254234,0.0009178792171666197
+Sensor,affected,C,logistic_regression,vibration_v_mms_mad7,0.0006001697945886564,0.0005442006834876812
+Sensor,affected,C,logistic_regression,vibration_v_mms_slope7,0.008458519705668058,0.004396289567304562
+Sensor,affected,C,logistic_regression,oil_pressure_bar_lag1,0.00042922122222671666,0.0012728296288071748
+Sensor,affected,C,logistic_regression,oil_pressure_bar_lag3,-6.29335914223798e-05,0.004965738021210551
+Sensor,affected,C,logistic_regression,oil_pressure_bar_lag7,0.009484078492929093,0.00636832502300982
+Sensor,affected,C,logistic_regression,oil_pressure_bar_diff1,-0.002217326428422132,0.002620329670471848
+Sensor,affected,C,logistic_regression,oil_pressure_bar_diff7,-0.0014321109183283072,0.0019015795899310405
+Sensor,affected,C,logistic_regression,oil_pressure_bar_median3,0.0124600656157726,0.011179057954553715
+Sensor,affected,C,logistic_regression,oil_pressure_bar_median7,0.002861394181342606,0.007640371434469138
+Sensor,affected,C,logistic_regression,oil_pressure_bar_mad7,-0.0002498650202552947,0.00028263730931185214
+Sensor,affected,C,logistic_regression,oil_pressure_bar_slope7,0.0034446483699453836,0.00039108156383319275
+Sensor,affected,C,logistic_regression,load_pct_lag1,0.01591543042692295,0.0038185502692384314
+Sensor,affected,C,logistic_regression,load_pct_lag3,0.006928058101231187,0.003930741925164066
+Sensor,affected,C,logistic_regression,load_pct_lag7,-0.0033542237375042325,0.005296873062450033
+Sensor,affected,C,logistic_regression,load_pct_diff1,-0.003743928200342417,0.0008918935290464069
+Sensor,affected,C,logistic_regression,load_pct_diff7,0.017913723763511486,0.0014112326937576328
+Sensor,affected,C,logistic_regression,load_pct_median3,0.00277325413865274,0.000246832485777641
+Sensor,affected,C,logistic_regression,load_pct_median7,-0.004963060517706545,0.009033486249256492
+Sensor,affected,C,logistic_regression,load_pct_mad7,9.268797086757023e-05,0.0020294978297022213
+Sensor,affected,C,logistic_regression,load_pct_slope7,0.0010243769088092252,0.00021357126509956436
+Sensor,affected,C,logistic_regression,shaft_rpm_lag1,0.04547319436133248,0.009754260854615842
+Sensor,affected,C,logistic_regression,shaft_rpm_lag3,0.02440704649815049,0.009277481335394
+Sensor,affected,C,logistic_regression,shaft_rpm_lag7,0.018957802884378188,0.00805607317664891
+Sensor,affected,C,logistic_regression,shaft_rpm_diff1,-0.0021357443409255605,0.002907710570125462
+Sensor,affected,C,logistic_regression,shaft_rpm_diff7,0.0005105142634983703,0.0027867183059347668
+Sensor,affected,C,logistic_regression,shaft_rpm_median3,0.0029298479046903823,0.007870958940718127
+Sensor,affected,C,logistic_regression,shaft_rpm_median7,-0.0034008246633112638,0.0037140640067823017
+Sensor,affected,C,logistic_regression,shaft_rpm_mad7,0.0007275039407156533,0.00018685540090314194
+Sensor,affected,C,logistic_regression,shaft_rpm_slope7,0.008630242460269518,0.003152498865088094
+Sensor,affected,C,logistic_regression,power_consumption_kw_lag1,-0.0006825970397690099,0.004923005568205945
+Sensor,affected,C,logistic_regression,power_consumption_kw_lag3,0.0023198709808746054,0.006618543231867296
+Sensor,affected,C,logistic_regression,power_consumption_kw_lag7,0.00664068223511786,0.009894701233186132
+Sensor,affected,C,logistic_regression,power_consumption_kw_diff1,-0.007613028560933451,0.0019562641110468654
+Sensor,affected,C,logistic_regression,power_consumption_kw_diff7,-0.0001297975137555992,6.887457015498605e-05
+Sensor,affected,C,logistic_regression,power_consumption_kw_median3,0.0023477580051370537,0.00624512074684682
+Sensor,affected,C,logistic_regression,power_consumption_kw_median7,0.010015324804104386,0.008304940908190214
+Sensor,affected,C,logistic_regression,power_consumption_kw_mad7,0.00043914611022999317,0.0009779701648143881
+Sensor,affected,C,logistic_regression,power_consumption_kw_slope7,0.010384264250158573,0.005051290418511202
+Sensor,affected,C,logistic_regression,affected_lag1,-0.0003768006132002048,0.00020967941341959388
+Sensor,affected,C,logistic_regression,affected_count_7d,-0.0021741195841692615,0.0006307323535952673
+Sensor,affected,C,logistic_regression,affected_count_30d,-0.0003150472255786241,0.0004638407497020332
+Sensor,affected,C,logistic_regression,days_since_last_affected,0.0038344076661251023,0.0016110858646145938
+Sensor,affected,C,logistic_regression,severe_lag1,-0.00014760985446634253,9.891959857314147e-05
+Sensor,affected,C,logistic_regression,severe_count_30d,4.94966665932998e-05,4.344625398534389e-05
+Sensor,affected,C,logistic_regression,temp_bearing_degC_expected,0.0005533552715931515,0.001806567965630317
+Sensor,affected,C,logistic_regression,temp_bearing_degC_residual,0.007851104629412612,0.004301718366305972
+Sensor,affected,C,logistic_regression,temp_bearing_degC_residual_robust_z,-0.001535095039018645,0.002983390631998678
+Sensor,affected,C,logistic_regression,temp_motor_degC_expected,-0.01107417432042751,0.003053927576730105
+Sensor,affected,C,logistic_regression,temp_motor_degC_residual,0.001549020960199025,0.0037955178341636214
+Sensor,affected,C,logistic_regression,temp_motor_degC_residual_robust_z,0.004651272873656705,0.005963971667216254
+Sensor,affected,C,logistic_regression,vibration_h_mms_expected,0.002295645692193408,0.0024190873164277116
+Sensor,affected,C,logistic_regression,vibration_h_mms_residual,-0.005511974030917299,0.0017788289965023718
+Sensor,affected,C,logistic_regression,vibration_h_mms_residual_robust_z,0.0005513108266183194,0.00016588448035739108
+Sensor,affected,C,logistic_regression,vibration_v_mms_expected,0.00019715397939623625,0.0015872892020650814
+Sensor,affected,C,logistic_regression,vibration_v_mms_residual,0.00807180932131755,0.0021960869566176803
+Sensor,affected,C,logistic_regression,vibration_v_mms_residual_robust_z,-0.010252976844657294,0.003145526037431897
+Sensor,affected,C,logistic_regression,oil_pressure_bar_expected,0.01914059804143022,0.011202286133580115
+Sensor,affected,C,logistic_regression,oil_pressure_bar_residual,0.00014158143934846676,0.00636286244030796
+Sensor,affected,C,logistic_regression,oil_pressure_bar_residual_robust_z,0.01864075372945795,0.0035824167261845298
+Sensor,affected,C,logistic_regression,temp_bearing_degC_residual_lag1,-0.011496780633837356,0.0051048756403948405
+Sensor,affected,C,logistic_regression,temp_bearing_degC_residual_lag3,-0.0011037198569463502,0.0007674898084711247
+Sensor,affected,C,logistic_regression,temp_bearing_degC_residual_lag7,0.028003717103667152,0.0043864847583427995
+Sensor,affected,C,logistic_regression,temp_bearing_degC_residual_median7,-0.005042001758728061,0.0029272101845232166
+Sensor,affected,C,logistic_regression,temp_bearing_degC_residual_mad7,0.01501037968216525,0.00577704414821829
+Sensor,affected,C,logistic_regression,temp_bearing_degC_residual_slope7,0.010118179587722986,0.0034527979456142653
+Sensor,affected,C,logistic_regression,temp_bearing_degC_residual_robust_z_lag1,0.014665641532474164,0.003665524112423232
+Sensor,affected,C,logistic_regression,temp_bearing_degC_residual_robust_z_lag3,-0.0013885620984889397,0.0008030948453807582
+Sensor,affected,C,logistic_regression,temp_bearing_degC_residual_robust_z_lag7,-0.012040902758396551,0.005700873390658545
+Sensor,affected,C,logistic_regression,temp_bearing_degC_residual_robust_z_median7,0.016104112429402833,0.005721946039151573
+Sensor,affected,C,logistic_regression,temp_bearing_degC_residual_robust_z_mad7,-0.00915410053501281,0.0074085514981951225
+Sensor,affected,C,logistic_regression,temp_bearing_degC_residual_robust_z_slope7,-0.004749385000451689,0.006247319834414048
+Sensor,affected,C,logistic_regression,temp_motor_degC_residual_lag1,-0.0056162025986471464,0.005844989081500239
+Sensor,affected,C,logistic_regression,temp_motor_degC_residual_lag3,0.01333664956215234,0.0010849637270540996
+Sensor,affected,C,logistic_regression,temp_motor_degC_residual_lag7,0.00527998475412204,0.0061599171953799796
+Sensor,affected,C,logistic_regression,temp_motor_degC_residual_median7,0.003133917012918023,0.0014194867512942794
+Sensor,affected,C,logistic_regression,temp_motor_degC_residual_mad7,0.015450201321081622,0.0036641452298810436
+Sensor,affected,C,logistic_regression,temp_motor_degC_residual_slope7,-0.0010262289454858002,0.0035661062916278307
+Sensor,affected,C,logistic_regression,temp_motor_degC_residual_robust_z_lag1,0.011211237190601927,0.005742880076082373
+Sensor,affected,C,logistic_regression,temp_motor_degC_residual_robust_z_lag3,-0.0033346496485020713,0.0008988421037848097
+Sensor,affected,C,logistic_regression,temp_motor_degC_residual_robust_z_lag7,0.013001761801261206,0.0023831220078299117
+Sensor,affected,C,logistic_regression,temp_motor_degC_residual_robust_z_median7,0.004527464993900517,0.0017401536031526432
+Sensor,affected,C,logistic_regression,temp_motor_degC_residual_robust_z_mad7,-0.01277762053754448,0.006309574066157811
+Sensor,affected,C,logistic_regression,temp_motor_degC_residual_robust_z_slope7,0.008606605743304796,0.004008825279871416
+Sensor,affected,C,logistic_regression,vibration_h_mms_residual_lag1,0.003023101325329236,0.003461455462249082
+Sensor,affected,C,logistic_regression,vibration_h_mms_residual_lag3,-0.0011908347142040587,0.00040216665318433217
+Sensor,affected,C,logistic_regression,vibration_h_mms_residual_lag7,0.0019287105551655803,0.003764402717062935
+Sensor,affected,C,logistic_regression,vibration_h_mms_residual_median7,0.011383927901803573,0.0025371154498901806
+Sensor,affected,C,logistic_regression,vibration_h_mms_residual_mad7,0.0031653656166187685,0.0005194771891860444
+Sensor,affected,C,logistic_regression,vibration_h_mms_residual_slope7,0.009236160903932053,0.004154249302772123
+Sensor,affected,C,logistic_regression,vibration_h_mms_residual_robust_z_lag1,0.0006405059355794607,0.0020158584869643813
+Sensor,affected,C,logistic_regression,vibration_h_mms_residual_robust_z_lag3,-0.001207354125131473,0.0002434119767902231
+Sensor,affected,C,logistic_regression,vibration_h_mms_residual_robust_z_lag7,0.004286166287333637,0.004107057005214142
+Sensor,affected,C,logistic_regression,vibration_h_mms_residual_robust_z_median7,-0.009771084896503838,0.003365386457574341
+Sensor,affected,C,logistic_regression,vibration_h_mms_residual_robust_z_mad7,-0.0009602729993245333,0.0007846817049319974
+Sensor,affected,C,logistic_regression,vibration_h_mms_residual_robust_z_slope7,0.007241616842171228,0.003914488907012661
+Sensor,affected,C,logistic_regression,vibration_v_mms_residual_lag1,0.004223488153336434,0.0032256712459481827
+Sensor,affected,C,logistic_regression,vibration_v_mms_residual_lag3,-0.0008898784180417785,0.0005037865896035591
+Sensor,affected,C,logistic_regression,vibration_v_mms_residual_lag7,0.0020048571607923504,0.0017629889854994297
+Sensor,affected,C,logistic_regression,vibration_v_mms_residual_median7,0.016598992167339694,0.006089080532368133
+Sensor,affected,C,logistic_regression,vibration_v_mms_residual_mad7,0.001929210963382555,0.002527237430069556
+Sensor,affected,C,logistic_regression,vibration_v_mms_residual_slope7,0.008775014402746287,0.003984526930724991
+Sensor,affected,C,logistic_regression,vibration_v_mms_residual_robust_z_lag1,0.012069401798905163,0.005126881658948733
+Sensor,affected,C,logistic_regression,vibration_v_mms_residual_robust_z_lag3,-0.0017071517173220345,0.000551733845692385
+Sensor,affected,C,logistic_regression,vibration_v_mms_residual_robust_z_lag7,0.0004262838045113552,0.00046507861300329516
+Sensor,affected,C,logistic_regression,vibration_v_mms_residual_robust_z_median7,-0.010544969053289166,0.0077803544066418606
+Sensor,affected,C,logistic_regression,vibration_v_mms_residual_robust_z_mad7,0.0005898633680374021,0.0022229490466387203
+Sensor,affected,C,logistic_regression,vibration_v_mms_residual_robust_z_slope7,0.0012462457085613554,0.010807135727419962
+Sensor,affected,C,logistic_regression,oil_pressure_bar_residual_lag1,0.007060275587023472,0.0007523329075135891
+Sensor,affected,C,logistic_regression,oil_pressure_bar_residual_lag3,0.017553688448168774,0.0030335945405260156
+Sensor,affected,C,logistic_regression,oil_pressure_bar_residual_lag7,0.0036749022421857145,0.0006762716974488863
+Sensor,affected,C,logistic_regression,oil_pressure_bar_residual_median7,-0.0004626195202097431,0.0059492221952387354
+Sensor,affected,C,logistic_regression,oil_pressure_bar_residual_mad7,-0.0012693847094347916,0.0033090402235566485
+Sensor,affected,C,logistic_regression,oil_pressure_bar_residual_slope7,0.021142018281499437,0.003511053140029288
+Sensor,affected,C,logistic_regression,oil_pressure_bar_residual_robust_z_lag1,0.00011470951928170085,0.0007127415919677451
+Sensor,affected,C,logistic_regression,oil_pressure_bar_residual_robust_z_lag3,0.010211429021998083,0.0010482113683199525
+Sensor,affected,C,logistic_regression,oil_pressure_bar_residual_robust_z_lag7,-0.000864474924698618,0.0007680023441474822
+Sensor,affected,C,logistic_regression,oil_pressure_bar_residual_robust_z_median7,0.004011049226586498,0.004292860113885431
+Sensor,affected,C,logistic_regression,oil_pressure_bar_residual_robust_z_mad7,0.006966162170704522,0.0020078373792561896
+Sensor,affected,C,logistic_regression,oil_pressure_bar_residual_robust_z_slope7,0.008281820788904585,0.005707732199898908
+Sensor,severe,A,random_forest,machine_type,0.0025311203905602486,0.0010522782892319396
+Sensor,severe,A,random_forest,asset_tag,-0.0042292479672173715,0.001670174676675232
+Sensor,severe,A,random_forest,temp_bearing_degC,-0.007592266981113038,0.005217351323341031
+Sensor,severe,A,random_forest,temp_motor_degC,0.008783012348926042,0.005245431525114598
+Sensor,severe,A,random_forest,vibration_h_mms,0.008881435589233414,0.007123237332197827
+Sensor,severe,A,random_forest,vibration_v_mms,0.00687119658917031,0.007138461979410548
+Sensor,severe,A,random_forest,oil_pressure_bar,-0.0003770802796889683,0.010446292631563816
+Sensor,severe,A,random_forest,load_pct,-0.006416735881993059,0.01097240737108718
+Sensor,severe,A,random_forest,shaft_rpm,0.004268300840394988,0.003932854432490385
+Sensor,severe,A,random_forest,power_consumption_kw,0.0018858059975760215,0.0022510585712878293
+Sensor,severe,A,random_forest,day_of_week,0.03418554475572159,0.0034294922288134588
+Sensor,severe,A,random_forest,month_sin,0.00413934513263553,0.0025103688432451423
+Sensor,severe,A,random_forest,month_cos,0.010561668578438183,0.0032168044558102907
+Fastener,affected,C,logistic_regression,machine_type,0.01737087965299956,0.0035702031746164035
+Fastener,affected,C,logistic_regression,asset_tag,0.006669851519728515,0.01127333496265315
+Fastener,affected,C,logistic_regression,temp_bearing_degC,-0.010322024399254429,0.0013330687917653997
+Fastener,affected,C,logistic_regression,temp_motor_degC,0.011978741997692416,0.002716199902975261
+Fastener,affected,C,logistic_regression,vibration_h_mms,0.004358471003809178,0.0008130229853064218
+Fastener,affected,C,logistic_regression,vibration_v_mms,-0.0001186020672373685,8.266643685769434e-05
+Fastener,affected,C,logistic_regression,oil_pressure_bar,0.003164873499204588,0.0045215997470981146
+Fastener,affected,C,logistic_regression,load_pct,-0.00562941026506734,0.0005427973703515421
+Fastener,affected,C,logistic_regression,shaft_rpm,0.031124657002624317,0.005277360844861299
+Fastener,affected,C,logistic_regression,power_consumption_kw,0.011472168825186499,0.0038983030520606723
+Fastener,affected,C,logistic_regression,day_of_week,0.042423852876663344,0.003997329252715952
+Fastener,affected,C,logistic_regression,month_sin,-6.375540001745302e-05,0.00013990749427068182
+Fastener,affected,C,logistic_regression,month_cos,-0.00012324116331228577,7.000938808858721e-05
+Fastener,affected,C,logistic_regression,temp_bearing_degC_lag1,-0.03137745238317453,0.002937430855060847
+Fastener,affected,C,logistic_regression,temp_bearing_degC_lag3,-0.010707458096620187,0.0017419536806457551
+Fastener,affected,C,logistic_regression,temp_bearing_degC_lag7,0.03299051910885565,0.0030390563414428614
+Fastener,affected,C,logistic_regression,temp_bearing_degC_diff1,0.0181695680597458,0.00786449366989281
+Fastener,affected,C,logistic_regression,temp_bearing_degC_diff7,-0.0023716216608343963,0.00857106675410728
+Fastener,affected,C,logistic_regression,temp_bearing_degC_median3,0.019473108710847658,0.004212910890271521
+Fastener,affected,C,logistic_regression,temp_bearing_degC_median7,0.03036740838212712,0.004695781716127358
+Fastener,affected,C,logistic_regression,temp_bearing_degC_mad7,8.988929475388836e-05,6.173492974397405e-05
+Fastener,affected,C,logistic_regression,temp_bearing_degC_slope7,-0.0002669927477637242,0.00038703798651044095
+Fastener,affected,C,logistic_regression,temp_motor_degC_lag1,0.0008524525469231122,0.000279191254948063
+Fastener,affected,C,logistic_regression,temp_motor_degC_lag3,-0.006942103880939854,0.001352759564066897
+Fastener,affected,C,logistic_regression,temp_motor_degC_lag7,-0.006502291802647914,0.003691874889192023
+Fastener,affected,C,logistic_regression,temp_motor_degC_diff1,0.00036958282635389067,0.000198774443623316
+Fastener,affected,C,logistic_regression,temp_motor_degC_diff7,0.0030724878575241386,0.0006064723607539737
+Fastener,affected,C,logistic_regression,temp_motor_degC_median3,0.011590104138092056,0.0023636865863919812
+Fastener,affected,C,logistic_regression,temp_motor_degC_median7,-0.007523516887439408,0.0026685230069711167
+Fastener,affected,C,logistic_regression,temp_motor_degC_mad7,0.0005807372625423468,4.3601820687769816e-05
+Fastener,affected,C,logistic_regression,temp_motor_degC_slope7,0.0015388319602657001,0.0009510361754768765
+Fastener,affected,C,logistic_regression,vibration_h_mms_lag1,0.003569071652843925,0.0024401183865779843
+Fastener,affected,C,logistic_regression,vibration_h_mms_lag3,0.00730353887190933,0.007112164908870625
+Fastener,affected,C,logistic_regression,vibration_h_mms_lag7,-0.007770930966618332,0.0032144647392506466
+Fastener,affected,C,logistic_regression,vibration_h_mms_diff1,0.003764452448564326,0.00098135552167372
+Fastener,affected,C,logistic_regression,vibration_h_mms_diff7,-0.008561505960798335,0.00163291077016188
+Fastener,affected,C,logistic_regression,vibration_h_mms_median3,0.010607879921238877,0.0012194907585833946
+Fastener,affected,C,logistic_regression,vibration_h_mms_median7,0.0065819198732267785,0.003873326655921755
+Fastener,affected,C,logistic_regression,vibration_h_mms_mad7,0.00011001822665527665,0.0004053070793269635
+Fastener,affected,C,logistic_regression,vibration_h_mms_slope7,0.012518128241996876,0.0025072411801070654
+Fastener,affected,C,logistic_regression,vibration_v_mms_lag1,-0.0004930021048309511,0.0005328336863360588
+Fastener,affected,C,logistic_regression,vibration_v_mms_lag3,0.011092958701528663,0.0015772621344216089
+Fastener,affected,C,logistic_regression,vibration_v_mms_lag7,0.007428444901967692,0.006079073168789516
+Fastener,affected,C,logistic_regression,vibration_v_mms_diff1,0.009301583856923748,0.007108583487090874
+Fastener,affected,C,logistic_regression,vibration_v_mms_diff7,0.005382240030428809,0.0014147826899804834
+Fastener,affected,C,logistic_regression,vibration_v_mms_median3,0.002988031750310575,0.0016811369084873122
+Fastener,affected,C,logistic_regression,vibration_v_mms_median7,-2.438382210349458e-06,4.240832451948367e-05
+Fastener,affected,C,logistic_regression,vibration_v_mms_mad7,0.0009493571683262721,0.00015185169878896625
+Fastener,affected,C,logistic_regression,vibration_v_mms_slope7,-0.0013547847251690985,0.003292150594183738
+Fastener,affected,C,logistic_regression,oil_pressure_bar_lag1,0.009422348560911351,0.004944488856328931
+Fastener,affected,C,logistic_regression,oil_pressure_bar_lag3,-0.00015927849594519575,0.0012998969890978896
+Fastener,affected,C,logistic_regression,oil_pressure_bar_lag7,0.012014883856393285,0.005278582819171758
+Fastener,affected,C,logistic_regression,oil_pressure_bar_diff1,-0.002518572919677183,0.0009151847275859578
+Fastener,affected,C,logistic_regression,oil_pressure_bar_diff7,0.004635662478590652,0.0018651981522177187
+Fastener,affected,C,logistic_regression,oil_pressure_bar_median3,0.008506563623559291,0.006991913186098499
+Fastener,affected,C,logistic_regression,oil_pressure_bar_median7,0.0017383580969592323,0.005137699823599301
+Fastener,affected,C,logistic_regression,oil_pressure_bar_mad7,9.30434103323663e-05,0.00011941907736840245
+Fastener,affected,C,logistic_regression,oil_pressure_bar_slope7,0.0015816865329031649,0.0014858971260183161
+Fastener,affected,C,logistic_regression,load_pct_lag1,-0.024871298046315687,0.008944387688094156
+Fastener,affected,C,logistic_regression,load_pct_lag3,0.0006472264537273434,0.00013481627813402485
+Fastener,affected,C,logistic_regression,load_pct_lag7,-0.01146146198537959,0.003796757541500888
+Fastener,affected,C,logistic_regression,load_pct_diff1,0.01051816589861962,0.006176943898168725
+Fastener,affected,C,logistic_regression,load_pct_diff7,0.0018524211043582373,0.002237862562769891
+Fastener,affected,C,logistic_regression,load_pct_median3,-0.008501967055302956,0.002427175475470859
+Fastener,affected,C,logistic_regression,load_pct_median7,0.013162661247407318,0.006284089111273614
+Fastener,affected,C,logistic_regression,load_pct_mad7,5.262003509509672e-05,0.0008924192406350136
+Fastener,affected,C,logistic_regression,load_pct_slope7,-0.005973639513880562,0.0013616675915592545
+Fastener,affected,C,logistic_regression,shaft_rpm_lag1,0.01155182344094798,0.005980004073394498
+Fastener,affected,C,logistic_regression,shaft_rpm_lag3,0.015116396705917717,0.004149534596925717
+Fastener,affected,C,logistic_regression,shaft_rpm_lag7,0.032125220759394564,0.0052233459778931535
+Fastener,affected,C,logistic_regression,shaft_rpm_diff1,0.007650974623360368,0.0028156898641859846
+Fastener,affected,C,logistic_regression,shaft_rpm_diff7,0.0015353896664458873,0.0036140345169521676
+Fastener,affected,C,logistic_regression,shaft_rpm_median3,0.02086585373808002,0.004732364229399544
+Fastener,affected,C,logistic_regression,shaft_rpm_median7,-0.0007814705179490233,0.0032333885644031477
+Fastener,affected,C,logistic_regression,shaft_rpm_mad7,-0.0002569062871149626,8.072820291401167e-05
+Fastener,affected,C,logistic_regression,shaft_rpm_slope7,0.0012742968001016781,0.003452422215957688
+Fastener,affected,C,logistic_regression,power_consumption_kw_lag1,-0.004171215789560294,0.008388472788206095
+Fastener,affected,C,logistic_regression,power_consumption_kw_lag3,0.01315343627175497,0.0040865486375358815
+Fastener,affected,C,logistic_regression,power_consumption_kw_lag7,0.023649421398183906,0.005605907945148173
+Fastener,affected,C,logistic_regression,power_consumption_kw_diff1,-0.0016574736354758775,0.0020057298090682897
+Fastener,affected,C,logistic_regression,power_consumption_kw_diff7,-0.0012517913039235367,0.0003731508425819417
+Fastener,affected,C,logistic_regression,power_consumption_kw_median3,-0.008089394048182022,0.003703407909473005
+Fastener,affected,C,logistic_regression,power_consumption_kw_median7,-0.006703088707219446,0.007574322821055862
+Fastener,affected,C,logistic_regression,power_consumption_kw_mad7,0.004697451647853558,0.0014622935215838045
+Fastener,affected,C,logistic_regression,power_consumption_kw_slope7,-0.007283983480122519,0.0013446513680146798
+Fastener,affected,C,logistic_regression,affected_lag1,-0.0006585557231801875,0.0004887643299457455
+Fastener,affected,C,logistic_regression,affected_count_7d,-0.00043458141371503317,0.00014195247294834922
+Fastener,affected,C,logistic_regression,affected_count_30d,0.0001588449529329831,0.00010360599645286524
+Fastener,affected,C,logistic_regression,days_since_last_affected,0.00013882542291933828,0.00018225926034156042
+Fastener,affected,C,logistic_regression,severe_lag1,-3.800651778360087e-05,0.0003209098285070727
+Fastener,affected,C,logistic_regression,severe_count_30d,7.906594679615853e-05,0.00012546375410856525
+Fastener,affected,C,logistic_regression,temp_bearing_degC_expected,-0.015919903758686894,0.0023834974226822213
+Fastener,affected,C,logistic_regression,temp_bearing_degC_residual,0.0002942595604257155,0.0041725851659088434
+Fastener,affected,C,logistic_regression,temp_bearing_degC_residual_robust_z,0.0023046972019428367,0.0021238235188789528
+Fastener,affected,C,logistic_regression,temp_motor_degC_expected,0.011998825278113365,0.00383422612590948
+Fastener,affected,C,logistic_regression,temp_motor_degC_residual,2.4537627021268642e-05,0.0014564011072241982
+Fastener,affected,C,logistic_regression,temp_motor_degC_residual_robust_z,-0.0001602634592867506,0.0011399103451673548
+Fastener,affected,C,logistic_regression,vibration_h_mms_expected,0.018815199383857856,0.00566884276277077
+Fastener,affected,C,logistic_regression,vibration_h_mms_residual,0.008833045047148852,0.011362700269143334
+Fastener,affected,C,logistic_regression,vibration_h_mms_residual_robust_z,0.0003480375306163519,0.0061644182155663006
+Fastener,affected,C,logistic_regression,vibration_v_mms_expected,-0.0008194708269406159,0.009129208645150322
+Fastener,affected,C,logistic_regression,vibration_v_mms_residual,0.0008098407154447559,0.00602133617211755
+Fastener,affected,C,logistic_regression,vibration_v_mms_residual_robust_z,-0.003948267053989161,0.003275311167244349
+Fastener,affected,C,logistic_regression,oil_pressure_bar_expected,0.004607631241203595,0.004561965055756172
+Fastener,affected,C,logistic_regression,oil_pressure_bar_residual,-0.00879746516083274,0.002305175697905606
+Fastener,affected,C,logistic_regression,oil_pressure_bar_residual_robust_z,-3.886614354819037e-05,3.0236851539139277e-05
+Fastener,affected,C,logistic_regression,temp_bearing_degC_residual_lag1,0.004735757181548996,0.005410925853608769
+Fastener,affected,C,logistic_regression,temp_bearing_degC_residual_lag3,0.0006717111844515844,0.001283060821272598
+Fastener,affected,C,logistic_regression,temp_bearing_degC_residual_lag7,0.004498368202732648,0.0058421553630253675
+Fastener,affected,C,logistic_regression,temp_bearing_degC_residual_median7,0.0034647206452964687,0.007267529557085316
+Fastener,affected,C,logistic_regression,temp_bearing_degC_residual_mad7,-0.005223199774316141,0.0032617667806416743
+Fastener,affected,C,logistic_regression,temp_bearing_degC_residual_slope7,0.002259779397142105,0.0055877696162616
+Fastener,affected,C,logistic_regression,temp_bearing_degC_residual_robust_z_lag1,-0.0008973162356144445,0.007156478672203836
+Fastener,affected,C,logistic_regression,temp_bearing_degC_residual_robust_z_lag3,0.011709926525492723,0.004037463134128366
+Fastener,affected,C,logistic_regression,temp_bearing_degC_residual_robust_z_lag7,-0.0036082970647550914,0.007638857300684037
+Fastener,affected,C,logistic_regression,temp_bearing_degC_residual_robust_z_median7,0.00358898510759049,0.006262924983149745
+Fastener,affected,C,logistic_regression,temp_bearing_degC_residual_robust_z_mad7,0.017243396180843324,0.008257445511316073
+Fastener,affected,C,logistic_regression,temp_bearing_degC_residual_robust_z_slope7,0.01505386638722725,0.0035739340771394823
+Fastener,affected,C,logistic_regression,temp_motor_degC_residual_lag1,0.011575177382269708,0.004578509887024704
+Fastener,affected,C,logistic_regression,temp_motor_degC_residual_lag3,0.01383638119071808,0.0045284451683872805
+Fastener,affected,C,logistic_regression,temp_motor_degC_residual_lag7,0.0054196901865754266,0.012504293436356652
+Fastener,affected,C,logistic_regression,temp_motor_degC_residual_median7,0.006160403879019782,0.0031393929283352355
+Fastener,affected,C,logistic_regression,temp_motor_degC_residual_mad7,0.0003889377628380671,0.0003843323854062596
+Fastener,affected,C,logistic_regression,temp_motor_degC_residual_slope7,0.0007469446832448398,0.0006516452095042832
+Fastener,affected,C,logistic_regression,temp_motor_degC_residual_robust_z_lag1,-0.0007386039711331597,0.005440109894321366
+Fastener,affected,C,logistic_regression,temp_motor_degC_residual_robust_z_lag3,-0.006388198528044851,0.007668020814573944
+Fastener,affected,C,logistic_regression,temp_motor_degC_residual_robust_z_lag7,0.008506164671509905,0.004055272305841837
+Fastener,affected,C,logistic_regression,temp_motor_degC_residual_robust_z_median7,-0.0005760905574181685,0.0015245983513213124
+Fastener,affected,C,logistic_regression,temp_motor_degC_residual_robust_z_mad7,-0.000347173641018587,0.00022926576862222485
+Fastener,affected,C,logistic_regression,temp_motor_degC_residual_robust_z_slope7,0.0008781343423178897,0.0009315544745144664
+Fastener,affected,C,logistic_regression,vibration_h_mms_residual_lag1,0.00368027460688188,0.0009329580822840598
+Fastener,affected,C,logistic_regression,vibration_h_mms_residual_lag3,-0.0006907393607882376,0.0007368371615959928
+Fastener,affected,C,logistic_regression,vibration_h_mms_residual_lag7,-0.01292494959854005,0.0029558774139601175
+Fastener,affected,C,logistic_regression,vibration_h_mms_residual_median7,0.0014872015058028283,0.0007929321877291046
+Fastener,affected,C,logistic_regression,vibration_h_mms_residual_mad7,0.004930298525490327,0.006305428388497184
+Fastener,affected,C,logistic_regression,vibration_h_mms_residual_slope7,-0.004000925800747475,0.0018021037387491571
+Fastener,affected,C,logistic_regression,vibration_h_mms_residual_robust_z_lag1,0.00037893625718259566,0.0004258739231592165
+Fastener,affected,C,logistic_regression,vibration_h_mms_residual_robust_z_lag3,0.00047625274005029067,0.0021648458359279743
+Fastener,affected,C,logistic_regression,vibration_h_mms_residual_robust_z_lag7,0.012164449763529067,0.012568080680410753
+Fastener,affected,C,logistic_regression,vibration_h_mms_residual_robust_z_median7,-0.0014776119032942996,0.003102731920778575
+Fastener,affected,C,logistic_regression,vibration_h_mms_residual_robust_z_mad7,0.008894321503370495,0.0038233032687502258
+Fastener,affected,C,logistic_regression,vibration_h_mms_residual_robust_z_slope7,-0.003322600996661068,0.002133838241444552
+Fastener,affected,C,logistic_regression,vibration_v_mms_residual_lag1,0.00757776695281769,0.007893086498620224
+Fastener,affected,C,logistic_regression,vibration_v_mms_residual_lag3,0.007051771805654694,0.004603316025846005
+Fastener,affected,C,logistic_regression,vibration_v_mms_residual_lag7,0.012994005687324367,0.011919710711673663
+Fastener,affected,C,logistic_regression,vibration_v_mms_residual_median7,-0.0008256766847477282,0.00043422064690238054
+Fastener,affected,C,logistic_regression,vibration_v_mms_residual_mad7,0.00461955541198462,0.003623935042618501
+Fastener,affected,C,logistic_regression,vibration_v_mms_residual_slope7,0.001419171508572653,0.000978271964870232
+Fastener,affected,C,logistic_regression,vibration_v_mms_residual_robust_z_lag1,-0.000966183073197513,0.001665357795499947
+Fastener,affected,C,logistic_regression,vibration_v_mms_residual_robust_z_lag3,-0.0008662924960638196,0.00030303468372113135
+Fastener,affected,C,logistic_regression,vibration_v_mms_residual_robust_z_lag7,-0.010191411227643101,0.006935759509601805
+Fastener,affected,C,logistic_regression,vibration_v_mms_residual_robust_z_median7,-9.77180101987644e-05,2.0407822006794612e-05
+Fastener,affected,C,logistic_regression,vibration_v_mms_residual_robust_z_mad7,0.01466767601046525,0.0036833409545730315
+Fastener,affected,C,logistic_regression,vibration_v_mms_residual_robust_z_slope7,0.018032643851940738,0.00395186506722832
+Fastener,affected,C,logistic_regression,oil_pressure_bar_residual_lag1,0.010915776341657052,0.0016029963759052657
+Fastener,affected,C,logistic_regression,oil_pressure_bar_residual_lag3,0.019883634861164918,0.0025560287567924214
+Fastener,affected,C,logistic_regression,oil_pressure_bar_residual_lag7,-0.00466753218093971,0.0033113940674138315
+Fastener,affected,C,logistic_regression,oil_pressure_bar_residual_median7,0.01632349840020722,0.005767392723162845
+Fastener,affected,C,logistic_regression,oil_pressure_bar_residual_mad7,0.020484182757428998,0.0017325845954954022
+Fastener,affected,C,logistic_regression,oil_pressure_bar_residual_slope7,0.00014255261301123387,0.00023395476764866802
+Fastener,affected,C,logistic_regression,oil_pressure_bar_residual_robust_z_lag1,0.0011586664502932498,0.006599163797056264
+Fastener,affected,C,logistic_regression,oil_pressure_bar_residual_robust_z_lag3,-0.00691979352795329,0.005582112930095729
+Fastener,affected,C,logistic_regression,oil_pressure_bar_residual_robust_z_lag7,0.027666508917874404,0.004278801124244339
+Fastener,affected,C,logistic_regression,oil_pressure_bar_residual_robust_z_median7,-0.004501305288179436,0.0038131760123695613
+Fastener,affected,C,logistic_regression,oil_pressure_bar_residual_robust_z_mad7,-0.00757779317502541,0.0026257673715355833
+Fastener,affected,C,logistic_regression,oil_pressure_bar_residual_robust_z_slope7,-2.379580619895257e-05,0.00020567960890231782
+Fastener,severe,B,random_forest,machine_type,0.0005226145928992123,0.0005300443153935522
+Fastener,severe,B,random_forest,asset_tag,0.001489780398082858,1.7475676293943757e-05
+Fastener,severe,B,random_forest,temp_bearing_degC,0.0008008312193404574,0.0007653653406714037
+Fastener,severe,B,random_forest,temp_motor_degC,0.00037279192609413733,0.0005718107319289531
+Fastener,severe,B,random_forest,vibration_h_mms,-0.0011368454417629303,0.0006274934772994092
+Fastener,severe,B,random_forest,vibration_v_mms,6.719885672972746e-05,0.00047410711922266086
+Fastener,severe,B,random_forest,oil_pressure_bar,0.0002774271619599168,0.0008189626186350271
+Fastener,severe,B,random_forest,load_pct,-0.001033731437601339,0.0011763187883128783
+Fastener,severe,B,random_forest,shaft_rpm,-0.0019336027660170167,0.00017792578124243677
+Fastener,severe,B,random_forest,power_consumption_kw,0.0010592336965210506,0.0010123400869951956
+Fastener,severe,B,random_forest,day_of_week,0.001293455693442665,0.0021962978348631684
+Fastener,severe,B,random_forest,month_sin,5.7623800590785495e-06,0.0003070131663272156
+Fastener,severe,B,random_forest,month_cos,-0.00022674930560879122,0.0004039429110917546
+Fastener,severe,B,random_forest,temp_bearing_degC_lag1,-0.00015678316509821003,0.00019924641349428228
+Fastener,severe,B,random_forest,temp_bearing_degC_lag3,-8.281977889911783e-05,0.0009490725214398321
+Fastener,severe,B,random_forest,temp_bearing_degC_lag7,-0.00027256228013478853,0.000503007642493329
+Fastener,severe,B,random_forest,temp_bearing_degC_diff1,0.00015721187602780613,0.0024765604465543764
+Fastener,severe,B,random_forest,temp_bearing_degC_diff7,0.00045877105985483194,0.001891316385565377
+Fastener,severe,B,random_forest,temp_bearing_degC_median3,7.540716873872452e-05,0.0013599636932119005
+Fastener,severe,B,random_forest,temp_bearing_degC_median7,-0.0009853787030706049,0.0004320572304188922
+Fastener,severe,B,random_forest,temp_bearing_degC_mad7,-0.0017227514344531753,0.00012142700045345206
+Fastener,severe,B,random_forest,temp_bearing_degC_slope7,0.000968557513113214,0.0007391066054344656
+Fastener,severe,B,random_forest,temp_motor_degC_lag1,0.000453910216528352,0.000801953561712642
+Fastener,severe,B,random_forest,temp_motor_degC_lag3,-0.0033297389382470483,0.0012855973229583004
+Fastener,severe,B,random_forest,temp_motor_degC_lag7,0.001337454187441086,0.00040838492110500187
+Fastener,severe,B,random_forest,temp_motor_degC_diff1,-0.0034672480575775057,0.00019192248582200027
+Fastener,severe,B,random_forest,temp_motor_degC_diff7,0.0009372971268763209,0.0010874200800988817
+Fastener,severe,B,random_forest,temp_motor_degC_median3,0.0008182591499167335,0.0009574693783402377
+Fastener,severe,B,random_forest,temp_motor_degC_median7,4.3268991673250705e-05,0.0010244768299715163
+Fastener,severe,B,random_forest,temp_motor_degC_mad7,-0.000694109614021228,0.0020597146280190116
+Fastener,severe,B,random_forest,temp_motor_degC_slope7,-0.0021455640533571754,0.0012994181913798528
+Fastener,severe,B,random_forest,vibration_h_mms_lag1,-0.0002037284765446986,0.00020972783867708171
+Fastener,severe,B,random_forest,vibration_h_mms_lag3,5.273691216165407e-07,0.0024961414598661876
+Fastener,severe,B,random_forest,vibration_h_mms_lag7,-0.00016340891188621845,0.00033796202527844733
+Fastener,severe,B,random_forest,vibration_h_mms_diff1,0.0007994272830068733,0.0005973429958122832
+Fastener,severe,B,random_forest,vibration_h_mms_diff7,-0.0018855640312494665,0.0008017914804365441
+Fastener,severe,B,random_forest,vibration_h_mms_median3,-0.0006713960506332962,0.00023674633101598768
+Fastener,severe,B,random_forest,vibration_h_mms_median7,-0.0008559779828067547,0.0003229137776644283
+Fastener,severe,B,random_forest,vibration_h_mms_mad7,-0.0011905322190158575,0.0008290892922677112
+Fastener,severe,B,random_forest,vibration_h_mms_slope7,0.0006545299200505014,0.00019188020536113376
+Fastener,severe,B,random_forest,vibration_v_mms_lag1,0.0007831082566058436,0.0009553247236541442
+Fastener,severe,B,random_forest,vibration_v_mms_lag3,-0.0004930163021136391,0.0019047478065103215
+Fastener,severe,B,random_forest,vibration_v_mms_lag7,-0.00015244251570024903,0.00034238986881684075
+Fastener,severe,B,random_forest,vibration_v_mms_diff1,0.0017569309136058434,0.0010325376839369447
+Fastener,severe,B,random_forest,vibration_v_mms_diff7,-0.001977525141957353,0.0005295941076792649
+Fastener,severe,B,random_forest,vibration_v_mms_median3,0.0003383878867824636,0.0001715151416471517
+Fastener,severe,B,random_forest,vibration_v_mms_median7,-0.0013202662775568218,0.00011196509368938099
+Fastener,severe,B,random_forest,vibration_v_mms_mad7,-0.005417093305354267,0.0019063610848503315
+Fastener,severe,B,random_forest,vibration_v_mms_slope7,5.3227664764476705e-05,0.00041674217208733944
+Fastener,severe,B,random_forest,oil_pressure_bar_lag1,-0.0004889112829940511,0.0009127811833911922
+Fastener,severe,B,random_forest,oil_pressure_bar_lag3,0.0002451616693386523,0.0017056043237977825
+Fastener,severe,B,random_forest,oil_pressure_bar_lag7,-0.002262792707301562,0.0009535680832024744
+Fastener,severe,B,random_forest,oil_pressure_bar_diff1,-0.0006308826555798825,0.00031326784087281766
+Fastener,severe,B,random_forest,oil_pressure_bar_diff7,-0.00020597025430374566,0.00012864619169691813
+Fastener,severe,B,random_forest,oil_pressure_bar_median3,-0.0010039773883871936,0.0015177310143332245
+Fastener,severe,B,random_forest,oil_pressure_bar_median7,0.0016197732215894399,0.00036348521419680096
+Fastener,severe,B,random_forest,oil_pressure_bar_mad7,0.0003512797435038962,0.0003682471353895252
+Fastener,severe,B,random_forest,oil_pressure_bar_slope7,-0.007824010833205981,0.0016649896966279833
+Fastener,severe,B,random_forest,load_pct_lag1,-0.0007186215429121866,0.00023505489768263054
+Fastener,severe,B,random_forest,load_pct_lag3,-0.0002915258651468751,0.0008740488972105404
+Fastener,severe,B,random_forest,load_pct_lag7,-0.00048290436610199636,0.00019968700638013667
+Fastener,severe,B,random_forest,load_pct_diff1,0.0011957576782825254,0.0014307219054292347
+Fastener,severe,B,random_forest,load_pct_diff7,0.001525046736632336,0.0007318897336140513
+Fastener,severe,B,random_forest,load_pct_median3,-0.00022694528292356922,0.00020960016694810562
+Fastener,severe,B,random_forest,load_pct_median7,-0.0015601138615370287,0.0001947460796398793
+Fastener,severe,B,random_forest,load_pct_mad7,0.0015618186346715017,0.0004325561828617574
+Fastener,severe,B,random_forest,load_pct_slope7,0.0014971407183341403,0.00035911813586744816
+Fastener,severe,B,random_forest,shaft_rpm_lag1,-0.003930195475744591,0.0021182708894746153
+Fastener,severe,B,random_forest,shaft_rpm_lag3,-7.673187988349131e-06,0.00037773598856208145
+Fastener,severe,B,random_forest,shaft_rpm_lag7,-0.00029346041914216775,0.0006632905303069974
+Fastener,severe,B,random_forest,shaft_rpm_diff1,0.0014737279926113935,0.001242992806997544
+Fastener,severe,B,random_forest,shaft_rpm_diff7,-0.0005385669598161705,0.0004892291857166746
+Fastener,severe,B,random_forest,shaft_rpm_median3,-0.0002823960619498453,0.0003118830480010831
+Fastener,severe,B,random_forest,shaft_rpm_median7,-0.00035693279290573837,0.00029302571932025937
+Fastener,severe,B,random_forest,shaft_rpm_mad7,-0.0003579915296438978,0.0006225859885808192
+Fastener,severe,B,random_forest,shaft_rpm_slope7,0.0005280929906801719,0.0015110806220690178
+Fastener,severe,B,random_forest,power_consumption_kw_lag1,-5.415573944671237e-05,9.71993605506667e-05
+Fastener,severe,B,random_forest,power_consumption_kw_lag3,-0.0020439700785582645,0.0014570167976622195
+Fastener,severe,B,random_forest,power_consumption_kw_lag7,-0.00027755138972130125,0.0014056981602772656
+Fastener,severe,B,random_forest,power_consumption_kw_diff1,-0.0020760532624425876,0.0016232965724256284
+Fastener,severe,B,random_forest,power_consumption_kw_diff7,-0.0005201784702219721,0.0005035188882566814
+Fastener,severe,B,random_forest,power_consumption_kw_median3,6.199538949665934e-05,0.00024706766809523404
+Fastener,severe,B,random_forest,power_consumption_kw_median7,0.000601051898990366,0.00048269732092372166
+Fastener,severe,B,random_forest,power_consumption_kw_mad7,0.0011687215175509278,0.0008561053112277466
+Fastener,severe,B,random_forest,power_consumption_kw_slope7,-0.0021570750871385998,0.001522191897335867
+Fastener,severe,B,random_forest,affected_lag1,-0.00013918218717674213,0.00013829333457628107
+Fastener,severe,B,random_forest,affected_count_7d,-0.0028995091501599402,0.0005185351318055914
+Fastener,severe,B,random_forest,affected_count_30d,-0.00013757456894364825,0.000554514110012122
+Fastener,severe,B,random_forest,days_since_last_affected,-0.0018019667422104594,0.0016555845133098797
+Fastener,severe,B,random_forest,severe_lag1,0.0,0.0
+Fastener,severe,B,random_forest,severe_count_30d,9.89744357200728e-05,0.0001988226221351903

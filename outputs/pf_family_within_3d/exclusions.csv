@@ -1,0 +1,11 @@
+﻿split,exclusion_reason,rows
+test,미래 날짜 누락·기간 끝,189
+test,사용,11721
+test,오늘 고장 표시,2940
+train,미래 정답이 다음 구간 침범,178
+train,사용,52859
+train,오늘 고장 표시,13731
+train,이전 30일 기록 부족,2172
+validation,미래 정답이 다음 구간 침범,215
+validation,사용,11631
+validation,오늘 고장 표시,2914
