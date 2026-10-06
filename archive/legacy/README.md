@@ -33,6 +33,7 @@ DB(MySQL)가 팀원 컴퓨터에만 있어 다른 팀원이 로그인할 수 없
 | `.env.example` | DB 주소·암호화 키·관리자 계정 환경 변수 |
 | `docs/DASHBOARD_LOGIN_GUIDE.md` 외 6개 | 로그인·세션·계정 역할·감사 로그 안내 |
 | `tests/test_dashboard_auth.py` 외 6개 | 위 모듈의 테스트 31개 |
+| `sql/recent_logs.sql` | 감사 로그 조회용 SELECT 문(MySQL Workbench용) — 최상위 `sql/`에 남아 있던 걸 뒤늦게 이동 |
 
 다시 쓰려면 이 파일들을 원래 위치로 옮기고, `requirements.txt`에서 뺀 패키지
 (`SQLAlchemy>=2.0,<2.1`, `PyMySQL>=1.1,<2`, `argon2-cffi>=23,<26`, `cryptography>=43,<47`,
