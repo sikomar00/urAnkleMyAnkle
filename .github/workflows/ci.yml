@@ -19,6 +19,9 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+      - name: Install Korean fonts (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y fonts-nanum
       - run: pip install -r requirements.txt ruff==0.16.10
       - run: ruff check .                     # 문법·정의되지 않은 이름·쓰지 않는 import (pyproject.toml [tool.ruff])
       - run: python -c "import src.wireframe_app"   # 대시보드 앱 import 가능한지(DB·로그인 없음)
