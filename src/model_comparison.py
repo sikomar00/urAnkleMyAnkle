@@ -24,6 +24,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.base import clone
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import average_precision_score, confusion_matrix, roc_auc_score
@@ -152,7 +153,8 @@ def build_machine_risk(raw: pd.DataFrame, output: Path, thresholds=(12, 13, 14))
         for name, estimator in estimators.items():
             pipeline = current_day_pipeline(TEMPORAL_NUMERIC, CATEGORICAL, None)
             if estimator is not None:
-                pipeline.set_params(classifier=estimator)
+                # 기준마다 새 객체로 학습한다 — 같은 객체를 넣으면 다음 기준의 fit이 앞 기준 모델을 덮어쓴다.
+                pipeline.set_params(classifier=clone(estimator))
             pipeline.fit(train[columns], train[target])
             fitted[name] = pipeline
             scores[name] = (pipeline.predict_proba(valid[columns])[:, 1], pipeline.predict_proba(test[columns])[:, 1])

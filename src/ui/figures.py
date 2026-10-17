@@ -38,7 +38,8 @@ def _heatmap_figure(heat, coverage, theme):
     step = max(1, len(periods) // 6)
     tickvals = [p for p in periods if p in set(periods[::step]) | set(partial)]
     observed_days = np.tile([coverage.get(p, (0, 0))[0] for p in periods], (len(pivot.index), 1))
-    zmax = max(int(pivot.to_numpy().max()), 1)
+    # 기간에 데이터가 없으면(시작일 > 종료일, 데이터 범위 밖) pivot이 비어 있다 — max(initial=0)로 빈 그림을 그린다.
+    zmax = max(int(pivot.to_numpy().max(initial=0)), 1)
     first = 1 / zmax  # 값 1의 위치 — 0만 표면색, 1 이상은 seq-blue-100부터
     colorscale = ([[0, C("surface-sunken", theme)], [first * 0.999, C("surface-sunken", theme)]]
                   + [[first + (1 - first) * i / (len(_SEQ_BLUE) - 1), C(name, theme)]

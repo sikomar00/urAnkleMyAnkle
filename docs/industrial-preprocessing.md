@@ -2,7 +2,7 @@
 
 실행: `python -m src.prepare_machine_data`
 
-다른 원본은 `--input 경로`, 결과 위치는 `--output-dir 경로`로 지정합니다. 기본 원본은 사용자 Downloads의 `synthetic_industrial_machine_data.csv`, 기본 결과는 `data/processed/industrial/`입니다.
+다른 원본은 `--input 경로`, 결과 위치는 `--output-dir 경로`로 지정합니다. 기본 원본은 `data/raw/synthetic_industrial_machine_data.csv`, 기본 결과는 `data/processed/industrial/`입니다.
 
 ## 결과 파일
 

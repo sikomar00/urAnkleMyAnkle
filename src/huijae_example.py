@@ -706,8 +706,8 @@ def main():
     parser.add_argument(
         '--data',
         type=Path,
-        default=Path.home() / 'Downloads' / 'synthetic_industrial_machine_data.csv',
-        help='원본 CSV 경로 (생략하면 Downloads의 synthetic_industrial_machine_data.csv 사용)',
+        default=ROOT / 'data' / 'raw' / 'synthetic_industrial_machine_data.csv',
+        help='원본 CSV 경로 (생략하면 data/raw의 synthetic_industrial_machine_data.csv 사용)',
     )
     parser.add_argument('--output-dir', type=Path, default=ROOT / 'outputs', help='결과 저장 폴더')
     parser.add_argument('--balanced', choices=['auto', 'all', 'none'], default='auto',

@@ -257,8 +257,8 @@ def interpret(results, rates):
 def run_experiment(experiment):
     parser = argparse.ArgumentParser(description=f'{experiment}: 설비 고장 기준 후보 비교')
     parser.add_argument('--data', type=Path,
-                        default=Path.home() / 'Downloads' / 'synthetic_industrial_machine_data.csv',
-                        help='원본 CSV 경로. 생략하면 Downloads의 원본 CSV를 사용합니다.')
+                        default=ROOT / 'data' / 'raw' / 'synthetic_industrial_machine_data.csv',
+                        help='원본 CSV 경로. 생략하면 data/raw의 원본 CSV를 사용합니다.')
     parser.add_argument('--output-dir', type=Path,
                         default=ROOT / 'outputs' / f'pd_bd_{experiment.lower()}',
                         help='CSV 저장 폴더')

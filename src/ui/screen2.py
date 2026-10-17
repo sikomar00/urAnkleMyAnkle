@@ -1,5 +1,7 @@
 """화면 ② 기계 상세 — 정보 띠, 센서 소형 다중 그래프, 부품 출고 금액."""
 
+import math
+
 from dash import dcc, html
 
 from ..dashboard_data import (
@@ -64,7 +66,9 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
          metric("위험도", 120, f"{detail['risk_score']:,.0f}"),
          metric("최근 고장 표시일", 140, detail["last_failure_date"] or "—", cls=CODE_12),
          metric("고장 표시 일수 (일)", 140, f"{detail['failure_days_count']:,}"),
-         metric("평균 소비 전력 (kW)", 140, f"{detail['avg_power_kw']:,.2f}")],
+         # 기간에 관측일이 없으면 평균이 NaN이다 — "nan" 대신 "—"를 보인다.
+         metric("평균 소비 전력 (kW)", 140,
+                "—" if math.isnan(detail["avg_power_kw"]) else f"{detail['avg_power_kw']:,.2f}")],
         className="pf-card",
         style={"height": "88px", "flexDirection": "row",
                "alignItems": "center", "gap": "16px"},

@@ -50,7 +50,7 @@ current_asset_score_model.py
 
 0. `current_family_diagnosis.py`
    - 목적: 당일 장비 센서로 9개 부품 Family의 이상·심각 점검 범위를 진단
-   - 실행: `python -m src.current_family_diagnosis --data dataVerification/synthetic_industrial_machine_data.csv`
+   - 실행: `python -m src.current_family_diagnosis --data data/raw/synthetic_industrial_machine_data.csv`
    - Feature: A(당일), B(과거 센서·Family 상태), C(운전조건 보정 잔차)
    - 주의: 여러 Family가 동시에 양성일 수 있는 다중라벨이며 고장 확정이 아님
 

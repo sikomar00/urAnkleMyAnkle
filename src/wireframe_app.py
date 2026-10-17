@@ -469,6 +469,10 @@ def write_filters(plant, machine_type, machine, _period_clicks, _reset_clicks, s
         # 기간 버튼이 채워 넣은 값이 Input으로 되돌아온 것이면 버튼 선택을 풀지 않는다.
         if (start_date, end_date) == _period_dates(current):
             return no_update, *dd_values, *date_values
+        # 시작일이 종료일보다 늦으면 기간이 비어 화면이 빈다 — 두 날짜를 바꿔 넣는다.
+        if start_date and end_date and start_date > end_date:
+            start_date, end_date = end_date, start_date
+            date_values = (start_date, end_date)
         # 직접 고친 날짜가 정본이 된다 — 눌린 기간 버튼을 푼다.
         new.update(period_index=None, start=start_date, end=end_date)
     else:

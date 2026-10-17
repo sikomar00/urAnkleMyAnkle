@@ -352,8 +352,8 @@ def run(experiment):
     title, days, task, family = EXPERIMENTS[experiment]
     parser = argparse.ArgumentParser(description=title)
     parser.add_argument('--data', type=Path,
-                        default=Path.home() / 'Downloads' / 'synthetic_industrial_machine_data.csv',
-                        help='원본 CSV 경로. 생략하면 Downloads 파일을 사용합니다.')
+                        default=ROOT / 'data' / 'raw' / 'synthetic_industrial_machine_data.csv',
+                        help='원본 CSV 경로. 생략하면 data/raw 파일을 사용합니다.')
     parser.add_argument('--output-dir', type=Path, default=ROOT / 'outputs' / f'pf_{experiment}',
                         help='결과 CSV 저장 폴더')
     args = parser.parse_args()

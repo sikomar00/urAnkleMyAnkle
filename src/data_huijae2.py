@@ -263,7 +263,7 @@ def run_test(splits, source_hash, run_dir, k=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--input', type=Path, help='원본 CSV 경로. 기본값은 Downloads의 합성 데이터입니다.')
+    parser.add_argument('--input', type=Path, help='원본 CSV 경로. 기본값은 data/raw의 합성 데이터입니다.')
     parser.add_argument('--stage', choices=['validation', 'test'], default='validation')
     parser.add_argument('--top-k', type=int, default=None, help='전체 설비 합산 하루 점검 수. 검증 기본값 10.')
     parser.add_argument('--run-dir', type=Path, help='검증은 새 폴더, 시험은 기존 검증 결과 폴더를 지정합니다.')
@@ -276,7 +276,7 @@ def main():
         manifest = json.loads((args.run_dir / 'manifest.json').read_text(encoding='utf-8'))
         source = (args.input or Path(manifest['source_path'])).resolve()
     else:
-        source = (args.input or Path.home() / 'Downloads/synthetic_industrial_machine_data.csv').resolve()
+        source = (args.input or ROOT / 'data/raw/synthetic_industrial_machine_data.csv').resolve()
     source_hash = digest(source)
     raw = pd.read_csv(source, parse_dates=['transaction_date'])
     splits, audit = prepare_rows(raw)

@@ -168,7 +168,7 @@ def prepare(raw):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--input', type=Path, default=Path.home() / 'Downloads' / 'synthetic_industrial_machine_data.csv')
+    parser.add_argument('--input', type=Path, default=ROOT / 'data' / 'raw' / 'synthetic_industrial_machine_data.csv')
     parser.add_argument('--output-dir', type=Path, default=ROOT / 'data/processed/industrial')
     args = parser.parse_args()
     source = args.input.resolve()

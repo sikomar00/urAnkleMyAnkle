@@ -10,7 +10,7 @@
 ./.venv/Scripts/python.exe -m src.data_huijae2 --top-k 10
 ```
 
-`src/data_huijae2.py`를 직접 실행해도 됩니다. 원본 경로는 기본적으로 Downloads의 `synthetic_industrial_machine_data.csv`이며 `--input 경로`로 바꿀 수 있습니다. 기존 `prepare_machine_data.py`의 전처리 함수를 재사용해 원본을 메모리에서 가공하며 원본과 이전 가공 파일을 덮어쓰지 않습니다.
+`src/data_huijae2.py`를 직접 실행해도 됩니다. 원본 경로는 기본적으로 `data/raw/synthetic_industrial_machine_data.csv`이며 `--input 경로`로 바꿀 수 있습니다. 기존 `prepare_machine_data.py`의 전처리 함수를 재사용해 원본을 메모리에서 가공하며 원본과 이전 가공 파일을 덮어쓰지 않습니다.
 
 결과는 `data/processed/industrial/ablation_results/실행시각/validation/`에 저장됩니다. `--run-dir 새폴더`로 위치를 지정할 수 있고, 기존 폴더를 덮어쓰지 않습니다. 각 실행에는 A/B/C 학습 모델과 입력 목록·설정·원본 해시를 기록한 `manifest.json`이 함께 저장됩니다.
 

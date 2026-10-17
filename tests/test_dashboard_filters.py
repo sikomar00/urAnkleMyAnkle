@@ -255,6 +255,38 @@ def test_report_export_works_with_custom_date_range():
     assert build_report_pdf(custom, w.DEFAULT_SEG, 'mgr')[:4] == b'%PDF'
 
 
+
+def test_report_context_tolerates_stale_seg_indices_and_fills_reference_date():
+    """seg-store는 localStorage에 남는다 — 옛 버전의 범위 밖 번호로도 보고서가 나와야 한다."""
+    from src.dashboard_data import load_data_reference_date
+    from src.ui.report import _report_context
+    meta = dict(_report_context(_filters(), {'task': 4, 'threshold': 7}, 'mgr')['meta'])
+    assert meta['모델 과제'] == '기계 고위험일 판별' and meta['위험 기준선'] == '12'
+    assert meta['데이터 기준일'] == load_data_reference_date()
+    # 12/13/14 기준선은 기계 고위험일 판별에만 있다.
+    assert dict(_report_context(_filters(), {'task': 1, 'threshold': 0}, 'mgr')['meta'])['위험 기준선'] == '해당 없음'
+
+
+def test_empty_period_renders_screens_instead_of_error():
+    """시작일 > 종료일이거나 데이터 범위 밖이면 기간이 빈다 — 화면이 오류로 바뀌지 않고 'nan'도 보이지 않는다."""
+    for start, end in [('2024-12-03', '2024-11-01'), ('2025-02-01', '2025-03-01')]:
+        assets, s, e = w._filter_scope(_filters(period_index=None, start=start, end=end))
+        w.screen_1(assets=assets, start=s, end=e)
+        assert 'nan' not in _text(w.screen_2(asset_tag='AST-2031', start=s, end=e))
+
+
+def test_reversed_custom_dates_are_swapped():
+    from dash._callback_context import context_value
+    from dash._utils import AttributeDict
+    current = _filters(period_index=LAST_30_DAYS)
+    token = context_value.set(AttributeDict(triggered_inputs=[{'prop_id': 'start-date.value', 'value': '2024-12-03'}]))
+    try:
+        new, *_, start_box, end_box = w.write_filters(None, None, None, [], 0, '2024-12-03', '2024-11-01', current)
+    finally:
+        context_value.reset(token)
+    assert (new['start'], new['end'], new['period_index']) == ('2024-11-01', '2024-12-03', None)
+    assert (start_box, end_box) == ('2024-11-01', '2024-12-03')
+
 def test_rate_change_shows_trend_glyph_with_words_not_color_only():
     from src.ui.screen1 import rate_change
     worse = rate_change(13.33, 9.74)

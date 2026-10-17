@@ -78,6 +78,16 @@ def test_performance_sentence_uses_comparison_numbers():
     assert f"기준 B(기계별 과거 비율)의 AP는 {base_b['average_precision']:.3f}" in text
 
 
+
+def test_performance_sentence_says_equal_when_baseline_b_ties_at_shown_precision():
+    from src.ui.screen3 import _performance_sentence
+    rows = load_model_comparison('machine_risk', 12)
+    focus = next(r for r in rows if r['model'] == 'logistic_regression')
+    tied = [{**r, 'average_precision': focus['average_precision'] + 0.0001} if r['model'] == 'baseline_b' else r
+            for r in rows]
+    text = _performance_sentence(tied, focus, 'machine_risk')
+    assert '이 모델과 같습니다' in text and '0.000 높습니다' not in text
+
 def test_machine_risk_production_label_is_validation_choice_without_todo():
     text = _text(screen_3({"task": 0, "threshold": 0}))
     assert '운영 모델은 검증 AP 1위' in text

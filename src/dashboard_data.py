@@ -766,7 +766,7 @@ def _family_metrics_raw() -> pd.DataFrame:
         raise FileNotFoundError(
             "부품군 진단 metrics.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
             "python -m src.current_family_diagnosis "
-            "--data dataVerification/synthetic_industrial_machine_data.csv"
+            "--data data/raw/synthetic_industrial_machine_data.csv"
         )
     return pd.read_csv(path)
 
@@ -820,7 +820,7 @@ def load_family_feature_importance(part_family: str) -> list[dict]:
         raise FileNotFoundError(
             "부품군 변수중요도 feature_importance.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
             "python -m src.current_family_diagnosis "
-            "--data dataVerification/synthetic_industrial_machine_data.csv"
+            "--data data/raw/synthetic_industrial_machine_data.csv"
         )
     importance = pd.read_csv(path)
     selected = importance.loc[
@@ -843,7 +843,7 @@ def _family_test_predictions_raw() -> pd.DataFrame:
         raise FileNotFoundError(
             "부품군 진단 test_predictions.csv가 없습니다. 먼저 다음 명령을 실행하세요:\n"
             "python -m src.current_family_diagnosis "
-            "--data dataVerification/synthetic_industrial_machine_data.csv"
+            "--data data/raw/synthetic_industrial_machine_data.csv"
         )
     return pd.read_csv(path)
 

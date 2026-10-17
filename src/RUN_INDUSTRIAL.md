@@ -8,8 +8,8 @@
 미래 예측 전에 다음 명령으로 당일 Family 진단부터 실행합니다.
 
 ```bash
-/Users/kodohyeon/Documents/project_LS/venv/bin/python -m src.current_family_diagnosis \
-  --data dataVerification/synthetic_industrial_machine_data.csv \
+./venv/bin/python -m src.current_family_diagnosis \
+  --data data/raw/synthetic_industrial_machine_data.csv \
   --feature-sets A B C \
   --targets affected severe \
   --scope overall \
@@ -40,7 +40,7 @@ Precision·Recall·F1과 다중라벨 Macro·Micro 지표를 함께 봅니다. P
 python src/current_asset_model.py
 python src/current_asset_score_model.py
 python src/current_asset_severity_experiments.py \
-  --data dataVerification/synthetic_industrial_machine_data.csv \
+  --data data/raw/synthetic_industrial_machine_data.csv \
   --high-risk-thresholds 12 13 --feature-sets A B C D --scope all --max-iter 100
 python src/forecast_asset_model.py --horizon 7 --risk-definition new
 python src/forecast_asset_model.py --horizon 7 --risk-definition any
@@ -52,7 +52,7 @@ python src/eda.py
 가상환경을 활성화하지 않았다면 이 프로젝트의 환경 경로를 직접 사용해도 됩니다.
 
 ```bash
-/Users/kodohyeon/Documents/project_LS/venv/bin/python src/current_asset_model.py
+./venv/bin/python src/current_asset_model.py
 ```
 
 ## 2. Windows PowerShell
@@ -61,7 +61,7 @@ python src/eda.py
 .\venv\Scripts\python.exe src\current_asset_model.py
 .\venv\Scripts\python.exe src\current_asset_score_model.py
 .\venv\Scripts\python.exe src\current_asset_severity_experiments.py `
-  --data dataVerification\synthetic_industrial_machine_data.csv `
+  --data data\raw\synthetic_industrial_machine_data.csv `
   --high-risk-thresholds 12 13 --feature-sets A B C D --scope all --max-iter 100
 .\venv\Scripts\python.exe src\forecast_asset_model.py --horizon 7 --risk-definition new
 .\venv\Scripts\python.exe src\forecast_asset_model.py --horizon 7 --risk-definition any
@@ -116,7 +116,7 @@ python src/current_asset_model.py --data data/raw/my_data.csv --output outputs/m
 
 ```bash
 python src/current_asset_score_model.py \
-  --data dataVerification/synthetic_industrial_machine_data.csv \
+  --data data/raw/synthetic_industrial_machine_data.csv \
   --scope all \
   --max-iter 100
 ```
@@ -162,8 +162,8 @@ LightGBM은 macOS의 `libomp` 같은 네이티브 의존성 문제를 피하기 
 ### 센서 이상·이력 Feature 비교 실험
 
 ```bash
-/Users/kodohyeon/Documents/project_LS/venv/bin/python src/current_asset_severity_experiments.py \
-  --data dataVerification/synthetic_industrial_machine_data.csv \
+./venv/bin/python src/current_asset_severity_experiments.py \
+  --data data/raw/synthetic_industrial_machine_data.csv \
   --high-risk-thresholds 12 13 \
   --feature-sets A B C D \
   --scope all \

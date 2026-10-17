@@ -207,11 +207,13 @@ def _performance_sentence(rows, focus_row, task_key):
     baseline_b = by_model.get("baseline_b")
     if baseline_b is not None:
         b_name = baseline_b["model_label"].split("·", 1)[-1].strip()
-        gap = ap - baseline_b["average_precision"]
+        # 표시 자릿수(소수 셋째)에서 같으면 "0.000 높습니다"가 아니라 같다고 적는다.
+        gap = round(ap - baseline_b["average_precision"], 3)
         sentences.append(
             f"기준 B({b_name})의 AP는 {baseline_b['average_precision']:.3f}, "
             + (f"이 모델이 {gap:.3f} 높습니다." if gap > 0 else
-               f"이 모델보다 {-gap:.3f} 높습니다 — 과거 비율만으로도 이 모델보다 잘 맞힙니다."))
+               f"이 모델보다 {-gap:.3f} 높습니다 — 과거 비율만으로도 이 모델보다 잘 맞힙니다." if gap < 0 else
+               "이 모델과 같습니다 — 과거 비율만으로도 이 모델만큼 맞힙니다."))
     best = next((r for r in rows if bool(r["selected_by_validation"])), None)
     if best is not None and best["model"] != focus_row["model"]:
         sentences.append(f"검증 AP가 가장 높았던 {best['model_label']}의 시험 AP는 {best['average_precision']:.3f}입니다.")

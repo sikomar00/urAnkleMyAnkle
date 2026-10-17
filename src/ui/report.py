@@ -102,6 +102,10 @@ def _report_context(filters, seg_state, audience):
     filters = filters or DEFAULT_FILTERS
     seg_state = seg_state or DEFAULT_SEG
     aud = REPORT_AUDIENCES.get(audience, REPORT_AUDIENCES[DEFAULT_AUDIENCE])
+    # seg-store는 localStorage에 남아 있어 옛 버전의 범위 밖 번호가 올 수 있다 — 0으로 되돌린다.
+    task, threshold = seg_state.get("task", 0), seg_state.get("threshold", 0)
+    task = task if isinstance(task, int) and 0 <= task < len(SEG_GROUPS["task"]) else 0
+    threshold = threshold if isinstance(threshold, int) and 0 <= threshold < len(SEG_GROUPS["threshold"]) else 0
     return {
         "aud": aud,
         "generated": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -110,13 +114,14 @@ def _report_context(filters, seg_state, audience):
             ("보고 목적", aud["purpose"]),
             ("집계 단위", aud["grain"]),
             ("생성 시각", datetime.now().strftime("%Y-%m-%d %H:%M")),
-            ("데이터 기준일", NO_DATA_MARK),
+            ("데이터 기준일", load_data_reference_date()),
             ("공장", filters.get("plant") or "전체"),
             ("기계 종류", filters.get("machine_type") or "전체"),
             ("기계", filters.get("machine") or "전체"),
             ("기간", _period_text(filters)),
-            ("모델 과제", SEG_GROUPS["task"][seg_state.get("task", 0)]),
-            ("위험 기준선", SEG_GROUPS["threshold"][seg_state.get("threshold", 0)]),
+            ("모델 과제", SEG_GROUPS["task"][task]),
+            # 12/13/14 기준선은 기계 고위험일 판별(task 0)에만 적용된다.
+            ("위험 기준선", SEG_GROUPS["threshold"][threshold] if task == 0 else "해당 없음"),
             ("제외 섹션", aud["excludes"]),
         ],
     }

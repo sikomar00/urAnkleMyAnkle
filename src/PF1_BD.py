@@ -141,8 +141,8 @@ def show_table(title, frame):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data', type=Path,
-                        default=Path.home() / 'Downloads' / 'synthetic_industrial_machine_data.csv',
-                        help='원본 CSV 경로 (생략하면 Downloads의 CSV 사용)')
+                        default=ROOT / 'data' / 'raw' / 'synthetic_industrial_machine_data.csv',
+                        help='원본 CSV 경로 (생략하면 data/raw의 CSV 사용)')
     parser.add_argument('--output-dir', type=Path, default=ROOT / 'outputs' / 'pf1_bd',
                         help='결과 저장 폴더')
     args = parser.parse_args()
