@@ -222,7 +222,7 @@ __marimo__/
 
 # ===== 프로젝트 전용 규칙 =====
 
-# 📊 원본/가공 데이터 — 용량 크고 라이선스 문제 있어서 Git에 안 올림
+# 📊 원본/가공 데이터 — 기본은 Git에 안 올린다. 합성 원본 CSV 하나만 예외로 커밋한다(DATA_SOURCES.md).
 data/raw/*
 data/processed/*
 !data/raw/.gitkeep
@@ -236,9 +236,19 @@ models/*.joblib
 # 장비 점수·4단계 모델 실행 산출물(재생성 가능, 대용량 모델 포함)
 outputs/asset_score_current/
 outputs/asset_severity_experiments/
+# src/RUN_INDUSTRIAL.md 명령이 만드는 산출물(재생성 가능)
+outputs/asset_current/
+outputs/asset_forecast_7d_*/
+outputs/part_current/
+outputs/part_forecast_7d/
+outputs/model_comparison.csv
+# 실험이 저장하는 모델 파일(재생성 가능). 대시보드·비교표가 읽는 HGB 하나만 커밋한다(src/model_comparison.py).
+outputs/**/models/*.joblib
+!outputs/current_state/models/overall__all__hist_gradient_boosting.joblib
+# 시계열 실험의 행 단위 예측(24MB, 재생성 가능) — 요약 metrics.csv는 커밋한다.
+outputs/timeseries/test_predictions.csv
 
 # 💻 OS 잡파일
 .DS_Store
 Thumbs.db
-Miniforge3.sh
 Miniforge3.sh

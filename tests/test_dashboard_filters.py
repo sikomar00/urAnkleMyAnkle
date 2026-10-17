@@ -287,6 +287,20 @@ def test_reversed_custom_dates_are_swapped():
     assert (new['start'], new['end'], new['period_index']) == ('2024-11-01', '2024-12-03', None)
     assert (start_box, end_box) == ('2024-11-01', '2024-12-03')
 
+
+def test_screens_draw_charts_in_current_theme_and_recolor_only_on_theme_change():
+    """화면은 처음부터 지금 테마로 그린다 — 재색칠 콜백은 테마가 바뀔 때만 돈다(새 화면마다 같은 계산을 두 번 하지 않는다)."""
+    from src.theme import C
+    assets, start, end = w._filter_scope(_filters(period_index=LAST_30_DAYS))
+    layout = w.screen_1(assets=assets, start=start, end=end, theme='dark')
+    heat = next(n for n in _walk(layout) if isinstance(n, dcc.Graph) and n.id['type'] == 'heatmap-chart')
+    assert heat.figure.layout.template.layout.paper_bgcolor == C('surface-card', 'dark')
+    recolor = [c for c in w.app._callback_list if c['output'].endswith('-chart"}.figure')]
+    assert len(recolor) == 7
+    for c in recolor:
+        assert c['prevent_initial_call'] is True, c['output']
+        assert [i['id'] for i in c['inputs']] == ['theme-store'], c['output']
+
 def test_rate_change_shows_trend_glyph_with_words_not_color_only():
     from src.ui.screen1 import rate_change
     worse = rate_change(13.33, 9.74)

@@ -298,15 +298,6 @@ def bar(pct=45, h=8):
     return html.Div(className="pf-placeholder", style={"width": f"{pct}%", "height": f"{h}px"})
 
 
-def btn(label, w=None, bid=None):
-    """기능이 아직 없는 버튼은 {"type": "ghost-btn"} 패턴을 달아, 눌렀을 때 하단
-    action-echo에 '무엇이 눌렸고 무엇이 아직 없는지'를 그대로 표시한다."""
-    return html.Button(
-        label, id={"type": "ghost-btn", "index": bid or label}, n_clicks=0,
-        className="pf-btn label-12", style={"width": f"{w}px"} if w else None,
-    )
-
-
 def seg(group, label_text, options, sel=0, disabled=False, help_text=None):
     """세그먼티드 컨트롤(.pf-seg) — 실제로 선택이 바뀐다. group은 seg-store의 키다.
     ③ 과제 / ③ 위험 기준선 / ④ 데이터셋 / ① 히트맵 단위가 각각 하나의 group.

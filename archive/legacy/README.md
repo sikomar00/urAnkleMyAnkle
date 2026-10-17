@@ -1,6 +1,6 @@
 # archive/legacy — 현재 대시보드에서 쓰지 않는 파일 보관
 
-현재 앱은 `src/wireframe_app.py`(화면 4개, 로그인·감사 로그)다. 아래는 그 이전 단계의 산출물로,
+현재 앱은 `src/wireframe_app.py`(화면 4개, DB·로그인 없음)다. 아래는 그 이전 단계의 산출물로,
 팀원 작업 이력을 남기기 위해 지우지 않고 옮겨 둔 것이다(git 이력은 `git log --follow`로 이어진다).
 pytest 기본 경로(`tests/`)에 포함되지 않고, 앱·CI에서 import하지 않는다.
 
@@ -13,6 +13,8 @@ pytest 기본 경로(`tests/`)에 포함되지 않고, 앱·CI에서 import하�
 | `scripts/make_dummy.py` | AI4I·에너지 더미 데이터 생성 | 위 실험 전용 |
 | `src/alert_service.py`, `src/init_dashboard_db.py` | 5탭 대시보드용 경보·로그 테이블 | 현재 앱은 `audit_service`를 쓴다 |
 | `docs/dashboard-handoff.md`, `docs/dashboard-preview.md` | 이전 대시보드 문서 | 위와 같음 |
+| `docs/data_contract.md`, `docs/project_definition.md` | 에너지·AI4I 트랙의 출력 스키마와 킥오프 정의서(빈 칸) | 현재 과제·`outputs/`와 무관 |
+| `docs/slides.md` (원래 `report/slides.md`) | 비어 있는 발표자료 틀 | 내용 없음 |
 | `tests/test_dashboard.py`, `tests/test_features.py`, `tests/test_alert_service.py` | 위 모듈의 테스트 | 모듈과 함께 보관 |
 
 `src/db_inga.py`(하드코딩 DB 계정, import만 해도 테이블 생성·행 쓰기)는 보관하지 않고 삭제했다.

@@ -37,8 +37,8 @@ from .dashboard_data import (  # noqa: E402
     load_comparison_at_cutoff,
     load_comparison_pr_curve,
     load_focus_model,
+    load_model_comparison,
     load_asset_failure_heatmap,
-    load_asset_family_diagnosis,
     load_asset_parts_history,
     load_asset_sensor_series,
     load_period_coverage,
@@ -68,7 +68,7 @@ from .ui.screen2 import (  # noqa: E402
     screen_2,
 )
 from .ui.screen3 import (  # noqa: E402
-    _confusion_body, _screen3_task_key, _screen3_threshold, _threshold_body, family_table_block,
+    _confusion_body, _family_selection, _screen3_task_key, _screen3_threshold, _threshold_body, family_table_block,
     model_table_block, SCREEN3_TASK_INFO, screen_3,
 )
 from .ui.screen4 import (  # noqa: E402
@@ -139,13 +139,17 @@ app.layout = html.Div(
     Input("selected-family-store", "data"),
     # 표 정렬은 sort_table()이 그 표만 다시 그린다. 여기서는 화면을 새로 그릴 때 정렬을 이어받기만 한다.
     State("table-sort-store", "data"),
+    # 차트를 처음부터 지금 테마로 그린다 — 테마가 바뀔 때만 아래 recolor_* 콜백이 다시 칠한다.
+    State("theme-store", "data"),
 )
-def render_screen(active, seg_state, filters, selected_family, table_sort):
+def render_screen(active, seg_state, filters, selected_family, table_sort, theme):
     assets, start, end = _filter_scope(filters)
     if active in ("1", "2", "4") and not assets:
         return empty_state("조건에 맞는 기계 없음",
                            "선택한 공장·기계 종류·기계 조합에 해당하는 기계가 없다", 400)
     kwargs = {"seg_state": seg_state, "audience": DEFAULT_AUDIENCE}
+    if active in ("1", "2", "3"):
+        kwargs["theme"] = theme or "light"
     if active == "1":
         kwargs.update(table_sort=table_sort, assets=assets, start=start, end=end)
     if active == "2":
@@ -164,7 +168,6 @@ def render_screen(active, seg_state, filters, selected_family, table_sort):
 
 # ②의 "‹ 이전 기계"/"다음 기계 ›" — 공장·기계 종류 필터 안에서 알파벳순으로
 # 순환하고, 고른 기계를 필터의 기계 값으로 쓴다(write_filters가 이어서 저장).
-# nav_btn()이 공용 ghost-btn과 다른 id 타입을 쓰므로 echo_action과 겹치지 않는다.
 @app.callback(
     Output("machine-dd", "value", allow_duplicate=True),
     Input({"type": "machine-nav-btn", "index": ALL}, "n_clicks"),
@@ -253,9 +256,27 @@ def recompute_threshold_metrics(slider_values, seg_state):
         return no_update, no_update
     threshold = _screen3_threshold(task_key, seg_state)
     focus = load_focus_model(task_key, threshold)
-    metrics = load_comparison_at_cutoff(task_key, focus, slider_values[0] / 100, threshold)
+    metrics = load_comparison_at_cutoff(task_key, focus, slider_values[0], threshold)
     positive_name = SCREEN3_TASK_INFO[task_key][2].format(thr=threshold)
     return [_threshold_body(metrics, positive_name)], [_confusion_body(metrics, positive_name)]
+
+
+# ③ 판정 임계값 "기본값으로" — 슬라이더를 저장된 판정 기준으로 되돌린다(값이 바뀌면 위 콜백이 다시 그린다).
+# 화면이 다시 그려지며 버튼이 n_clicks=0으로 마운트될 때의 발화는 무시한다.
+@app.callback(
+    Output({"type": "thr-slider", "index": ALL}, "value"),
+    Input({"type": "thr-reset", "index": ALL}, "n_clicks"),
+    State("seg-store", "data"),
+    prevent_initial_call=True,
+)
+def reset_threshold_slider(n_clicks_list, seg_state):
+    if not n_clicks_list or not any(n_clicks_list):
+        return no_update
+    task_key = _screen3_task_key(seg_state)
+    threshold = _screen3_threshold(task_key, seg_state)
+    focus = load_focus_model(task_key, threshold)
+    cutoff = next(r["cutoff"] for r in load_model_comparison(task_key, threshold) if r["model"] == focus)
+    return [cutoff] * len(n_clicks_list)
 
 
 # ------------------------------------------------------------
@@ -271,19 +292,18 @@ def toggle_theme(_n, current):
     return "light" if (current or "light") == "dark" else "dark"
 
 
-# 화면⑤ "고장·위험 추세" 차트 전용 재색칠 — render_screen과 무관한 별도
-# 콜백이라 테마 전환이 화면①~④의 render_screen 재실행(및 그로 인한 화면④
-# 표의 page_current/sort_by 리셋)을 유발하지 않는다. 패턴매칭 id라 화면⑤가
-# DOM에 없으면(다른 화면을 보는 중) Dash가 이 콜백을 호출하지 않는다 —
-# KPI_FAILRATE_ID와 동일 원리. screen-tabs도 Input으로 받아, 이미 다크
-# 테마인 상태에서 화면⑤에 처음 탭 이동할 때도(테마 자체는 안 바뀌었으므로
-# theme-store만으로는 못 잡는 경우) 곧바로 올바른 색으로 그린다.
+# 테마 전환 시 차트 재색칠 — render_screen과 무관한 별도 콜백이라 테마 전환이
+# 화면 재렌더(및 그로 인한 화면④ 표의 page_current/sort_by 리셋)를 유발하지 않는다.
+# 패턴매칭 id라 그 차트가 DOM에 없으면 Dash가 콜백을 호출하지 않는다.
+# 화면을 새로 그릴 때는 render_screen이 이미 지금 테마로 그리므로
+# prevent_initial_call=True로 새 레이아웃이 들어올 때의 중복 호출을 막는다.
+# 아래는 화면⑤ "고장·위험 추세" 차트(탭에서는 빠져 있다).
 @app.callback(
     Output({"type": "trend-chart", "index": ALL}, "figure"),
     Input("theme-store", "data"),
-    Input("screen-tabs", "value"),
+    prevent_initial_call=True,
 )
-def recolor_trend_chart(theme, _active_tab):
+def recolor_trend_chart(theme):
     return [_trend_figure(load_failure_trend(), theme or "light")]
 
 
@@ -292,11 +312,11 @@ def recolor_trend_chart(theme, _active_tab):
 @app.callback(
     Output({"type": "heatmap-chart", "index": ALL}, "figure"),
     Input("theme-store", "data"),
-    Input("screen-tabs", "value"),
     State("filter-store", "data"),
     State("seg-store", "data"),
+    prevent_initial_call=True,
 )
-def recolor_heatmap_chart(theme, _active_tab, filters, seg_state):
+def recolor_heatmap_chart(theme, filters, seg_state):
     assets, start, end = _filter_scope(filters)
     index = (seg_state or DEFAULT_SEG).get("heat_unit", DEFAULT_SEG["heat_unit"])
     unit = HEATMAP_UNITS[index if 0 <= index < len(HEATMAP_UNITS) else DEFAULT_SEG["heat_unit"]]
@@ -329,10 +349,10 @@ app.clientside_callback(
 @app.callback(
     Output({"type": "spark-chart", "index": ALL}, "figure"),
     Input("theme-store", "data"),
-    Input("screen-tabs", "value"),
     State("filter-store", "data"),
+    prevent_initial_call=True,
 )
-def recolor_spark_charts(theme, _active_tab, filters):
+def recolor_spark_charts(theme, filters):
     assets, _, _ = _filter_scope(filters)
     rows = load_screen1_machine_status(assets)
     return [_spark_figure(r["sparkline"], theme or "light") for r in rows]
@@ -344,10 +364,10 @@ def recolor_spark_charts(theme, _active_tab, filters):
 @app.callback(
     Output({"type": "smult-chart", "index": ALL}, "figure"),
     Input("theme-store", "data"),
-    Input("screen-tabs", "value"),
     State("filter-store", "data"),
+    prevent_initial_call=True,
 )
-def recolor_smult_chart(theme, _active_tab, filters):
+def recolor_smult_chart(theme, filters):
     _, start, end = _filter_scope(filters)
     asset_tag = _focus_asset(filters)
     return [_smult_figure(load_asset_sensor_series(asset_tag, start, end), theme or "light",
@@ -359,30 +379,27 @@ def recolor_smult_chart(theme, _active_tab, filters):
 @app.callback(
     Output({"type": "parts-chart", "index": ALL}, "figure"),
     Input("theme-store", "data"),
-    Input("screen-tabs", "value"),
     State("filter-store", "data"),
+    prevent_initial_call=True,
 )
-def recolor_parts_chart(theme, _active_tab, filters):
+def recolor_parts_chart(theme, filters):
     _, start, end = _filter_scope(filters)
     return [_parts_figure(load_asset_parts_history(_focus_asset(filters), start, end), theme or "light")]
 
 
 # ③ "부품군 진단" 드릴다운의 PR곡선도 같은 방식으로 재색칠한다.
 # family-pr-chart는 부품군 진단 과제일 때만 DOM에 있으므로
-# 다른 과제·다른 화면에서는 호출 자체가 안 된다 — asset_tag/family 폴백은
-# screen_3()의 폴백 로직과 동일하게 반복한다(그 함수 자체를 State로 참조할
-# 수는 없으므로).
+# 다른 과제·다른 화면에서는 호출 자체가 안 된다 — 기계·부품군 폴백은 screen_3()과
+# 같은 _family_selection()을 쓴다.
 @app.callback(
     Output({"type": "family-pr-chart", "index": ALL}, "figure"),
     Input("theme-store", "data"),
-    Input("screen-tabs", "value"),
     State("filter-store", "data"),
     State("selected-family-store", "data"),
+    prevent_initial_call=True,
 )
-def recolor_family_pr_chart(theme, _active_tab, filters, family):
-    asset_tag = _focus_asset(filters, machine_only=True)
-    valid_families = [r["part_family"] for r in load_asset_family_diagnosis(asset_tag)]
-    family = family if family in valid_families else valid_families[0]
+def recolor_family_pr_chart(theme, filters, family):
+    asset_tag, _, family = _family_selection(_focus_asset(filters, machine_only=True), family)
     pr_cm = load_family_pr_curve_and_confusion(asset_tag, family)
     c = pr_cm["confusion"]
     pr_cm = {**pr_cm, "positive_rate": (c["tp"] + c["fn"]) / max(1, sum(c.values()))}
@@ -393,10 +410,10 @@ def recolor_family_pr_chart(theme, _active_tab, filters, family):
 @app.callback(
     Output({"type": "comparison-pr-chart", "index": ALL}, "figure"),
     Input("theme-store", "data"),
-    Input("screen-tabs", "value"),
     State("seg-store", "data"),
+    prevent_initial_call=True,
 )
-def recolor_comparison_pr_chart(theme, _active_tab, seg_state):
+def recolor_comparison_pr_chart(theme, seg_state):
     task_key = _screen3_task_key(seg_state)
     if task_key == "family":
         return no_update
@@ -563,23 +580,6 @@ def write_seg(_clicks, current):
 
 
 # ------------------------------------------------------------
-# 기능 미구현 버튼 — 클릭은 되고, 무엇이 없는지 그대로 알려준다
-# ------------------------------------------------------------
-@app.callback(
-    Output("action-echo", "children"),
-    Input({"type": "ghost-btn", "index": ALL}, "n_clicks"),
-    prevent_initial_call=True,
-)
-def echo_action(_clicks):
-    trig = ctx.triggered[0] if ctx.triggered else None
-    if not trig or not trig.get("value"):
-        return no_update
-    tid = ctx.triggered_id
-    label = tid["index"] if isinstance(tid, dict) else str(tid)
-    return f"'{label}' 클릭됨 — 동작 미구현 ({NO_DATA_MARK})"
-
-
-# ------------------------------------------------------------
 # 표 정렬 — 모든 표의 열 제목 버튼({"type": "sort-th"})이 이 콜백 하나로 모인다.
 # 누른 표 하나만 다시 그리고(나머지는 no_update), 정렬 상태는 table-sort-store에 남긴다.
 # 화면이 다시 그려지면 버튼이 n_clicks=0으로 재생성되며 한 번 더 불린다 — 값 0은 무시한다.
@@ -719,6 +719,8 @@ def export_dtable_csv(_clicks, filters):
 if __name__ == "__main__":
     # 최신 Dash(2.17+)는 app.run, 이전 버전은 app.run_server를 쓴다.
     # 이전 실행본이 8050 포트에 남아 오래된 시간 기록을 만들 수 있어 새 포트를 사용한다.
-    # 같은 사내·가정 네트워크의 다른 기기도 접속할 수 있도록 모든 네트워크 인터페이스에서 받는다.
-    # 외부 인터넷 공개는 별도의 방화벽·공유기·HTTPS 설정이 필요하므로 여기서 자동으로 열지 않는다.
-    app.run(host=os.environ.get("DASHBOARD_HOST", "0.0.0.0"), port=int(os.environ.get("DASHBOARD_PORT", "8052")), debug=False)
+    # 기본은 이 컴퓨터에서만 접속한다(127.0.0.1). 같은 사내·가정 네트워크의 다른 기기에서 보려면
+    # DASHBOARD_HOST=0.0.0.0으로 실행한다(Windows 방화벽은 scripts/enable_dashboard_lan.ps1).
+    # 외부 인터넷 공개는 별도의 방화벽·공유기·HTTPS 설정이 필요하므로 여기서 열지 않는다.
+    app.run(host=os.environ.get("DASHBOARD_HOST", "127.0.0.1"), port=int(os.environ.get("DASHBOARD_PORT", "8052")),
+            debug=False)

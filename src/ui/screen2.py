@@ -28,7 +28,7 @@ SENSOR_HELP = (f"센서마다 이 기계의 학습 구간({OUTLIER_BASELINE_END:
 # 화면 ② 기계 상세 — 정보 띠 88 / 824
 # ============================================================
 
-def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=None, end=None):
+def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=None, end=None, theme="light"):
     def value_box(content, w, h=26, cls=BODY_13):
         """strip 전용 값 칸 — screen_2() 안에서만 쓰인다."""
         return html.Div(
@@ -44,9 +44,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
                          style={"width": f"{w}px", "display": "flex", "flexDirection": "column", "gap": "4px"})
 
     def nav_btn(label, index):
-        """공용 btn()은 id 타입이 항상 "ghost-btn"이라 전역 echo_action이
-        같이 반응해 '미구현' 문구를 띄운다. 여기서는 실제 기계 전환 콜백만
-        반응하도록 다른 id 타입을 쓴다."""
+        """기계 전환 버튼 — cycle_selected_asset 콜백이 이 id 타입에만 반응한다."""
         return html.Button(label, id={"type": "machine-nav-btn", "index": index},
                             n_clicks=0, className="pf-btn label-12")
 
@@ -105,7 +103,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
         [hstack(
             [sensor_labels,
              dcc.Graph(id={"type": "smult-chart", "index": "screen2"},
-                       figure=_smult_figure(series, "light", bounds),
+                       figure=_smult_figure(series, theme, bounds),
                        config={"displayModeBar": False, "responsive": True},
                        style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"})],
             8, style={"height": f"{SMULT_BODY_H}px"},
@@ -130,7 +128,7 @@ def screen_2(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, start=No
         parts_body = empty_state("기간 내 부품 출고 없음", "선택한 기간에 이 기계의 부품 출고 금액이 0이다")
     else:
         parts_body = dcc.Graph(id={"type": "parts-chart", "index": "screen2"},
-                               figure=_parts_figure(parts_history, "light"),
+                               figure=_parts_figure(parts_history, theme),
                                config={"displayModeBar": False, "responsive": True},
                                style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"})
     parts = card("부품 출고 금액 상위 10 (INR)", 616, SCREEN2_ROW_H, parts_body,

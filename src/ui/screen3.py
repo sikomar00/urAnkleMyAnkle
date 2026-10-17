@@ -278,10 +278,10 @@ def _threshold_body(metrics, positive_name):
     ]
     return html.Div([
         html.Div([html.Span("현재 임계값", className=LABEL_12),
-                  html.Span(f"{metrics['cutoff']:.2f}", className="value-20 pf-num")],
+                  html.Span(f"{metrics['cutoff']:.3f}", className="value-20 pf-num")],
                  style={"display": "flex", "alignItems": "baseline", "gap": "8px"}),
         html.Div(tiles, className="pf-metric-grid"),
-        html.Div(f"임계값 {metrics['cutoff']:.2f} 기준으로 {metrics['rows']:,}건 중 {metrics['alerts']:,}건에 경보를 내고, "
+        html.Div(f"임계값 {metrics['cutoff']:.3f} 기준으로 {metrics['rows']:,}건 중 {metrics['alerts']:,}건에 경보를 내고, "
                  f"실제 {positive_name} {actual:,}건 중 {caught:,}건을 잡습니다.", className=f"{BODY_13} pf-sentence"),
     ], style={"display": "flex", "flexDirection": "column", "gap": "10px"})
 
@@ -419,11 +419,12 @@ def _screen3_toolbar(seg_state, task_key, meta_text, machine_picker=None):
 #   과제 ④:   도구줄 60 / 460 / 432
 # ============================================================
 
-def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=None, table_sort=None):
+def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=None, table_sort=None,
+             theme="light"):
     seg_state = seg_state or DEFAULT_SEG
     task_key = _screen3_task_key(seg_state)
     if task_key == "family":
-        return _family_screen(seg_state, asset_tag, family, table_sort)
+        return _family_screen(seg_state, asset_tag, family, table_sort, theme)
     threshold = _screen3_threshold(task_key, seg_state)
     grain, what, positive_template = SCREEN3_TASK_INFO[task_key]
     positive_name = positive_template.format(thr=threshold)
@@ -452,7 +453,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
     if any(bool(r["production"]) and bool(r["selected_by_validation"]) for r in rows):
         table_note += " · 운영 모델은 검증 AP 1위"
     elif any(bool(r["production"]) for r in rows):
-        table_note += " · 운영 모델 RF는 팀 결정 — 근거 TODO(사용자 확인)"
+        table_note += " · 운영 모델 RF는 팀 결정(원 실험은 검증 구간 미사용)"
     comparison = card("모델 비교", 1880, 276, model_table_block(table_sort, seg_state),
                       right=html.Div([note(table_note), help_icon(MODEL_TABLE_HELP)],
                                      style={"display": "flex", "alignItems": "center", "gap": "8px"}))
@@ -461,7 +462,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
     pr = load_comparison_pr_curve(task_key, focus, threshold)
     pr_body = html.Div(
         dcc.Graph(id={"type": "comparison-pr-chart", "index": "screen3"},
-                  figure=_pr_figure(pr, "light", height=360),
+                  figure=_pr_figure(pr, theme, height=360),
                   config={"displayModeBar": False, "responsive": True},
                   style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
         style={"flex": "1 1 auto", "minHeight": "0", "display": "flex", "flexDirection": "column"})
@@ -473,10 +474,15 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
                         style={"height": "100%"}),
                right=note(focus_row["model_label"]))
 
+    # 0.001 단위로 움직이고, 기본값은 저장된 판정 기준 그대로 둔다(0.1164를 0.12로 반올림하지 않는다).
+    # 한 번 움직인 뒤에도 "기본값으로"가 정확한 기준으로 되돌린다(reset_threshold_slider).
     slider = html.Div(
-        [html.Label("임계값 조정 (0 ~ 1)", htmlFor="thr-slider", className=LABEL_12),
-         dcc.Slider(id={"type": "thr-slider", "index": "screen3"}, min=0, max=100, step=1, marks=None,
-                    value=round(focus_row["cutoff"] * 100))],
+        [html.Div([html.Label("임계값 조정 (0 ~ 1)", htmlFor="thr-slider", className=LABEL_12),
+                   html.Button("기본값으로", id={"type": "thr-reset", "index": "screen3"}, n_clicks=0,
+                               className="pf-btn label-12")],
+                  style={"display": "flex", "alignItems": "center", "justifyContent": "space-between"}),
+         dcc.Slider(id={"type": "thr-slider", "index": "screen3"}, min=0, max=1, step=0.001, marks=None,
+                    value=focus_row["cutoff"])],
         style={"display": "flex", "flexDirection": "column", "gap": "4px"},
     )
     thr_body = html.Div(
@@ -487,7 +493,7 @@ def screen_3(seg_state=None, audience=DEFAULT_AUDIENCE, asset_tag=None, family=N
     thr = card("판정 임계값", 458, 432, thr_body,
                right=html.Div([note("가상 실험 · 재학습 없음"),
                                help_icon(f"저장된 Test 점수에 임계값만 다시 적용하는 가상 실험이다. 모델을 다시 학습하지 "
-                                         f"않는다. 기본값({focus_row['cutoff']:.2f})은 {policy} 기준으로 정한 값이다. "
+                                         f"않는다. 기본값({focus_row['cutoff']:.3f})은 {policy} 기준으로 정한 값이다. "
                                          "놓친 건수·오경보 건수의 점 색은 혼동행렬 칸의 색과 같다.")],
                               style={"display": "flex", "alignItems": "center", "gap": "8px"}))
 
@@ -558,7 +564,7 @@ def family_table_block(store, asset_tag, family):
     return sortable("family", family_table(family_rows, family, store))
 
 
-def _family_screen(seg_state, asset_tag, family, table_sort):
+def _family_screen(seg_state, asset_tag, family, table_sort, theme="light"):
     """화면 ③ ④ 부품군 진단 — 선택 기계의 부품군 9종 표·PR 곡선·혼동행렬·영향 변수·운영 판단."""
     asset_tag, family_rows, family = _family_selection(asset_tag, family)
     selected = next(fr for fr in family_rows if fr["part_family"] == family)
@@ -572,7 +578,7 @@ def _family_screen(seg_state, asset_tag, family, table_sort):
                  right=note("행 = 부품군 · 행을 누르면 오른쪽·아래 카드가 바뀐다"))
     pr_body = html.Div(
         dcc.Graph(id={"type": "family-pr-chart", "index": "screen3"},
-                  figure=_pr_figure(pr_cm, "light"),
+                  figure=_pr_figure(pr_cm, theme),
                   config={"displayModeBar": False, "responsive": True},
                   style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
         style={"flex": "1 1 auto", "minHeight": "0", "display": "flex", "flexDirection": "column"})

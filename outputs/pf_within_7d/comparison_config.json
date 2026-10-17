@@ -51,6 +51,6 @@
     "asset_tag",
     "part_no"
   ],
-  "rf_reproduction_max_abs_diff": 0.28,
+  "rf_reproduction_max_abs_diff": 0.0,
   "source": "src/model_comparison.py"
 }

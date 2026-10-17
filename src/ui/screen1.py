@@ -146,7 +146,8 @@ KPI_HELP = {
 }
 
 
-def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, table_sort=None, assets=None, start=None, end=None):
+def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, table_sort=None, assets=None, start=None, end=None,
+             theme="light"):
     # KPI 4개는 판단에 쓰는 값만 둔다(관측 기계 수·평균 소비 전력은 뺐다).
     #   고위험일(기계·일)·고위험일 비율(%) — 선택 기간. 비율 옆에 직전 같은 길이 기간 값을 둔다.
     #   기준일 고위험 기계(대) — 하루치 스냅샷. 비율(1대 = 10.0%)로 쓰면 정밀해 보이기만 해서 건수로 둔다.
@@ -186,7 +187,7 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, table_sort=None, assets=
                       style={"width": "104px", "flexShrink": "0", "display": "flex",
                              "flexDirection": "column", "gap": "4px"}),
              dcc.Graph(id={"type": "spark-chart", "index": status_row["asset_tag"]},
-                       figure=_spark_figure(status_row["sparkline"], "light"),
+                       figure=_spark_figure(status_row["sparkline"], theme),
                        config={"displayModeBar": False, "responsive": True},
                        style={"flexGrow": "1", "minWidth": "0", "height": "32px"}),
              html.Div([html.Span(f"{status_row['risk_score']:,.0f}", className="value-20"),
@@ -212,7 +213,7 @@ def screen_1(seg_state=None, audience=DEFAULT_AUDIENCE, table_sort=None, assets=
     heat_body = html.Div(
         dcc.Graph(id={"type": "heatmap-chart", "index": "screen1"},
                   figure=_heatmap_figure(load_asset_failure_heatmap(assets, start, end, unit),
-                                         load_period_coverage(start, end, unit), "light"),
+                                         load_period_coverage(start, end, unit), theme),
                   config={"displayModeBar": False, "responsive": True},
                   style={"flex": "1 1 auto", "minHeight": "0", "minWidth": "0"}),
         style={"height": "100%", "display": "flex", "flexDirection": "column"},

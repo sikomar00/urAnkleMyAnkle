@@ -10,7 +10,7 @@ python -m src.wireframe_app              # DB·로그인 없이 실행
 # → http://127.0.0.1:8052
 ```
 
-로그인 없이 바로 4개 화면이 열립니다. 팀에서 만든 로그인·계정·MySQL 감사 로그 기능은 2026-10-03에 앱에서 떼어 [`archive/legacy/`](archive/legacy/README.md)에 보관했습니다. 다른 해상도·다크 테마 화면은 [`docs/images/`](docs/images/)에 있습니다.
+로그인 없이 바로 4개 화면이 열립니다. 같은 네트워크의 다른 기기에서 보려면 `DASHBOARD_HOST=0.0.0.0`으로 실행합니다(포트는 `DASHBOARD_PORT`, 기본 8052). 팀에서 만든 로그인·계정·MySQL 감사 로그 기능은 2026-10-03에 앱에서 떼어 [`archive/legacy/`](archive/legacy/README.md)에 보관했습니다. 다른 해상도·다크 테마 화면은 [`docs/images/`](docs/images/)에 있습니다.
 
 ## 1. 문제 정의와 과제 전환
 
@@ -66,7 +66,7 @@ python -m src.wireframe_app              # DB·로그인 없이 실행
 
 **불리한 점**
 - LR은 기준 B보다 AP가 0.002 높을 뿐이고, 운영 모델 RF는 기준 B보다 낮습니다.
-- 저장된 RF 예측은 같은 설정으로 다시 학습해도 재현되지 않습니다(점수 최대 차이 0.28, `comparison_config.json`의 `rf_reproduction_max_abs_diff`).
+- RF 점수는 실행 환경에 따라 달라집니다. 고정 패키지 버전(`requirements.txt`)으로 Linux에서 다시 학습하면 저장된 예측과 같지만(`comparison_config.json`의 `rf_reproduction_max_abs_diff` 0.0), 이전에 다른 환경에서 다시 학습했을 때는 점수가 최대 0.28 달랐습니다.
 
 ### 부품 당일 고장 표시 판별 (보조 과제)
 출처 `outputs/current_state/comparison.csv`. 시험 2024-07-01~2025-01-01, 37,000 기계·부품·일, 양성 비율 0.100.
@@ -109,7 +109,7 @@ flowchart LR
 | 대시보드 | dash 2.18.2, plotly 5.24.1 |
 | 보고서 내보내기 | reportlab 4.4.10(PDF), openpyxl 3.1.5(Excel) |
 | 시계열 실험 | prophet 1.1.6, cmdstanpy 1.2.5, holidays 0.58 — `src/data_huijae.py`의 Prophet 실험에서만 쓰고 대시보드는 쓰지 않음 |
-| 검증 | pytest 8.3.3, ruff 0.16.10·playwright 1.63.0(`requirements-dev.txt`) |
+| 검증·개발 | pytest 8.3.3, ruff 0.16.10, playwright 1.63.0, ipykernel·nbstripout(`requirements-dev.txt`) |
 
 **화면**
 - ① 현황: 고위험일 KPI, 점검 우선순위, 기계 상태, 고장 표시 히트맵(일·주·월·년), 전력
@@ -124,7 +124,8 @@ flowchart LR
 **검증 명령**
 
 ```bash
-pytest -q                                  # 274 passed (PDF 내보내기 테스트 1건은 한글 TrueType 글꼴이 필요)
+pip install -r requirements-dev.txt        # 앱 의존성 + pytest·ruff·playwright (CI도 이 파일로 설치)
+pytest -q                                  # 280 passed (PDF 내보내기 테스트 1건은 한글 TrueType 글꼴이 필요 — Linux는 fonts-nanum)
 ruff check .
 python -m scripts.capture_screens          # 4화면 × 3해상도 캡처 + 금지 문구·가로 스크롤·잘린 셀 검사
 python -m scripts.a11y_check               # axe-core 접근성 검사 → docs/a11y/
@@ -146,7 +147,7 @@ python -m scripts.a11y_check               # axe-core 접근성 검사 → docs/
   - 현장 검증을 거친 기준이 아닙니다. 기계 10대 × 부품군 9종 90개 중 탐색적 83 · 사용 불가 4 · 점검 보조 3입니다.
 - **결과 일부가 재현되지 않습니다.**
   - 부품 당일 과제는 지금 코드로 재현되지 않습니다.
-  - 7일 내 과제의 RF 예측은 다시 학습하면 달라집니다.
+  - 7일 내 과제의 RF 예측은 실행 환경에 따라 달라집니다. 고정 버전 Linux에서는 저장된 예측과 같고, 다른 환경에서는 점수가 최대 0.28 달랐습니다.
   - 주 과제의 RF는 실행 환경에 따라 점수가 달라집니다. 같은 패키지 버전으로 Linux에서 다시 돌리면 AP가 최대 0.003, 예측 점수가 최대 0.06 달라집니다. LR·HGB·기준선은 같은 값이 나옵니다(LR은 기준 14에서 AP 차이 0.00001).
 
 ## 5. 팀과 기여

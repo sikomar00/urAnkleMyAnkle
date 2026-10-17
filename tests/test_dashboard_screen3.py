@@ -88,12 +88,27 @@ def test_performance_sentence_says_equal_when_baseline_b_ties_at_shown_precision
     text = _performance_sentence(tied, focus, 'machine_risk')
     assert '이 모델과 같습니다' in text and '0.000 높습니다' not in text
 
+
+def test_threshold_slider_starts_at_exact_cutoff_and_reset_restores_it():
+    """부품 당일 과제의 기본 판정 기준 0.1164를 0.12로 반올림하지 않고, "기본값으로"가 정확히 되돌린다."""
+    from dash import dcc
+    seg_state = {"task": 2, "threshold": 0}
+    from src.dashboard_data import load_focus_model
+    focus = load_focus_model('part_current', None)
+    cutoff = next(r['cutoff'] for r in load_model_comparison('part_current', None) if r['model'] == focus)
+    assert round(cutoff, 4) == 0.1164
+    slider = next(n for n in _walk(screen_3(seg_state)) if isinstance(n, dcc.Slider))
+    assert (slider.min, slider.max, slider.step, slider.value) == (0, 1, 0.001, cutoff)
+    assert w.reset_threshold_slider([0], seg_state) is no_update
+    assert w.reset_threshold_slider([1], seg_state) == [cutoff]
+
 def test_machine_risk_production_label_is_validation_choice_without_todo():
     text = _text(screen_3({"task": 0, "threshold": 0}))
     assert '운영 모델은 검증 AP 1위' in text
     assert 'TODO' not in text and '팀 결정' not in text
-    # 부품 7일 내 과제는 검증 구간이 없어 팀 결정을 그대로 표기한다.
-    assert '운영(팀 결정)' in _text(screen_3({"task": 1, "threshold": 0}))
+    # 부품 7일 내 과제는 검증 구간이 없어 팀 결정을 그대로 표기한다(화면에 TODO 표시는 남기지 않는다).
+    part_text = _text(screen_3({"task": 1, "threshold": 0}))
+    assert '운영(팀 결정)' in part_text and 'TODO' not in part_text
 
 
 def test_model_table_sorts_by_column_and_bolds_rank_metric_best():
